@@ -1,0 +1,182 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : "automatic",
+  "groups" : [
+    {
+      "hidden" : true,
+      "layers" : [
+        {
+          "image-name" : "OBIcon 4.svg",
+          "name" : "OBIcon 4",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              1.404631191908722,
+              7.023155959543476
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0.5,
+      "hidden" : false,
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "fill" : {
+            "solid" : "display-p3:0.96783,0.94910,0.91606,1.00000"
+          },
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "CircleTop.svg",
+          "name" : "CircleTop",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              137.65385680705185,
+              -25.283361454356463
+            ]
+          }
+        }
+      ],
+      "position" : {
+        "scale" : 0.5,
+        "translation-in-points" : [
+          -175.57889898858656,
+          -60.39914125207378
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0.1,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill" : "none",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "GlassBottom.svg",
+          "name" : "GlassBottom",
+          "opacity-specializations" : [
+            {
+              "value" : 0.7
+            },
+            {
+              "appearance" : "tinted",
+              "value" : 0.7
+            }
+          ]
+        }
+      ],
+      "position" : {
+        "scale" : 0.5,
+        "translation-in-points" : [
+          -107.919683182884,
+          -73.3882539595012
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : false,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0.15,
+      "hidden" : false,
+      "layers" : [
+        {
+          "hidden" : false,
+          "image-name" : "Upper Note.svg",
+          "name" : "Upper Note",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0.8
+            }
+          ],
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              109.89710562988928,
+              84.07903622198376
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0,
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "Bottom Note.svg",
+          "name" : "Bottom Note",
+          "opacity-specializations" : [
+            {
+              "appearance" : "tinted",
+              "value" : 0.5
+            }
+          ],
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              -130.71852476763476,
+              -72.82416056626835
+            ]
+          }
+        }
+      ],
+      "position" : {
+        "scale" : 1,
+        "translation-in-points" : [
+          5.61852476763477,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

@@ -1,0 +1,3 @@
+// Local secrets (gitignored). Maintainer-only — official On Board Supabase project.
+// iOS contributors do not need this file; the app runs with mock data without it.
+#include? "../Secrets.xcconfig"
