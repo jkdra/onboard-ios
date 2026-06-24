@@ -19,7 +19,7 @@ jobs:
         run: |
           xcodebuild \
             -scheme "On Board" \
-            -destination "generic/platform=iOS" \
+            -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
