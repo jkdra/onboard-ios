@@ -21,7 +21,6 @@ jobs:
             -scheme "On Board" \
             -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO \
-            ASSETCATALOG_COMPILER_SKIP_APP_STORE_DEPLOYMENT=YES \
             build
 
       - name: Test
@@ -30,6 +29,5 @@ jobs:
             -scheme "On Board" \
             -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=latest" \
             CODE_SIGNING_ALLOWED=NO \
-            ASSETCATALOG_COMPILER_SKIP_APP_STORE_DEPLOYMENT=YES \
             -only-testing:"On BoardTests" \
             test
