@@ -19,6 +19,8 @@ xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPh
 xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16" -only-testing "On BoardTests/On_BoardTests/refreshMarksCompleteForSampleAppleUser"
 ```
 
+The app targets iOS 18+ as its minimum deployment target. iOS 26 APIs (e.g. `glassEffect`) are used where available via `#available(iOS 26.0, *)` guards with fallbacks for older OS versions.
+
 No secrets are required to build. The app runs fully offline with `MockAuthService` and `MockOnboardingService` when `Secrets.xcconfig` is absent. To enable live Supabase: `cp Secrets.xcconfig.example Secrets.xcconfig` and fill in `SUPABASE_URL` / `SUPABASE_ANON_KEY`.
 
 ## Architecture Overview

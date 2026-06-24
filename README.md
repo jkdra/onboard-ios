@@ -4,7 +4,7 @@ A campus bulletin board for weekly posts, reactions, and comments. Built with Sw
 
 ## Requirements
 
-- Xcode 16+ (iOS 26 deployment target)
+- Xcode 16+ (iOS 18 minimum deployment target)
 - Optional: [Supabase CLI](https://supabase.com/docs/guides/cli) for database migrations
 
 ## Getting started
