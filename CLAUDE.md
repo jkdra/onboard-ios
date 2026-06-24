@@ -30,6 +30,8 @@ All major stores are `@Observable @MainActor` classes, injected as environment o
 - **OnboardingStore** — onboarding flow progression and step state
 - **NetworkMonitor** — wraps `NWPathMonitor`
 
+`NotificationService` is a `@MainActor` singleton (not injected as an environment object) that handles APNs registration, device token upload, and `last_seen_at` tracking. It is driven directly from `On_BoardApp.swift`.
+
 ### Service Layer (Protocol + Factory Pattern)
 Every backend interaction is behind a protocol so mocks require zero Supabase configuration:
 
@@ -59,10 +61,24 @@ RootView
 ### Database
 Supabase migrations live in `supabase/migrations/`. Board data is fetched via Supabase RPC functions (`fetch_active_board_week`, `fetch_posts_for_week`, `fetch_my_reactions_for_week`). Realtime subscriptions on the `reactions` table merge remote changes without overwriting the current user's local state.
 
+### Push Notifications
+Push is delivered via APNs using a `.p8` key stored as a Supabase Edge Function secret. The `send-notifications` Edge Function handles four triggers fired by `pg_cron` jobs:
+
+| Trigger | Schedule (UTC) | Audience |
+|---|---|---|
+| `monday-reset` | Mon 14:30 | Everyone |
+| `re-engagement` | Mon–Sat 17:00 | Inactive 2+ days with unseen posts |
+| `sunday-reengagement` | Sun 19:00 | Anyone with unseen posts |
+| `clearing-soon` | Mon 03:00 | Everyone (body varies by unseen post count) |
+
+The Edge Function uses `api.sandbox.push.apple.com` — change to `api.push.apple.com` before App Store submission.
+
 ## Key Conventions
 
 - **Adding a new auth provider**: touch `AuthProvider.swift`, `AuthService.swift` protocol, `SupabaseAuthService.swift`, and `MockAuthService.swift`. Both impls must stay in sync.
 - **Adding a new post/comment field**: update `Post.swift` / `Comment.swift`, `RemotePostRow.swift` (JSON decoding adapter), and the relevant Supabase RPC or table query in `SupabaseBoardService.swift`.
 - **Changing onboarding steps**: `OnboardingStatus.swift` defines the step enum; `OnboardingStore.swift` drives the state machine.
+- **Changing notification logic**: update `NotificationService.swift` (iOS) and the `send-notifications` Edge Function together. The SQL helper functions `get_reengagement_targets` and `get_clearing_soon_targets` live in `supabase/migrations/20260624000000_push_notifications.sql`.
 - **Tests use Swift Testing** (`@Test`, `#expect`), not XCTest. All test fixtures go through mock services, not live Supabase.
 - `Secrets.xcconfig` is gitignored. Never commit real keys.
+- `.agents/`, `.mcp.json`, and `skills-lock.json` are Claude Code internals and are gitignored.
