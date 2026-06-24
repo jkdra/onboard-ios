@@ -7,7 +7,6 @@
 
 import Foundation
 import SwiftUI
-import AVFoundation
 
 public enum FontStyle {
     case largeTitle, title, title2, title3, headline, body, callout, subheadline, footnote, caption, caption2

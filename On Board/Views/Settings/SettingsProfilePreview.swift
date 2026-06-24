@@ -10,16 +10,7 @@ struct SettingsProfilePreview: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(.thinMaterial)
-                    .frame(width: 52, height: 52)
-                    .overlay(
-                        Circle().stroke(Color.secondary.opacity(0.25), lineWidth: 1)
-                    )
-                Text(profile.avatarEmoji)
-                    .font(.system(size: 28))
-            }
+            AvatarView(profile: profile, size: .medium)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(profile.displayName)

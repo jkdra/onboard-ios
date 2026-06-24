@@ -23,7 +23,8 @@ struct EditingIndicator: View {
 }
 
 #Preview {
-    EditingIndicator()
-        .fontStyle(.title)
-        .padding()
+    NavigationStack {
+        EditingIndicator()
+            .fontStyle(.title3)
+    }
 }

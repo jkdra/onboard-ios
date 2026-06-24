@@ -29,6 +29,7 @@ enum BoardServiceError: Error, LocalizedError, Sendable {
     case notConfigured
     case missingActiveWeek
     case notAuthenticated
+    case sessionExpired
 
     var errorDescription: String? {
         switch self {
@@ -38,11 +39,14 @@ enum BoardServiceError: Error, LocalizedError, Sendable {
             "No active board week is available."
         case .notAuthenticated:
             "Sign in to interact with the board."
+        case .sessionExpired:
+            AuthError.sessionExpired.localizedDescription
         }
     }
 }
 
 protocol BoardService: Sendable {
+    func listAccessibleBoards(for userID: UUID) async throws -> [Board]
     func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot
     func listArchivedWeeks(boardID: UUID, limit: Int, offset: Int) async throws -> [BoardWeek]
     func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts
@@ -53,20 +57,35 @@ protocol BoardService: Sendable {
         authorID: UUID,
         title: String,
         description: String,
-        tone: PostTone
+        tone: PostTone,
+        imageUrl: String?,
+        imageAspectRatio: Double?
     ) async throws -> Post
     func updatePost(
         id: UUID,
         title: String,
         description: String,
-        tone: PostTone
+        tone: PostTone,
+        imageUrl: String?,
+        imageAspectRatio: Double?
     ) async throws -> Post
+    func deletePost(id: UUID) async throws
+    func createComment(
+        postID: UUID,
+        authorID: UUID,
+        authorHandle: String,
+        body: String,
+        parentCommentID: UUID?
+    ) async throws
+    func updateComment(id: UUID, body: String) async throws
+    func deleteComment(id: UUID) async throws
     func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws
     func updateProfile(
         id: UUID,
         displayName: String,
         handle: String,
-        bio: String?
+        bio: String?,
+        avatarUrl: String?
     ) async throws -> Profile
 }
 

@@ -3,8 +3,28 @@
 //  On Board
 //
 
+import AuthenticationServices
 import Foundation
 import Supabase
+import UIKit
+
+// Provides a real foreground window as the ASWebAuthenticationSession anchor.
+// The SDK's default creates UIWindow() with no scene, which silently fails on iOS 16+.
+private final class ForegroundWindowProvider: NSObject, ASWebAuthenticationPresentationContextProviding, @unchecked Sendable {
+    static let shared = ForegroundWindowProvider()
+
+    // Explicitly nonisolated so the static `shared` initializer can use it
+    // without requiring a @MainActor context.
+    nonisolated override init() { super.init() }
+
+    @MainActor
+    func presentationAnchor(for _: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .first(where: { $0.activationState == .foregroundActive })
+            .flatMap { $0 as? UIWindowScene }?
+            .keyWindow ?? ASPresentationAnchor()
+    }
+}
 
 final class SupabaseAuthService: AuthService, @unchecked Sendable {
     private let configuration: AppConfiguration
@@ -24,38 +44,51 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         case .apple:
             throw AuthError.unknown("Use the native Sign in with Apple button.")
         case .google:
-            guard configuration.isGoogleSignInConfigured else {
-                throw AuthError.providerUnavailable(.google)
-            }
-            throw AuthError.providerUnavailable(.google)
+            return try await signInWithGoogle()
         case .phone:
             throw AuthError.unknown("Use the phone number sign-in flow.")
+        case .email:
+            throw AuthError.unknown("Use the email sign-in flow.")
         }
     }
 
     func sendPhoneOTP(phone: String) async throws {
         let client = try requireClient()
-        try await client.auth.signInWithOTP(phone: phone)
+        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
+            throw AuthError.invalidPhoneNumber
+        }
+        // POST /auth/v1/otp — Supabase forwards to your configured SMS provider (e.g. Twilio).
+        try await client.auth.signInWithOTP(phone: e164, channel: .sms)
     }
 
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession {
         let client = try requireClient()
-        try await client.auth.verifyOTP(phone: phone, token: token, type: .sms)
-
-        guard let session = client.auth.currentSession, !session.isExpired else {
-            throw AuthError.sessionRestoreFailed
+        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
+            throw AuthError.invalidPhoneNumber
         }
-
-        return Self.mapSession(session)
+        try await client.auth.verifyOTP(phone: e164, token: token, type: .sms)
+        return try await requireRefreshedSession()
     }
 
-    func signInWithApple(idToken: String, fullName: String?) async throws -> AuthSession {
+    func sendEmailOTP(email: String) async throws {
+        let client = try requireClient()
+        try await client.auth.signInWithOTP(email: email)
+    }
+
+    func verifyEmailOTP(email: String, token: String) async throws -> AuthSession {
+        let client = try requireClient()
+        try await client.auth.verifyOTP(email: email, token: token, type: .email)
+        return try await requireRefreshedSession()
+    }
+
+    func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession {
         let client = try requireClient()
 
         _ = try await client.auth.signInWithIdToken(
             credentials: OpenIDConnectCredentials(
                 provider: .apple,
-                idToken: idToken
+                idToken: idToken,
+                nonce: nonce
             )
         )
 
@@ -72,11 +105,125 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             }
         }
 
-        guard let session = client.auth.currentSession, !session.isExpired else {
-            throw AuthError.sessionRestoreFailed
+        return try await requireRefreshedSession()
+    }
+
+    func signInWithGoogle() async throws -> AuthSession {
+        let client = try requireClient()
+
+        let session: Session
+
+        if let clientID = configuration.googleClientID {
+            // Native Google Sign-In: GID SDK presents the account picker, returns an ID token,
+            // which we exchange with Supabase directly without opening a browser.
+            let idToken = try await GoogleSignInService.signIn(clientID: clientID)
+            session = try await client.auth.signInWithIdToken(
+                credentials: OpenIDConnectCredentials(
+                    provider: .google,
+                    idToken: idToken,
+                    nonce: nil
+                )
+            )
+        } else {
+            // Fallback: Supabase web OAuth (opens ASWebAuthenticationSession).
+            guard configuration.isGoogleOAuthAvailable else {
+                throw AuthError.providerUnavailable(.google)
+            }
+            let provider = ForegroundWindowProvider.shared
+            session = try await client.auth.signInWithOAuth(provider: .google) { webSession in
+                webSession.presentationContextProvider = provider
+                webSession.prefersEphemeralWebBrowserSession = false
+            }
         }
 
-        return Self.mapSession(session)
+        let identities = try await client.auth.userIdentities()
+        return Self.mapSession(session, identities: identities)
+    }
+
+    func linkApple(idToken: String, nonce: String?) async throws -> AuthSession {
+        let client = try requireClient()
+        _ = try await client.auth.linkIdentityWithIdToken(
+            credentials: OpenIDConnectCredentials(
+                provider: .apple,
+                idToken: idToken,
+                nonce: nonce
+            )
+        )
+        return try await requireRefreshedSession()
+    }
+
+    func linkGoogle() async throws -> AuthSession {
+        let client = try requireClient()
+
+        if let clientID = configuration.googleClientID {
+            let idToken = try await GoogleSignInService.signIn(clientID: clientID)
+            _ = try await client.auth.linkIdentityWithIdToken(
+                credentials: OpenIDConnectCredentials(
+                    provider: .google,
+                    idToken: idToken,
+                    nonce: nil
+                )
+            )
+        } else {
+            guard configuration.isGoogleOAuthAvailable else {
+                throw AuthError.providerUnavailable(.google)
+            }
+            let provider = ForegroundWindowProvider.shared
+            _ = try await client.auth.signInWithOAuth(provider: .google) { webSession in
+                webSession.presentationContextProvider = provider
+                webSession.prefersEphemeralWebBrowserSession = false
+            }
+        }
+
+        return try await requireRefreshedSession()
+    }
+
+    func sendLinkPhoneOTP(phone: String) async throws {
+        let client = try requireClient()
+        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
+            throw AuthError.invalidPhoneNumber
+        }
+        try await client.auth.update(user: UserAttributes(phone: e164))
+    }
+
+    func verifyLinkPhoneOTP(phone: String, token: String) async throws -> AuthSession {
+        let client = try requireClient()
+        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
+            throw AuthError.invalidPhoneNumber
+        }
+        try await client.auth.verifyOTP(phone: e164, token: token, type: .phoneChange)
+        return try await requireRefreshedSession()
+    }
+
+    func sendLinkEmailOTP(email: String) async throws {
+        let client = try requireClient()
+        try await client.auth.update(user: UserAttributes(email: email))
+    }
+
+    func verifyLinkEmailOTP(email: String, token: String) async throws -> AuthSession {
+        let client = try requireClient()
+        try await client.auth.verifyOTP(email: email, token: token, type: .emailChange)
+        return try await requireRefreshedSession()
+    }
+
+    func unlinkIdentity(id: String) async throws -> AuthSession {
+        let client = try requireClient()
+        let identities = try await client.auth.userIdentities()
+        guard let identity = identities.first(where: { $0.id == id }) else {
+            throw AuthError.unknown("That sign-in method is no longer linked.")
+        }
+
+        try await client.auth.unlinkIdentity(identity)
+        _ = try await client.auth.refreshSession()
+        return try await requireRefreshedSession()
+    }
+
+    func refreshAuthSession() async throws -> AuthSession? {
+        let client = try requireClient()
+        guard let session = client.auth.currentSession, !session.isExpired else {
+            return nil
+        }
+        return try await mapSession(using: client, session: session)
     }
 
     func sendSchoolEmailVerification(to email: String) async throws {
@@ -86,7 +233,7 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
 
     func verifySchoolEmailOTP(email: String, token: String) async throws {
         let client = try requireClient()
-        try await client.auth.verifyOTP(email: email, token: token, type: .email)
+        try await client.auth.verifyOTP(email: email, token: token, type: .emailChange)
     }
 
     func signOut() async throws {
@@ -110,13 +257,13 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         let client = try requireClient()
 
         if let stored = client.auth.currentSession, !stored.isExpired {
-            return Self.mapSession(stored)
+            return try await mapSession(using: client, session: stored)
         }
 
         do {
             let session = try await client.auth.session
             guard !session.isExpired else { return nil }
-            return Self.mapSession(session)
+            return try await mapSession(using: client, session: session)
         } catch {
             return nil
         }
@@ -127,33 +274,52 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         return client
     }
 
-    private static func mapSession(_ session: Session) -> AuthSession {
-        AuthSession(
-            userId: session.user.id,
-            provider: provider(from: session.user),
-            email: session.user.email
+    private func requireRefreshedSession() async throws -> AuthSession {
+        guard let session = try await refreshAuthSession() else {
+            throw AuthError.sessionRestoreFailed
+        }
+        return session
+    }
+
+    private func mapSession(using client: SupabaseClient, session: Session) async throws -> AuthSession {
+        let identities = try await client.auth.userIdentities()
+        return Self.mapSession(session, identities: identities)
+    }
+
+    private static func mapSession(_ session: Session, identities: [UserIdentity]) -> AuthSession {
+        let user = session.user
+        let linkedIdentities = identities.compactMap { identity -> LinkedIdentity? in
+            let email = identity.identityData?["email"]?.stringValue
+            return LinkedIdentity.fromSupabaseProvider(identity.provider, id: identity.id, email: email)
+        }
+
+        return AuthSession(
+            userId: user.id,
+            primaryProvider: primaryProvider(from: user, identities: identities),
+            email: user.email,
+            phone: user.phone,
+            linkedIdentities: linkedIdentities
         )
     }
 
-    private static func provider(from user: User) -> AuthProvider {
-        if let identity = user.identities?.first {
-            switch identity.provider {
-            case "apple": return .apple
-            case "google": return .google
-            case "phone": return .phone
-            default: break
-            }
+    private static func primaryProvider(from user: User, identities: [UserIdentity]) -> AuthProvider {
+        if let identity = identities.first, let provider = AuthProvider(supabaseProvider: identity.provider) {
+            return provider
         }
 
-        if case .string(let value) = user.appMetadata["provider"] {
-            switch value {
-            case "apple": return .apple
-            case "google": return .google
-            case "phone": return .phone
-            default: break
-            }
+        if let phone = user.phone, !phone.isEmpty {
+            return .phone
         }
 
-        return .apple
+        if let email = user.email, !email.isEmpty {
+            return .email
+        }
+
+        if case .string(let value) = user.appMetadata["provider"],
+           let provider = AuthProvider(supabaseProvider: value) {
+            return provider
+        }
+
+        return .phone
     }
 }

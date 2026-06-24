@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum OnboardingStep: String, Codable, Sendable, CaseIterable {
+enum OnboardingStep: String, Codable, Sendable, CaseIterable, Hashable {
     case username
     case profile
     case schoolVerify = "school_verify"

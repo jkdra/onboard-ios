@@ -2,17 +2,17 @@
 //  ArchiveCalendarView.swift
 //  On Board
 //
-//  Vertical Monday-start calendar. Month splits show a divider only (29 30 | 1).
-//  Days outside the scroll-focused month fade out.
+//  Drum-roller archive calendar. Weeks snap to a central capsule viewfinder.
 //
 
 import SwiftUI
 
-private struct WeekScrollPreference: PreferenceKey {
-    static var defaultValue: [Date: CGFloat] = [:]
-
-    static func reduce(value: inout [Date: CGFloat], nextValue: () -> [Date: CGFloat]) {
-        value.merge(nextValue()) { _, new in new }
+// Used in .modifier(active:identity:) transitions for the month label slide
+private struct SlideFadeModifier: ViewModifier {
+    var offsetX: CGFloat
+    var opacity: Double
+    func body(content: Content) -> some View {
+        content.offset(x: offsetX).opacity(opacity)
     }
 }
 
@@ -20,178 +20,228 @@ struct ArchiveCalendarView: View {
     let weeks: [ArchiveCalendarWeek]
     @Binding var selectedWeekID: UUID?
 
-    @State private var weekPositions: [Date: CGFloat] = [:]
-    @State private var scrollCenterY: CGFloat = 0
-    /// Captured once so scroll padding stays stable (avoids layout ↔ scroll feedback loops).
-    @State private var layoutViewportHeight: CGFloat = 0
+    @State private var scrollPosition = ScrollPosition(idType: Date.self)
     @State private var focusedMonth: CalendarMonth?
+    @State private var availableHeight: CGFloat = 0
+    @State private var monthForward = true
 
-    private let unfocusedOpacity: Double = 0.28
-    private let defaultTopPadding: CGFloat = 32
-    private let defaultBottomPadding: CGFloat = 120
+    private let rowHeight: CGFloat = 56   // 44pt cell + 6pt padding × 2
+
+    // Weeks up to and including the active week — no future weeks shown.
+    private var displayedWeeks: [ArchiveCalendarWeek] {
+        guard let activeIndex = weeks.lastIndex(where: { $0.boardWeek?.status == .active }) else {
+            return weeks
+        }
+        return Array(weeks[...activeIndex])
+    }
+
+    private var centeredWeekDate: Date? {
+        scrollPosition.viewID(type: Date.self)
+            ?? displayedWeeks.first(where: { $0.boardWeek?.id == selectedWeekID })?.id
+    }
+
+    private var centeredWeekIndex: Int? {
+        guard let d = centeredWeekDate else { return nil }
+        return displayedWeeks.firstIndex(where: { $0.id == d })
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    pastBoundaryCap
-                        .padding(.top, topScrollPadding)
+        GeometryReader { geo in
+            let inset = max(0, (geo.size.height - rowHeight) / 2)
 
-                    ForEach(weeks) { week in
+            ZStack(alignment: .top) {
+                // Capsule viewfinder + scrolling weeks
+                ZStack(alignment: .center) {
+                    viewfinderHighlight
+                    calendarScrollView(inset: inset)
+                }
+
+                // Month label (top) + weekday header (just above viewfinder)
+                fixedHeaderOverlay(inset: inset)
+            }
+            .onAppear { availableHeight = geo.size.height }
+            .onChange(of: geo.size.height) { _, h in availableHeight = h }
+            .onChange(of: availableHeight) { old, new in
+                if old == 0, new > 0 { scrollToSelection(animated: false) }
+            }
+        }
+    }
+
+    // MARK: - Viewfinder (capsule)
+
+    @ViewBuilder
+    private var viewfinderHighlight: some View {
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(.regular, in: Capsule())
+                .clipShape(Capsule())
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                }
+                .frame(height: rowHeight)
+                .padding(.horizontal, 12)
+                .allowsHitTesting(false)
+        } else {
+            Capsule()
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    Capsule()
+                        .strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5)
+                }
+                .frame(height: rowHeight)
+                .padding(.horizontal, 12)
+                .allowsHitTesting(false)
+        }
+    }
+
+    // MARK: - Scroll view
+
+    private func calendarScrollView(inset: CGFloat) -> some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                pastBoundaryCap
+                    .padding(.bottom, 20)
+
+                LazyVStack(spacing: 20) {
+                    ForEach(displayedWeeks) { week in
                         weekRow(for: week)
                             .id(week.id)
-                            .background {
-                                GeometryReader { geometry in
-                                    Color.clear.preference(
-                                        key: WeekScrollPreference.self,
-                                        value: [week.id: geometry.frame(in: .named("archiveScroll")).midY]
-                                    )
-                                }
-                            }
                     }
-
-                    futureBoundaryCap
-                        .padding(.bottom, bottomScrollPadding)
-
-                    legend
-                        .padding(.top, 4)
                 }
+                .scrollTargetLayout()
+
+                futureBoundaryCap
+                    .padding(.top, 20)
+            }
+            .padding(.horizontal, 20)
+        }
+        .scrollPosition($scrollPosition)
+        .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+        .contentMargins(.vertical, inset, for: .scrollContent)
+        .scrollIndicators(.hidden)
+        .onAppear {
+            seedFocusedMonthIfNeeded()
+            scrollToSelection(animated: false)
+        }
+        .onChange(of: scrollPosition.viewID(type: Date.self)) { old, new in
+            // Detect scroll direction for the month label transition
+            if let old, let new {
+                monthForward = new > old
+            }
+            updateFocusedMonthAndSelection(for: new)
+        }
+        .onChange(of: selectedWeekID) { _, newVal in
+            let currentDate = scrollPosition.viewID(type: Date.self)
+            let currentWeek = weeks.first(where: { $0.id == currentDate })
+            if currentWeek?.boardWeek?.id != newVal {
+                scrollToSelection(animated: true)
+            }
+        }
+    }
+
+    // MARK: - Fixed header overlay
+
+    // Month label sits at the top; weekday header is pinned just above the viewfinder.
+    // bottom spacer = inset + rowHeight pushes the weekday header's bottom to the viewfinder's top.
+    private func fixedHeaderOverlay(inset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            monthLabelView
                 .padding(.horizontal, 20)
-                .padding(.vertical, 16)
-            }
-            .coordinateSpace(name: "archiveScroll")
-            .onScrollGeometryChange(for: ScrollMetrics.self) { geometry in
-                ScrollMetrics(
-                    centerY: geometry.contentOffset.y + geometry.containerSize.height / 2,
-                    viewportHeight: geometry.containerSize.height
-                )
-            } action: { _, metrics in
-                if layoutViewportHeight == 0, metrics.viewportHeight > 0 {
-                    layoutViewportHeight = metrics.viewportHeight
-                }
-                scrollCenterY = metrics.centerY
-                updateFocusedMonth()
-            }
-            .onPreferenceChange(WeekScrollPreference.self) { positions in
-                guard !positionsApproximatelyEqual(positions, weekPositions) else { return }
-                weekPositions = positions
-                updateFocusedMonth()
-            }
-            .onAppear {
-                seedFocusedMonthIfNeeded()
-                scrollToSelection(with: proxy, animated: false)
-            }
-            .onChange(of: selectedWeekID) { _, _ in
-                scrollToSelection(with: proxy, animated: true)
-            }
+
+            Spacer()
+
+            ArchiveWeekdayHeader()
+                .padding(.horizontal, 20)
+                .padding(.vertical, 6)
+
+            Color.clear.frame(height: inset + rowHeight)
         }
-    }
-
-    // MARK: - Boundary caps
-
-    private var pastBoundaryCap: some View {
-        VStack(spacing: 10) {
-            dotTrail(fading: .towardContent)
-            Text("Looks like that's all!")
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
+        .background(alignment: .top) {
+            ArchiveToolbarChrome()
+                .frame(height: 96)
+                .allowsHitTesting(false)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.bottom, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Beginning of the archive. Looks like that's all.")
-    }
-
-    private var futureBoundaryCap: some View {
-        VStack(spacing: 16) {
-            ghostWeekRow(title: "Next Week")
-            Text("More weeks to come!")
-                .fontStyle(.footnote)
-                .foregroundStyle(.tertiary)
-            dotTrail(fading: .towardEdge)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 4)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Future weeks. Next week. More weeks to come.")
-    }
-
-    private enum DotFadeDirection {
-        /// Faint at the outer edge, stronger toward the calendar content.
-        case towardContent
-        /// Strongest near the calendar content, faint toward the outer edge.
-        case towardEdge
-    }
-
-    private func dotTrail(fading direction: DotFadeDirection) -> some View {
-        VStack(spacing: 7) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(Color.secondary.opacity(dotOpacity(for: index, direction: direction)))
-                    .frame(width: 4, height: 4)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func dotOpacity(for index: Int, direction: DotFadeDirection) -> Double {
-        let step = 0.14
-        let base = 0.12
-        switch direction {
-        case .towardContent:
-            return base + Double(index) * step
-        case .towardEdge:
-            return base + Double(2 - index) * step
-        }
-    }
-
-    private func ghostWeekRow(title: String) -> some View {
-        ZStack {
-            HStack(spacing: 0) {
-                ForEach(0..<7, id: \.self) { _ in
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                }
-            }
-
-            Text("(\(title))")
-                .fontStyle(.caption)
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.vertical, 6)
         .allowsHitTesting(false)
     }
 
-    private var topScrollPadding: CGFloat {
-        guard layoutViewportHeight > 0 else { return defaultTopPadding }
-        return max(defaultTopPadding, layoutViewportHeight * 0.08)
-    }
+    // MARK: - Month label
 
-    private var bottomScrollPadding: CGFloat {
-        guard layoutViewportHeight > 0 else { return defaultBottomPadding }
-        return max(defaultBottomPadding, layoutViewportHeight * 0.22)
-    }
-
-    private struct ScrollMetrics: Equatable {
-        let centerY: CGFloat
-        let viewportHeight: CGFloat
-    }
-
-    private func positionsApproximatelyEqual(_ lhs: [Date: CGFloat], _ rhs: [Date: CGFloat]) -> Bool {
-        guard lhs.count == rhs.count else { return false }
-        for (key, value) in lhs {
-            guard let other = rhs[key], abs(value - other) < 0.5 else { return false }
+    private var monthLabelText: String {
+        guard let week = weeks.first(where: { $0.id == centeredWeekDate }) else {
+            guard let m = focusedMonth else { return "" }
+            return fullMonthName(m.month, year: m.year)
         }
-        return true
+
+        if week.spansMonthBoundary, week.monthSegments.count >= 2 {
+            let a = week.monthSegments[0]
+            let b = week.monthSegments[1]
+            return "\(shortMonthName(a.month))  |  \(fullMonthName(b.month, year: b.year))"
+        }
+
+        if let seg = week.monthSegments.first {
+            return fullMonthName(seg.month, year: seg.year)
+        }
+        return ""
+    }
+
+    // Direction-aware transition: forward → slides left/right; backward → opposite
+    private var monthLabelTransition: AnyTransition {
+        let x: CGFloat = monthForward ? 16 : -16
+        return .asymmetric(
+            insertion: .modifier(
+                active: SlideFadeModifier(offsetX: x, opacity: 0),
+                identity: SlideFadeModifier(offsetX: 0, opacity: 1)
+            ),
+            removal: .modifier(
+                active: SlideFadeModifier(offsetX: -x, opacity: 0),
+                identity: SlideFadeModifier(offsetX: 0, opacity: 1)
+            )
+        )
+    }
+
+    private var monthLabelView: some View {
+        Text(monthLabelText)
+            .fontStyle(.headline)
+            .foregroundStyle(.primary)
+            .id(monthLabelText)
+            .transition(monthLabelTransition)
+            .animation(.snappy(duration: 0.2), value: monthLabelText)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.top, 12)
+            .padding(.bottom, 2)
+    }
+
+    private func fullMonthName(_ month: Int, year: Int) -> String {
+        var comps = DateComponents()
+        comps.month = month; comps.year = year; comps.day = 1
+        guard let date = Calendar.current.date(from: comps) else { return "" }
+        return date.formatted(.dateTime.month(.wide).year())
+    }
+
+    private func shortMonthName(_ month: Int) -> String {
+        Calendar.current.shortStandaloneMonthSymbols[month - 1]
+    }
+
+    // MARK: - Week row
+
+    // Exponential fade: centered = 1.0, each step away multiplies by ~0.55
+    private func weekOpacity(for week: ArchiveCalendarWeek) -> Double {
+        guard let centeredIndex = centeredWeekIndex,
+              let selfIndex = displayedWeeks.firstIndex(where: { $0.id == week.id }) else { return 0.45 }
+        let distance = abs(centeredIndex - selfIndex)
+        return max(0.10, pow(0.55, Double(distance)))
     }
 
     private func weekRow(for week: ArchiveCalendarWeek) -> some View {
-        let isSelected = week.boardWeek.map { selectedWeekID == $0.id } ?? false
+        let isCentered = week.id == centeredWeekDate
 
         return Button {
-            if let boardWeek = week.boardWeek {
-                selectedWeekID = boardWeek.id
+            guard week.boardWeek != nil else { return }
+            withAnimation(.smooth(duration: 0.35)) {
+                scrollPosition = ScrollPosition(id: week.id, anchor: .center)
             }
         } label: {
             HStack(spacing: 0) {
@@ -203,16 +253,27 @@ struct ArchiveCalendarView: View {
                 }
             }
             .padding(.vertical, 6)
-            .background {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.secondary.opacity(0.18))
-                        .offset(y: -3)
-                }
-            }
+            .background(Color.clear)
         }
         .buttonStyle(.plain)
         .disabled(week.boardWeek == nil)
+        .opacity(weekOpacity(for: week))
+        .animation(.smooth(duration: 0.22), value: centeredWeekDate)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(weekAccessibilityLabel(for: week))
+        .accessibilityAddTraits(isCentered ? [.isSelected] : [])
+        .accessibilityHint(
+            week.boardWeek == nil ? "No data for this period" :
+            week.boardWeek?.status == .active ? "Current week" : "Tap to view"
+        )
+    }
+
+    private func weekAccessibilityLabel(for week: ArchiveCalendarWeek) -> String {
+        let fmt = Date.FormatStyle().month(.abbreviated).day()
+        guard let first = week.days.first, let last = week.days.last else { return "Unknown week" }
+        let range = "\(first.date.formatted(fmt)) to \(last.date.formatted(fmt))"
+        if week.boardWeek?.status == .active { return "\(range), current week" }
+        return range
     }
 
     private var monthSplitDivider: some View {
@@ -221,10 +282,9 @@ struct ArchiveCalendarView: View {
             .frame(width: 1, height: 32)
     }
 
-    @ViewBuilder
-    private func dayCell(_ day: ArchiveCalendarDay) -> some View {
-        let inFocus = isInFocus(day)
+    // MARK: - Day cell (opacity handled at row level)
 
+    private func dayCell(_ day: ArchiveCalendarDay) -> some View {
         ZStack {
             if day.isToday {
                 Circle()
@@ -232,138 +292,117 @@ struct ArchiveCalendarView: View {
                     .frame(width: 36, height: 36)
                     .offset(y: -3)
             }
-
-            VStack(spacing: 2) {
-                Text("\(day.dayOfMonth)")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(day.isToday ? Color.white : .primary)
-
-                if day.isBoardOrigin {
-                    Circle()
-                        .fill(day.isToday ? Color.white.opacity(0.9) : Color.accentColor)
-                        .frame(width: 4, height: 4)
-                } else {
-                    Color.clear.frame(width: 4, height: 4)
-                }
-            }
+            Text("\(day.dayOfMonth)")
+                .fontStyle(.subheadline)
+                .foregroundStyle(day.isToday ? Color.white : .primary)
+                .offset(y: -3)
         }
-        .opacity(inFocus ? 1 : unfocusedOpacity)
         .frame(maxWidth: .infinity)
         .frame(height: 44)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(dayAccessibilityLabel(for: day))
+        .accessibilityHidden(true)
     }
 
-    private var legend: some View {
-        HStack(spacing: 20) {
-            legendItem(color: Color.accentColor, filled: true, label: "Today")
-            legendItem(color: Color.secondary.opacity(0.18), filled: true, label: "Selected week")
-            legendItem(color: Color.accentColor, dot: true, label: "Board created")
+    // MARK: - Boundary caps
+
+    private var pastBoundaryCap: some View {
+        VStack(spacing: 8) {
+            dotTrail(ascending: true)
+            Text("That's the beginning!")
+                .fontStyle(.caption)
+                .foregroundStyle(.tertiary)
         }
-        .fontStyle(.caption2)
-        .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
+        .frame(minHeight: rowHeight)
+        .opacity(0.65)
+        .accessibilityLabel("Beginning of the archive.")
     }
 
-    private func legendItem(color: Color, filled: Bool = false, dot: Bool = false, label: String) -> some View {
-        HStack(spacing: 6) {
-            if dot {
-                Circle().fill(color).frame(width: 6, height: 6)
-            } else if filled {
-                Circle().fill(color).frame(width: 10, height: 10)
-            } else {
-                Circle().strokeBorder(color, lineWidth: 1.5).frame(width: 10, height: 10)
+    private var futureBoundaryCap: some View {
+        VStack(spacing: 8) {
+            dotTrail(ascending: false)
+            Text("More weeks to come.")
+                .fontStyle(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity)
+        .frame(minHeight: rowHeight)
+        .opacity(0.65)
+        .accessibilityLabel("More weeks to come.")
+    }
+
+    private func dotTrail(ascending: Bool) -> some View {
+        VStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(Color.secondary.opacity(ascending ? 0.12 + Double(i) * 0.12 : 0.36 - Double(i) * 0.12))
+                    .frame(width: 4, height: 4)
             }
-            Text(label)
         }
     }
 
-    private func crossesMonthBoundary(between previous: ArchiveCalendarDay, and next: ArchiveCalendarDay) -> Bool {
-        previous.month != next.month || previous.year != next.year
+    // MARK: - Scroll helpers
+
+    private func scrollToSelection(animated: Bool) {
+        guard let targetID = scrollTargetWeekID() else { return }
+        let pos = ScrollPosition(id: targetID, anchor: .center)
+        if animated {
+            withAnimation(.smooth(duration: 0.35)) { scrollPosition = pos }
+        } else {
+            scrollPosition = pos
+        }
     }
 
-    private func isInFocus(_ day: ArchiveCalendarDay) -> Bool {
-        guard let focusedMonth else { return true }
-        return focusedMonth.contains(day)
+    private func scrollTargetWeekID() -> Date? {
+        if let selectedWeekID,
+           let match = displayedWeeks.first(where: { $0.boardWeek?.id == selectedWeekID }) {
+            return match.id
+        }
+        return displayedWeeks.last?.id
+    }
+
+    private func updateFocusedMonthAndSelection(for weekDate: Date?) {
+        guard let weekDate, let week = weeks.first(where: { $0.id == weekDate }) else { return }
+
+        if let boardWeek = week.boardWeek, selectedWeekID != boardWeek.id {
+            selectedWeekID = boardWeek.id
+        }
+
+        guard let month = week.dominantMonth, focusedMonth != month else { return }
+        withAnimation(.snappy(duration: 0.2)) { focusedMonth = month }
     }
 
     private func seedFocusedMonthIfNeeded() {
         guard focusedMonth == nil else { return }
-        if let todayMonth = todayMonth() {
-            focusedMonth = todayMonth
-        } else if let active = weeks.last?.dominantMonth {
-            focusedMonth = active
-        }
-    }
-
-    private func todayMonth() -> CalendarMonth? {
-        let today = Calendar.current.dateComponents([.month, .year], from: .now)
-        guard let month = today.month, let year = today.year else { return nil }
-        return CalendarMonth(month: month, year: year)
-    }
-
-    private func updateFocusedMonth() {
-        guard !weekPositions.isEmpty else { return }
-
-        let nearestWeekID = weekPositions.min { lhs, rhs in
-            abs(lhs.value - scrollCenterY) < abs(rhs.value - scrollCenterY)
-        }?.key
-
-        guard let nearestWeekID,
-              let week = weeks.first(where: { $0.id == nearestWeekID }),
-              let month = week.dominantMonth else { return }
-
-        if focusedMonth != month {
-            focusedMonth = month
-        }
-    }
-
-    private func dayAccessibilityLabel(for day: ArchiveCalendarDay) -> String {
-        var parts = [day.date.formatted(.dateTime.month(.wide).day())]
-        if day.isToday { parts.append("today") }
-        if day.isBoardOrigin { parts.append("board created") }
-        if !isInFocus(day) { parts.append("outside focused month") }
-        return parts.joined(separator: ", ")
-    }
-
-    private func scrollToSelection(with proxy: ScrollViewProxy, animated: Bool) {
-        guard let selectedWeekID,
-              let week = weeks.first(where: { $0.boardWeek?.id == selectedWeekID }) else {
-            if let activeWeek = weeks.last {
-                scroll(to: activeWeek.id, with: proxy, animated: animated)
-            }
-            return
-        }
-        scroll(to: week.id, with: proxy, animated: animated)
-    }
-
-    private func scroll(to id: Date, with proxy: ScrollViewProxy, animated: Bool) {
-        if animated {
-            withAnimation(.smooth(duration: 0.35)) {
-                proxy.scrollTo(id, anchor: .center)
-            }
+        let comps = Calendar.current.dateComponents([.month, .year], from: .now)
+        if let m = comps.month, let y = comps.year {
+            focusedMonth = CalendarMonth(month: m, year: y)
         } else {
-            proxy.scrollTo(id, anchor: .center)
+            focusedMonth = displayedWeeks.last?.dominantMonth
         }
+    }
+
+    private func crossesMonthBoundary(between prev: ArchiveCalendarDay, and next: ArchiveCalendarDay) -> Bool {
+        prev.month != next.month || prev.year != next.year
     }
 }
 
+// MARK: - Previews
+
 #Preview("Month boundary") {
-    let calendar = Calendar.current
-    let juneWeekStart = calendar.date(from: DateComponents(year: 2025, month: 6, day: 30))!
+    let cal = Calendar.current
+    let start = cal.date(from: DateComponents(year: 2025, month: 6, day: 30))!
     let weeks = ArchiveCalendarBuilder.build(
         boardWeeks: [
             BoardWeek(
-                startsAt: juneWeekStart,
-                endsAt: calendar.date(byAdding: .day, value: 7, to: juneWeekStart)!,
+                startsAt: start,
+                endsAt: cal.date(byAdding: .day, value: 7, to: start)!,
                 status: .archived,
-                archivedAt: juneWeekStart
+                archivedAt: start
             )
         ],
-        boardOrigin: calendar.date(from: DateComponents(year: 2025, month: 6, day: 15)),
-        now: calendar.date(from: DateComponents(year: 2025, month: 7, day: 2))!
+        boardOrigin: cal.date(from: DateComponents(year: 2025, month: 6, day: 15)),
+        now: cal.date(from: DateComponents(year: 2025, month: 7, day: 2))!
     )
-
     return ArchiveCalendarView(weeks: weeks, selectedWeekID: .constant(weeks.first?.boardWeek?.id))
 }
 
@@ -375,6 +414,5 @@ struct ArchiveCalendarView: View {
         boardOrigin: store.currentBoard?.createdAt
     )
     selected = store.activeBoardWeek?.id
-
     return ArchiveCalendarView(weeks: weeks, selectedWeekID: $selected)
 }

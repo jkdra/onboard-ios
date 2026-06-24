@@ -17,111 +17,220 @@ extension BoardStore {
         userCommentVotes[commentID]
     }
 
-    func addPost(title: String, description: String, tone: PostTone) async {
-        guard canInteractWithBoard, let user = currentUser else { return }
-
-        if let boardService, let weekID = activeBoardWeek?.id {
-            do {
-                let post = try await boardService.createPost(
-                    weekID: weekID,
-                    authorID: user.id,
-                    title: title,
-                    description: description,
-                    tone: tone
-                )
-                insertPost(post)
-            } catch {
-                loadError = error.localizedDescription
-            }
-            return
+    func addPost(
+        title: String,
+        description: String,
+        tone: PostTone,
+        imageUrl: String? = nil,
+        imageAspectRatio: Double? = nil
+    ) async -> Bool {
+        guard canInteractWithBoard, let user = currentUser else { return false }
+        guard let boardService, let weekID = activeBoardWeek?.id else {
+            loadError = isLive
+                ? "No active board week is available."
+                : "Connect to the On Board backend to post."
+            return false
         }
 
-        let post = Post(
-            authorId: user.id,
-            boardWeekId: activeBoardWeek?.id,
-            title: title,
-            description: description,
-            author: user.handle,
-            tone: tone
-        )
-        insertPost(post)
+        do {
+            let post = try await boardService.createPost(
+                weekID: weekID,
+                authorID: user.id,
+                title: title,
+                description: description,
+                tone: tone,
+                imageUrl: imageUrl,
+                imageAspectRatio: imageAspectRatio
+            )
+            insertPost(post)
+            return true
+        } catch {
+            loadError = Self.mapLoadError(error)
+            return false
+        }
     }
 
     func updatePost(
         id: UUID,
         title: String,
         description: String,
-        tone: PostTone
+        tone: PostTone,
+        imageUrl: String?,
+        imageAspectRatio: Double?
     ) async {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
               canEdit(post: posts[index]) else { return }
 
-        if let boardService {
-            do {
-                let updated = try await boardService.updatePost(
-                    id: id,
-                    title: title,
-                    description: description,
-                    tone: tone
-                )
-                replacePost(at: index, with: updated)
-            } catch {
-                loadError = error.localizedDescription
-            }
+        let existing = posts[index]
+
+        guard let boardService else {
+            let updated = Post(
+                id: existing.id,
+                authorId: existing.authorId,
+                boardWeekId: existing.boardWeekId,
+                isReadOnly: existing.isReadOnly,
+                title: title,
+                description: description,
+                author: existing.author,
+                tone: tone,
+                reactionCounts: existing.reactionCounts,
+                comments: comments(for: id),
+                createdAt: existing.createdAt,
+                imageUrl: imageUrl,
+                imageAspectRatio: imageAspectRatio
+            )
+            replacePost(at: index, with: updated)
             return
         }
 
-        var local = posts[index]
-        local.title = title
-        local.description = description
-        local.tone = tone
-        replacePost(at: index, with: local)
+        do {
+            let updated = try await boardService.updatePost(
+                id: id,
+                title: title,
+                description: description,
+                tone: tone,
+                imageUrl: imageUrl,
+                imageAspectRatio: imageAspectRatio
+            )
+            replacePost(at: index, with: updated)
+        } catch {
+            loadError = Self.mapLoadError(error)
+        }
     }
 
-    func updateProfile(
-        displayName: String,
-        handle: String,
-        bio: String?
-    ) async {
-        guard let currentUserID,
-              let index = profiles.firstIndex(where: { $0.id == currentUserID }) else { return }
+    func deletePost(id: UUID) async -> Bool {
+        guard let index = posts.firstIndex(where: { $0.id == id }),
+              canInteract(with: posts[index]),
+              canEdit(post: posts[index]) else { return false }
 
-        if let boardService {
-            do {
-                let updated = try await boardService.updateProfile(
-                    id: currentUserID,
-                    displayName: displayName,
-                    handle: handle,
-                    bio: bio
-                )
-                profiles[index] = updated
-                rebuildCaches()
-            } catch {
-                loadError = error.localizedDescription
-            }
-            return
+        guard let boardService else {
+            loadError = "Connect to the On Board backend to delete posts."
+            return false
         }
 
-        profiles[index] = Profile(
-            id: currentUserID,
-            handle: handle,
-            displayName: displayName,
-            bio: bio,
-            avatarEmoji: profiles[index].avatarEmoji,
-            joinedAt: profiles[index].joinedAt
-        )
-        rebuildCaches()
+        do {
+            try await boardService.deletePost(id: id)
+            removePost(id: id)
+            return true
+        } catch {
+            loadError = Self.mapLoadError(error)
+            return false
+        }
+    }
+
+    func addComment(
+        postID: UUID,
+        body: String,
+        parentCommentID: UUID? = nil
+    ) async -> Bool {
+        let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let user = currentUser,
+              let postIndex = posts.firstIndex(where: { $0.id == postID }),
+              canInteract(with: posts[postIndex]) else { return false }
+
+        guard let boardService else {
+            loadError = "Connect to the On Board backend to comment."
+            return false
+        }
+
+        do {
+            try await boardService.createComment(
+                postID: postID,
+                authorID: user.id,
+                authorHandle: user.handle,
+                body: trimmed,
+                parentCommentID: parentCommentID
+            )
+            await loadComments(for: postID)
+            return true
+        } catch {
+            loadError = Self.mapLoadError(error)
+            return false
+        }
     }
 
     func updateComment(postID: UUID, commentID: UUID, body: String) async {
         let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty,
               let postIndex = posts.firstIndex(where: { $0.id == postID }),
-              canInteract(with: posts[postIndex]) else { return }
+              canInteract(with: posts[postIndex]),
+              let existing = comments(for: postID).comment(with: commentID),
+              canEdit(comment: existing) else { return }
 
+        guard let boardService else {
+            loadError = "Connect to the On Board backend to edit comments."
+            return
+        }
+
+        let previous = existing.body
         _ = mutateComments(for: postID) { comments in
             updateCommentBody(in: &comments, commentID: commentID, body: trimmed)
+        }
+
+        do {
+            try await boardService.updateComment(id: commentID, body: trimmed)
+        } catch {
+            _ = mutateComments(for: postID) { comments in
+                updateCommentBody(in: &comments, commentID: commentID, body: previous)
+            }
+            loadError = Self.mapLoadError(error)
+        }
+    }
+
+    func deleteComment(postID: UUID, commentID: UUID) async -> Bool {
+        guard let postIndex = posts.firstIndex(where: { $0.id == postID }),
+              canInteract(with: posts[postIndex]),
+              let existing = comments(for: postID).comment(with: commentID),
+              canEdit(comment: existing) else { return false }
+
+        guard let boardService else {
+            loadError = "Connect to the On Board backend to delete comments."
+            return false
+        }
+
+        let snapshot = comments(for: postID)
+        guard var thread = commentsByPostID[postID],
+              removeComment(commentID: commentID, from: &thread) else { return false }
+        commentsByPostID[postID] = thread
+
+        do {
+            try await boardService.deleteComment(id: commentID)
+            return true
+        } catch {
+            commentsByPostID[postID] = snapshot
+            loadError = Self.mapLoadError(error)
+            return false
+        }
+    }
+
+    func updateProfile(
+        displayName: String,
+        handle: String,
+        bio: String?,
+        avatarUrl: String? = nil
+    ) async {
+        guard let currentUserID,
+              let index = profiles.firstIndex(where: { $0.id == currentUserID }) else { return }
+
+        guard let boardService else {
+            loadError = "Connect to the On Board backend to update your profile."
+            return
+        }
+
+        do {
+            let updated = try await boardService.updateProfile(
+                id: currentUserID,
+                displayName: displayName,
+                handle: handle,
+                bio: bio,
+                avatarUrl: avatarUrl
+            )
+            profiles[index] = updated
+            rebuildCaches()
+        } catch {
+            loadError = Self.mapLoadError(error)
         }
     }
 
@@ -154,7 +263,7 @@ extension BoardStore {
                     previous: reaction,
                     reaction: previous
                 )
-                loadError = error.localizedDescription
+                loadError = Self.mapLoadError(error)
             }
         }
     }
@@ -189,12 +298,27 @@ extension BoardStore {
                     previous: vote,
                     vote: previous
                 )
-                loadError = error.localizedDescription
+                loadError = Self.mapLoadError(error)
             }
         }
     }
 
     // MARK: - Private helpers
+
+    @discardableResult
+    private func removeComment(commentID: UUID, from comments: inout [Comment]) -> Bool {
+        if let index = comments.firstIndex(where: { $0.id == commentID }) {
+            comments.remove(at: index)
+            return true
+        }
+
+        for index in comments.indices {
+            if removeComment(commentID: commentID, from: &comments[index].replies) {
+                return true
+            }
+        }
+        return false
+    }
 
     private func applyReactionChange(
         postIndex: Int,

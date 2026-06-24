@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
@@ -12,7 +13,9 @@ struct SettingsView: View {
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
     @AppStorage("rotationEnabled") private var rotationEnabled: Bool = true
     @Environment(\.dismiss) private var dismiss
-    
+
+    @State private var triggerShake = 0
+
     private let previewWidth: CGFloat = 184
     private let previewHeight: CGFloat = 256
     private let columns = [
@@ -26,35 +29,26 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                HStack (alignment: .center) {
-                    
+                HStack(alignment: .center) {
                     Spacer()
-                    Image(systemName: "wave.3.left")
-                        .scaleEffect(2)
+                    ZigZagMark()
                         .opacity(hapticsEnabled ? 1 : 0)
                     Spacer()
-                
-                    UnevenRoundedRectangle(cornerRadii: .init(topLeading: 48, topTrailing: 48))
-                        .stroke(lineWidth: 6)
-                        .frame(width: previewWidth, height: previewHeight)
-                        .foregroundStyle(.tertiary)
-                        .overlay(alignment: .bottom) {
-                            LazyVGrid(columns: columns, spacing: 14) {
-                                ForEach(0..<4) { index in
-                                    RoundedRectangle(cornerRadius: 20)
-                                        .stroke(lineWidth: 6)
-                                        .frame(width: previewWidth / 2.8, height: previewHeight / 2.5)
-                                        .foregroundStyle(colors[index])
-                                        .rotationEffect(.degrees(rotationEnabled ? Double.random(in: -4...4) : 0))
-                                        .foregroundStyle(.primary)
-                                        .offset(x: index.isMultiple(of: 2) ? 4 : -4, y: index.isMultiple(of: 2) ? 0 : 48)
-                                }
-                            }
+
+                    boardPreview
+                        .keyframeAnimator(initialValue: CGFloat(0), trigger: triggerShake) { content, offset in
+                            content.offset(x: offset)
+                        } keyframes: { _ in
+                            LinearKeyframe(3,  duration: 0.05)
+                            LinearKeyframe(-6, duration: 0.05)
+                            LinearKeyframe(6,  duration: 0.05)
+                            LinearKeyframe(-6, duration: 0.05)
+                            LinearKeyframe(3,  duration: 0.05)
+                            LinearKeyframe(0,  duration: 0.05)
                         }
-                    
+
                     Spacer()
-                    Image(systemName: "wave.3.right")
-                        .scaleEffect(2)
+                    ZigZagMark()
                         .opacity(hapticsEnabled ? 1 : 0)
                     Spacer()
                 }
@@ -64,15 +58,13 @@ struct SettingsView: View {
                 .mask { LinearGradient(colors: [.white, .clear], startPoint: .top, endPoint: .bottom).padding(.top, -6) }
                 .listRowBackground(Color.clear)
                 .offset(y: 24)
-                
+
                 Section {
-                    
                     Picker("Theme", selection: $appearance) {
                         ForEach(AppearancePreference.allCases) { value in
                             Text(value.label).tag(value)
                         }
                     }
-                    
                     Toggle("Card rotation", isOn: $rotationEnabled)
                 } header: {
                     Text("Appearance")
@@ -91,10 +83,23 @@ struct SettingsView: View {
                     Text("Light taps when you react to a post.")
                         .fontStyle(.footnote)
                 }
-                
+
                 accountSection
 
                 Section {
+                    Link(destination: URL(string: "mailto:\(AppLinks.supportEmail)")!) {
+                        Label("Contact Support", systemImage: "envelope")
+                    }
+                } header: {
+                    Text("Support")
+                        .fontStyle(.subheadline)
+                }
+
+                Section {
+                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                       let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                        LabeledContent("Version", value: "\(version) (\(build))")
+                    }
                     Text("Made with love by @jkdra")
                         .frame(maxWidth: .infinity)
                 }
@@ -107,12 +112,62 @@ struct SettingsView: View {
                     Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
                 }
             }
+            .onAppear {
+                Task {
+                    try? await Task.sleep(for: .milliseconds(600))
+                    shakeAndVibrate()
+                }
+            }
+            .onChange(of: hapticsEnabled) { _, on in
+                if on { shakeAndVibrate() }
+            }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in
                 guard !isSignedIn else { return }
                 dismiss()
             }
         }
     }
+
+    // MARK: - Board preview
+
+    private var boardPreview: some View {
+        UnevenRoundedRectangle(cornerRadii: .init(topLeading: 48, topTrailing: 48))
+            .stroke(lineWidth: 6)
+            .frame(width: previewWidth, height: previewHeight)
+            .foregroundStyle(.tertiary)
+            .overlay(alignment: .bottom) {
+                LazyVGrid(columns: columns, spacing: 14) {
+                    ForEach(0..<4) { index in
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(lineWidth: 6)
+                            .frame(width: previewWidth / 2.8, height: previewHeight / 2.5)
+                            .foregroundStyle(colors[index])
+                            .rotationEffect(.degrees(rotationEnabled ? Double.random(in: -6...6) : 0))
+                            .offset(x: index.isMultiple(of: 2) ? 4 : -4, y: index.isMultiple(of: 2) ? 0 : 48)
+                    }
+                }
+            }
+    }
+
+    // MARK: - Haptics
+
+    private func shakeAndVibrate() {
+        triggerShake += 1
+        guard hapticsEnabled else { return }
+        let hard = UIImpactFeedbackGenerator(style: .rigid)
+        let soft = UIImpactFeedbackGenerator(style: .light)
+        hard.prepare()
+        soft.prepare()
+        hard.impactOccurred(intensity: 1.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) {
+            soft.impactOccurred(intensity: 0.8)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            soft.impactOccurred(intensity: 0.5)
+        }
+    }
+
+    // MARK: - Account section
 
     @ViewBuilder
     private var accountSection: some View {
@@ -145,6 +200,25 @@ struct SettingsView: View {
                     .fontStyle(.footnote)
             }
         }
+    }
+}
+
+// MARK: - Zig-zag haptic indicator
+
+private struct ZigZagMark: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let (w, h) = (size.width, size.height)
+            var path = Path()
+            path.move(to:    CGPoint(x: w * 0.5, y: 0))
+            path.addLine(to: CGPoint(x: w,       y: h * 0.2))
+            path.addLine(to: CGPoint(x: 0,       y: h * 0.4))
+            path.addLine(to: CGPoint(x: w,       y: h * 0.6))
+            path.addLine(to: CGPoint(x: 0,       y: h * 0.8))
+            path.addLine(to: CGPoint(x: w * 0.5, y: h))
+            ctx.stroke(path, with: .foreground, lineWidth: 3)
+        }
+        .frame(width: 14, height: 44)
     }
 }
 

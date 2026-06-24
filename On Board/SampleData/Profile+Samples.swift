@@ -14,25 +14,22 @@ extension Profile {
             handle: "maya.c",
             displayName: "Maya Chen",
             bio: "second year CS. perpetually one assignment behind.",
-            avatarEmoji: "🌱",
+            avatarUrl: "https://i.pravatar.cc/256?img=47",
             joinedAt: Date(timeIntervalSince1970: 1_725_148_800)
         ),
-        Profile(id: SampleProfileID.leo, handle: "leokp", displayName: "Leo Park", bio: "design + caffeine.", avatarEmoji: "🎨"),
-        Profile(id: SampleProfileID.aisha, handle: "aishap", displayName: "Aisha Patel", bio: "math nerd, sandwich enthusiast.", avatarEmoji: "📚"),
-        Profile(id: SampleProfileID.daniel, handle: "danielr", displayName: "Daniel Reyes", bio: "ranks tims locations by line speed.", avatarEmoji: "☕️"),
-        Profile(id: SampleProfileID.priya, handle: "priyas", displayName: "Priya Singh", bio: "always down for a study group.", avatarEmoji: "📝"),
-        Profile(id: SampleProfileID.marcus, handle: "marcus.l", displayName: "Marcus Lee", bio: "the oat milk was MINE.", avatarEmoji: "🥛"),
-        Profile(id: SampleProfileID.sara, handle: "saraa", displayName: "Sara Okafor", bio: "trails, parks, and snacks.", avatarEmoji: "🏞️"),
-        Profile(id: SampleProfileID.jordan, handle: "jordank", displayName: "Jordan Kim", bio: "if my lab won't submit one more time...", avatarEmoji: "📡"),
-        Profile(id: SampleProfileID.riley, handle: "rileyc", displayName: "Riley Chen", bio: "watching the squirrels carefully.", avatarEmoji: "🐿️"),
-        Profile(id: SampleProfileID.quinn, handle: "quinnm", displayName: "Quinn Murphy", bio: "lost an umbrella, never recovered.", avatarEmoji: "☔️")
+        Profile(id: SampleProfileID.leo,    handle: "leokp",    displayName: "Leo Park",      bio: "design + caffeine.",                         avatarUrl: "https://i.pravatar.cc/256?img=11"),
+        Profile(id: SampleProfileID.aisha,  handle: "aishap",   displayName: "Aisha Patel",   bio: "math nerd, sandwich enthusiast.",             avatarUrl: "https://i.pravatar.cc/256?img=49"),
+        Profile(id: SampleProfileID.daniel, handle: "danielr",  displayName: "Daniel Reyes",  bio: "ranks tims locations by line speed.",         avatarUrl: "https://i.pravatar.cc/256?img=12"),
+        Profile(id: SampleProfileID.priya,  handle: "priyas",   displayName: "Priya Singh",   bio: "always down for a study group.",              avatarUrl: "https://i.pravatar.cc/256?img=44"),
+        Profile(id: SampleProfileID.marcus, handle: "marcus.l", displayName: "Marcus Lee",    bio: "the oat milk was MINE.",                      avatarUrl: "https://i.pravatar.cc/256?img=15"),
+        Profile(id: SampleProfileID.sara,   handle: "saraa",    displayName: "Sara Okafor",   bio: "trails, parks, and snacks.",                  avatarUrl: "https://i.pravatar.cc/256?img=48"),
+        Profile(id: SampleProfileID.jordan, handle: "jordank",  displayName: "Jordan Kim",    bio: "if my lab won't submit one more time...",     avatarUrl: "https://i.pravatar.cc/256?img=32"),
+        Profile(id: SampleProfileID.riley,  handle: "rileyc",   displayName: "Riley Chen",    bio: "watching the squirrels carefully.",           avatarUrl: "https://i.pravatar.cc/256?img=45"),
+        Profile(id: SampleProfileID.quinn,  handle: "quinnm",   displayName: "Quinn Murphy",  bio: "lost an umbrella, never recovered.",          avatarUrl: "https://i.pravatar.cc/256?img=18"),
     ]
 
     static func lookup(handle: String) -> Profile? {
         ProfileIndex(profiles: samples).profile(handle: handle)
     }
 
-    static func lookup(id: UUID) -> Profile? {
-        ProfileIndex(profiles: samples).profile(id: id)
-    }
 }

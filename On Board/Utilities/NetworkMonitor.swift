@@ -23,7 +23,7 @@ final class NetworkMonitor {
 
         let monitor = NWPathMonitor()
         monitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.apply(path: path)
             }
         }

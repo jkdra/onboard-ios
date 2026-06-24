@@ -8,51 +8,56 @@
 import SwiftUI
 
 struct OfflineGateView: View {
-    @Environment(\.colorScheme) private var scheme
+    
+    @Environment(\.dynamicTypeSize) private var typeSize
+    
     var onRetry: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer()
+        VStack(alignment: .leading, spacing: 24) {
 
-            Image(systemName: "wifi.slash")
-                .font(.system(size: 44, weight: .semibold))
-                .foregroundStyle(.secondary)
+            Text(":(")
+                .fontStyle(.largeTitle)
+                .fontWeight(.heavy)
                 .accessibilityHidden(true)
 
-            VStack(spacing: 10) {
-                Text("No connection")
-                    .fontStyle(.largeTitle)
-                    .fontWeight(.heavy)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("On Board ran into a problem and needs to reconnect.")
+                    .fontStyle(.title3)
+                    .fontWeight(.semibold)
+                    .accessibilityLabel("No internet connection")
 
-                Text("On Board needs internet to sign in, finish setup, and load your board. Check your connection and try again.")
+                Text("We'll get you back on board (heh) as soon as the internet comes back.")
                     .fontStyle(.body)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 8)
+                    .foregroundStyle(.white.opacity(0.85))
             }
+            
+            if !typeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("If you call a friend, give them this info:")
+                    Text("Stop code: NETWORK_UNREACHABLE")
+                    
+                }
+                .font(.system(.footnote, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.8))
+            }
+            
+            Spacer()
 
             Button(action: onRetry) {
-                Label("Try again", systemImage: "arrow.clockwise")
+                Label("TRY AGAIN", systemImage: "arrow.clockwise")
             }
-            .buttonStyle(.boardPrimary)
-            .padding(.horizontal, 24)
+            .buttonStyle(.offlineGate)
 
-            Spacer()
+
         }
-        .padding(24)
+        .foregroundStyle(.white)
+        .persistentSystemOverlays(.hidden)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background {
-            LinearGradient(
-                colors: [
-                    Color.gray.opacity(scheme == .light ? 0.22 : 0.18),
-                    Color(.systemBackground)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+        .background { Color.blue.ignoresSafeArea() }
+        .environment(\.colorScheme, .light)
+        .statusBarHidden()
+        .safeAreaPadding()
     }
 }
 

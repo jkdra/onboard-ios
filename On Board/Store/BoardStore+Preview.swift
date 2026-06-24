@@ -18,7 +18,8 @@ extension BoardStore {
     }
 
     /// Active week plus archived history — for previews and UI development.
-    static func previewBoard(currentUserID: UUID? = SampleProfileID.maya) -> BoardStore {
+    static func previewBoard(currentUserID: UUID? = nil) -> BoardStore {
+        let currentUserID = currentUserID ?? SampleProfileID.maya
         let now = Date()
         let mainBoard = Board(
             id: SampleBoardID.main,
@@ -26,11 +27,13 @@ extension BoardStore {
             createdAt: now.addingTimeInterval(-86_400 * 38)
         )
 
+        let weekStart = BoardSchedule.startOfWeek(containing: now)
+        let nextWeekStart = Calendar.current.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart.addingTimeInterval(86_400 * 7)
         let activeWeek = BoardWeek(
             id: SampleBoardWeekID.active,
             boardId: mainBoard.id,
-            startsAt: now.addingTimeInterval(-86_400 * 3),
-            endsAt: now.addingTimeInterval(86_400 * 4),
+            startsAt: weekStart,
+            endsAt: nextWeekStart,
             status: .active
         )
 

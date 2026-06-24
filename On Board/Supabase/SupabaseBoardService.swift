@@ -20,6 +20,14 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         self.client = client
     }
 
+    func listAccessibleBoards(for userID: UUID) async throws -> [Board] {
+        struct Params: Encodable { let pUserId: UUID }
+        return try await client
+            .rpc("list_accessible_boards", params: Params(pUserId: userID))
+            .execute()
+            .value
+    }
+
     func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot {
         let week: BoardWeek = try await client
             .rpc("get_active_board_week", params: ["p_board_id": boardID])
@@ -132,7 +140,9 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         authorID: UUID,
         title: String,
         description: String,
-        tone: PostTone
+        tone: PostTone,
+        imageUrl: String? = nil,
+        imageAspectRatio: Double? = nil
     ) async throws -> Post {
         struct Insert: Encodable {
             let boardWeekId: UUID
@@ -140,6 +150,8 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
             let title: String
             let description: String
             let tone: PostTone
+            let imageUrl: String?
+            let imageAspectRatio: Double?
         }
 
         struct InsertedID: Decodable { let id: UUID }
@@ -152,7 +164,9 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
                     authorId: authorID,
                     title: title,
                     description: description,
-                    tone: tone
+                    tone: tone,
+                    imageUrl: imageUrl,
+                    imageAspectRatio: imageAspectRatio
                 )
             )
             .select("id")
@@ -171,46 +185,122 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         id: UUID,
         title: String,
         description: String,
-        tone: PostTone
+        tone: PostTone,
+        imageUrl: String?,
+        imageAspectRatio: Double?
     ) async throws -> Post {
-        struct Update: Encodable {
-            let title: String
-            let description: String
-            let tone: PostTone
-        }
-
-        try await client
-            .from("posts")
-            .update(Update(title: title, description: description, tone: tone))
-            .eq("id", value: id.uuidString)
-            .execute()
-
-        let enriched: RemotePostRow = try await client
-            .rpc("fetch_post_by_id", params: ["p_post_id": id])
-            .execute()
-            .value
-        return enriched.toPost()
-    }
-
-    func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {
-        if let reaction {
-            struct Upsert: Encodable {
-                let postId: UUID
-                let userId: UUID
-                let type: Reaction
+        try await mapAuthErrors {
+            struct Update: Encodable {
+                let title: String
+                let description: String
+                let tone: PostTone
+                let imageUrl: String?
+                let imageAspectRatio: Double?
+                enum CodingKeys: String, CodingKey {
+                    case title, description, tone
+                    case imageUrl = "image_url"
+                    case imageAspectRatio = "image_aspect_ratio"
+                }
             }
 
             try await client
-                .from("reactions")
-                .upsert(Upsert(postId: postID, userId: userID, type: reaction))
+                .from("posts")
+                .update(Update(title: title, description: description, tone: tone,
+                               imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
+                .eq("id", value: id.uuidString)
                 .execute()
-        } else {
+
+            let enriched: RemotePostRow = try await client
+                .rpc("fetch_post_by_id", params: ["p_post_id": id])
+                .execute()
+                .value
+            return enriched.toPost()
+        }
+    }
+
+    func deletePost(id: UUID) async throws {
+        try await mapAuthErrors {
             try await client
-                .from("reactions")
+                .from("posts")
                 .delete()
-                .eq("post_id", value: postID.uuidString)
-                .eq("user_id", value: userID.uuidString)
+                .eq("id", value: id.uuidString)
                 .execute()
+        }
+    }
+
+    func createComment(
+        postID: UUID,
+        authorID: UUID,
+        authorHandle: String,
+        body: String,
+        parentCommentID: UUID?
+    ) async throws {
+        try await mapAuthErrors {
+            struct Insert: Encodable {
+                let postId: UUID
+                let authorId: UUID
+                let authorHandle: String
+                let body: String
+                let parentCommentId: UUID?
+            }
+
+            _ = try await client
+                .from("comments")
+                .insert(
+                    Insert(
+                        postId: postID,
+                        authorId: authorID,
+                        authorHandle: authorHandle,
+                        body: body,
+                        parentCommentId: parentCommentID
+                    )
+                )
+                .execute()
+        }
+    }
+
+    func updateComment(id: UUID, body: String) async throws {
+        try await mapAuthErrors {
+            struct Update: Encodable { let body: String }
+            try await client
+                .from("comments")
+                .update(Update(body: body))
+                .eq("id", value: id.uuidString)
+                .execute()
+        }
+    }
+
+    func deleteComment(id: UUID) async throws {
+        try await mapAuthErrors {
+            try await client
+                .from("comments")
+                .delete()
+                .eq("id", value: id.uuidString)
+                .execute()
+        }
+    }
+
+    func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {
+        try await mapAuthErrors {
+            if let reaction {
+                struct Upsert: Encodable {
+                    let postId: UUID
+                    let userId: UUID
+                    let type: Reaction
+                }
+
+                try await client
+                    .from("reactions")
+                    .upsert(Upsert(postId: postID, userId: userID, type: reaction))
+                    .execute()
+            } else {
+                try await client
+                    .from("reactions")
+                    .delete()
+                    .eq("post_id", value: postID.uuidString)
+                    .eq("user_id", value: userID.uuidString)
+                    .execute()
+            }
         }
     }
 
@@ -218,17 +308,19 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         id: UUID,
         displayName: String,
         handle: String,
-        bio: String?
+        bio: String?,
+        avatarUrl: String?
     ) async throws -> Profile {
         struct Update: Encodable {
             let displayName: String
             let handle: String
             let bio: String?
+            let avatarUrl: String?
         }
 
         let profile: Profile = try await client
             .from("profiles")
-            .update(Update(displayName: displayName, handle: handle, bio: bio))
+            .update(Update(displayName: displayName, handle: handle, bio: bio, avatarUrl: avatarUrl))
             .eq("id", value: id.uuidString)
             .select()
             .single()
@@ -247,6 +339,18 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
             .value
     }
 
+    @discardableResult
+    private func mapAuthErrors<T>(_ work: () async throws -> T) async throws -> T {
+        do {
+            return try await work()
+        } catch {
+            if SessionErrorClassifier.isSessionExpired(error) {
+                throw BoardServiceError.sessionExpired
+            }
+            throw error
+        }
+    }
+
     private func mergeProfiles(current: Profile, posts: [Post]) -> [Profile] {
         var seen = Set([current.id])
         var merged = [current]
@@ -257,8 +361,7 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
                 Profile(
                     id: authorId,
                     handle: post.author,
-                    displayName: post.author,
-                    avatarEmoji: "🌱"
+                    displayName: post.author
                 )
             )
         }

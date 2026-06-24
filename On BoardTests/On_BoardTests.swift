@@ -88,6 +88,25 @@ struct AppConfigurationTests {
     }
 }
 
+struct PhoneNumberNormalizerTests {
+    @Test func formatsTenDigitUSNumbers() {
+        #expect(PhoneNumberNormalizer.e164(from: "5555550100") == "+15555550100")
+        #expect(PhoneNumberNormalizer.e164(from: "(555) 555-0100") == "+15555550100")
+    }
+
+    @Test func preservesExplicitCountryCode() {
+        #expect(PhoneNumberNormalizer.e164(from: "+44 7911 123456") == "+447911123456")
+    }
+
+    @Test func rejectsTooShortNumbers() {
+        #expect(PhoneNumberNormalizer.e164(from: "12345") == nil)
+    }
+
+    @Test func displayLabelFormatsUSNumbers() {
+        #expect(PhoneNumberNormalizer.displayLabel(for: "+15555550100") == "(555) 555-0100")
+    }
+}
+
 struct MockAuthServiceTests {
     @Test func signInPersistsAndRestoresSession() async throws {
         let defaults = UserDefaults(suiteName: "MockAuthServiceTests")!
@@ -97,6 +116,7 @@ struct MockAuthServiceTests {
         let session = try await service.signIn(with: .apple)
         #expect(session.userId == SampleProfileID.maya)
         #expect(session.provider == .apple)
+        #expect(session.hasLinked(.apple))
 
         let restored = try await service.restoreSession()
         #expect(restored == session)
@@ -113,6 +133,57 @@ struct MockAuthServiceTests {
 
         let session = try await service.signIn(with: .google)
         #expect(session.userId == SampleProfileID.leo)
+        #expect(session.hasLinked(.google))
+    }
+
+    @Test func cannotUnlinkLastSignInMethod() async throws {
+        let defaults = UserDefaults(suiteName: "MockAuthUnlinkTests")!
+        defaults.removePersistentDomain(forName: "MockAuthUnlinkTests")
+        let service = MockAuthService(defaults: defaults)
+
+        let session = try await service.signIn(with: .apple)
+        let identity = try #require(session.linkedIdentities.first)
+
+        do {
+            _ = try await service.unlinkIdentity(id: identity.id)
+            Issue.record("Expected cannotUnlinkLastSignInMethod")
+        } catch let error as AuthError {
+            #expect(error == .cannotUnlinkLastSignInMethod)
+        }
+    }
+
+    @Test func canUnlinkWhenBackupMethodExists() async throws {
+        let defaults = UserDefaults(suiteName: "MockAuthUnlinkBackupTests")!
+        defaults.removePersistentDomain(forName: "MockAuthUnlinkBackupTests")
+        let service = MockAuthService(defaults: defaults)
+
+        _ = try await service.signIn(with: .apple)
+        _ = try await service.verifyLinkPhoneOTP(phone: "+15555550123", token: "123456")
+        let session = try await service.restoreSession()
+        let identity = try #require(session?.linkedIdentities.first)
+
+        let updated = try await service.unlinkIdentity(id: identity.id)
+        #expect(updated.linkedIdentities.isEmpty)
+        #expect(updated.hasLinked(.phone))
+    }
+}
+
+struct AuthSessionTests {
+    @Test func countsSignInMethodsForUnlinkGuardrails() {
+        let appleOnly = AuthSession(
+            userId: UUID(),
+            primaryProvider: .apple,
+            linkedIdentities: [LinkedIdentity(id: "apple-1", provider: .apple, email: "you@icloud.com")]
+        )
+        #expect(!appleOnly.canUnlinkIdentity(appleOnly.linkedIdentities[0]))
+
+        let phoneAndApple = AuthSession(
+            userId: UUID(),
+            primaryProvider: .phone,
+            phone: "+15555550100",
+            linkedIdentities: [LinkedIdentity(id: "apple-1", provider: .apple, email: nil)]
+        )
+        #expect(phoneAndApple.canUnlinkIdentity(phoneAndApple.linkedIdentities[0]))
     }
 }
 
@@ -186,7 +257,8 @@ struct BoardStoreTests {
             currentUserID: SampleProfileID.maya,
             activeBoardWeek: activeWeek
         )
-        await store.addPost(title: "hello", description: "world", tone: .blue)
+        let succeeded = await store.addPost(title: "hello", description: "world", tone: .blue)
+        #expect(succeeded)
         #expect(store.posts.count == 1)
         #expect(store.posts[0].title == "hello")
         #expect(store.posts[0].author == "maya.c")
@@ -518,5 +590,27 @@ struct OnboardingStoreTests {
         await store.refresh()
         #expect(store.isComplete)
         #expect(!store.needsOnboarding)
+    }
+
+    @Test func provisionalCompleteProfileStillNeedsOnboarding() {
+        let status = OnboardingStatus(
+            id: UUID(),
+            handle: "u_abc123def456",
+            displayName: "New member",
+            bio: nil,
+            avatarEmoji: "🌱",
+            onboardingStep: .complete,
+            onboardingCompletedAt: .now,
+            waitlistJoinedAt: nil,
+            verifiedSchoolEmail: nil,
+            pendingSchoolEmail: nil,
+            schoolName: nil,
+            boardId: nil,
+            boardName: nil
+        )
+
+        #expect(status.isComplete)
+        #expect(status.needsOnboarding)
+        #expect(status.effectiveOnboardingStep == .username)
     }
 }

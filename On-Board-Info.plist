@@ -2,6 +2,25 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.onboard.auth</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>onboard</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.google.GIDSignIn</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.609819130016-ps5jn4mhva2c0uhagcc89a1d71kubt3g</string>
+			</array>
+		</dict>
+	</array>
 	<key>GoogleClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>MKDirectionsApplicationSupportedModes</key>
@@ -9,7 +28,7 @@
 	<key>SupabaseAnonKey</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>SupabaseURL</key>
-	<string>$(SUPABASE_URL)</string>
+	<string>https://pvgmcqokvcqsztaeqcpe.supabase.co</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>ZalandoSans.ttf</string>

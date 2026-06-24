@@ -31,7 +31,14 @@ enum SupabaseClientFactory {
             supabaseURL: url,
             supabaseKey: key,
             options: SupabaseClientOptions(
-                auth: .init(emitLocalSessionAsInitialSession: true)
+                db: .init(
+                    encoder: BoardJSON.encoder,
+                    decoder: BoardJSON.decoder
+                ),
+                auth: .init(
+                    redirectToURL: AppConfiguration.authRedirectURL,
+                    emitLocalSessionAsInitialSession: true
+                )
             )
         )
         cachedKey = cacheKey

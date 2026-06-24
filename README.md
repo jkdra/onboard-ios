@@ -12,7 +12,7 @@ A campus bulletin board for weekly posts, reactions, and onboarding. Built with 
 1. Clone the repo and open `On Board.xcodeproj` in Xcode.
 2. Select the **On Board** scheme and run on a simulator or device.
 
-The app runs in **development mode** without any backend keys: mock auth, sample board data, and full onboarding UI.
+The app runs in **development mode** without any backend keys: mock auth and onboarding UI. Board data requires a configured Supabase backend — sample fixtures are limited to Xcode previews.
 
 ### Live Supabase backend (maintainers)
 
@@ -34,7 +34,15 @@ The app runs in **development mode** without any backend keys: mock auth, sample
 
 4. In the Supabase Dashboard, enable **Realtime** for the `reactions` table (Database → Publications → `supabase_realtime`) if it is not already enabled after migration.
 
-5. Configure auth providers you use (Phone, Apple Sign In, etc.) in the Supabase Dashboard.
+5. Configure auth providers in the Supabase Dashboard:
+   - **Phone** (SMS OTP) — default sign-in method
+   - **Email** (magic link / OTP) — optional sign-in via the Email tab on the sign-in screen
+   - **Apple** — native Sign in with Apple (requires the app capability; already enabled in `On Board.entitlements`)
+   - **Google** — enable the Google provider; sign-in and linking use Supabase OAuth in a browser sheet
+   - Under **Authentication → URL Configuration**, add redirect URL: `onboard://auth-callback`
+   - Enable **manual linking** if you want users to attach Apple/Google to an existing phone or email account
+
+6. In Xcode, ensure **Sign in with Apple** is enabled for the On Board target (Signing & Capabilities).
 
 ## Project layout
 
@@ -61,7 +69,7 @@ The app bundles **Zalando Sans** under `Styling/Font/`. Confirm you have redistr
 
 - Do not commit `Secrets.xcconfig`, `.env` files, or `supabase/.temp/`.
 - SQL changes belong in new timestamped files under `supabase/migrations/`.
-- Without Supabase keys, contributors can still build and test against mock data.
+- Without Supabase keys, contributors can still build and test auth/onboarding UI against mocks. Board posts and comments require live backend keys.
 
 ## License
 

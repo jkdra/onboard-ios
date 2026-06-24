@@ -4,6 +4,8 @@
 //
 
 import SwiftUI
+import PhotosUI
+import Supabase
 
 enum ProfilePresentation {
     case sheet
@@ -22,8 +24,16 @@ struct ProfileView: View {
     @State private var draftDisplayName = ""
     @State private var draftHandle = ""
     @State private var draftBio = ""
+    @State private var draftAvatarUrl: String?
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var selectedPhotoData: Data?
+    @State private var isUploadingPhoto = false
 
-    private var canEdit: Bool { store.canEdit(profile: profile) }
+    private var displayedProfile: Profile {
+        store.profile(id: profile.id) ?? profile
+    }
+
+    private var canEdit: Bool { store.canEdit(profile: displayedProfile) }
 
     private let joinedFormatter: Date.FormatStyle = .dateTime
         .month(.wide)
@@ -33,53 +43,41 @@ struct ProfileView: View {
     var body: some View {
         ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    if editMode {
-                        VStack(spacing: 10) {
-                            EditingIndicator()
-                                .fontStyle(.title)
-                                .frame(maxWidth: .infinity)
-                            Text("Tap any element to edit.")
-                                .fontStyle(.body)
-                                .multilineTextAlignment(.center)
+                    HStack(alignment: .center, spacing: 16) {
+                        avatar
+
+                        VStack(alignment: .leading, spacing: 3) {
+                            if !editMode {
+                                Text(displayedProfile.displayName)
+                                    .fontStyle(.title)
+                                    .fontWeight(.heavy)
+                                    .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                                Text("@\(displayedProfile.handle)")
+                                    .fontStyle(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                            } else {
+                                TextField("Display Name", text: $draftDisplayName, axis: .vertical)
+                                    .fontStyle(.title)
+                                    .fontWeight(.heavy)
+                                    .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                                TextField("username", text: $draftHandle, axis: .vertical)
+                                    .fontStyle(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                            }
                         }
-                        .safeAreaPadding()
-                        .background {
-                            Color(uiColor: .systemBackground)
-                        }
-                        .ignoresSafeArea()
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    avatar
-
                     if !editMode {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(profile.displayName)
-                                .fontStyle(.largeTitle)
-                                .fontWeight(.heavy)
-                                .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
-                            Text("@\(profile.handle)")
-                                .fontStyle(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
-                        }
-
-                        if let bio = profile.bio, !bio.isEmpty {
+                        if let bio = displayedProfile.bio, !bio.isEmpty {
                             Text(bio)
                                 .fontStyle(.body)
                                 .foregroundStyle(.primary)
                                 .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
                         }
                     } else {
-                        VStack(alignment: .leading, spacing: 4) {
-                            TextField("Display Name", text: $draftDisplayName, axis: .vertical)
-                                .fontStyle(.largeTitle)
-                                .fontWeight(.heavy)
-                                .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
-                            TextField("username", text: $draftHandle, axis: .vertical)
-                                .fontStyle(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
-                        }
                         TextField("Bio", text: $draftBio, axis: .vertical)
                             .fontStyle(.body)
                             .foregroundStyle(.primary)
@@ -88,71 +86,99 @@ struct ProfileView: View {
 
                     HStack(spacing: 6) {
                         Image(systemName: "calendar")
-                        Text("joined \(profile.joinedAt.formatted(joinedFormatter).lowercased())")
+                        Text("joined \(displayedProfile.joinedAt.formatted(joinedFormatter).lowercased())")
                     }
                     .fontStyle(.footnote)
                     .foregroundStyle(.secondary)
-
-                    if canEdit {
-                        if editMode {
-                            HStack(spacing: 12) {
-                                Button { saveProfile() } label: {
-                                    Label("Save", systemImage: "checkmark")
-                                }
-                                .buttonStyle(.boardPrimary)
-
-                                Button { cancelEditing() } label: {
-                                    Label("Cancel", systemImage: "xmark")
-                                }
-                                .buttonStyle(.boardSecondary)
-                            }
-                            .padding(.top, 4)
-                        } else {
-                            Button { beginEditing() } label: {
-                                Label("Edit profile", systemImage: "pencil")
-                            }
-                            .buttonStyle(.boardSecondary)
-                            .padding(.top, 4)
-                        }
-                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .safeAreaPadding()
             }
             .background {
-                StripesOverlay()
-                    .offset(x: editMode ? 0 : 100)
-                    .opacity(editMode ? 1 : 0)
+                AnimatedStripesView(isActive: editMode)
             }
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if editMode {
+                    Text("Tap any element to edit.")
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+            }
+            .navigationBackDisabled(editMode)
+            .interactiveDismissDisabled(editMode)
             .toolbar {
-                if presentation == .sheet {
+                if editMode {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button { cancelEditing() } label: { Label("Cancel", systemImage: "xmark") }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        EditingIndicator()
+                            .fontStyle(.title3)
+                            .fixedSize()
+                    }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                        Button { saveProfile() } label: { Label("Save", systemImage: "checkmark") }
+                    }
+                } else {
+                    if presentation == .sheet {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                        }
+                    }
+                    if canEdit {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button { beginEditing() } label: { Label("Edit", systemImage: "pencil") }
+                        }
                     }
                 }
             }
     }
 
     private var avatar: some View {
-        ZStack {
-            Circle()
-                .fill(.thinMaterial)
-                .frame(width: 92, height: 92)
-                .overlay(
-                    Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-                )
-            Text(profile.avatarEmoji)
-                .font(.system(size: 48))
+        ZStack(alignment: .bottomTrailing) {
+            if editMode {
+                if let data = selectedPhotoData, let uiImage = UIImage(data: data) {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: 92, height: 92)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                } else {
+                    AvatarView(profile: draftAvatarUrl.map { url in
+                        Profile(id: displayedProfile.id, handle: displayedProfile.handle, displayName: displayedProfile.displayName, bio: displayedProfile.bio, avatarUrl: url)
+                    } ?? displayedProfile, size: .large)
+                }
+
+                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                    Image(systemName: "camera.fill")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 28, height: 28)
+                        .background(Color.accentColor)
+                        .clipShape(Circle())
+                        .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
+                }
+                .offset(x: 4, y: 4)
+            } else {
+                AvatarView(profile: displayedProfile, size: .large)
+            }
         }
-        .accessibilityLabel("\(profile.displayName) avatar")
+        .accessibilityLabel("\(displayedProfile.displayName) avatar")
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            Task { await loadAndUploadPhoto(newItem) }
+        }
     }
 
     private func beginEditing() {
-        draftDisplayName = profile.displayName
-        draftHandle = profile.handle
-        draftBio = profile.bio ?? ""
+        draftDisplayName = displayedProfile.displayName
+        draftHandle = displayedProfile.handle
+        draftBio = displayedProfile.bio ?? ""
+        draftAvatarUrl = displayedProfile.avatarUrl
+        selectedPhotoData = nil
+        selectedPhotoItem = nil
         withAnimation(.smooth(duration: 0.3)) { editMode = true }
     }
 
@@ -161,20 +187,47 @@ struct ProfileView: View {
             await store.updateProfile(
                 displayName: draftDisplayName.trimmed,
                 handle: draftHandle.trimmed,
-                bio: draftBio.trimmed.isEmpty ? nil : draftBio.trimmed
+                bio: draftBio.trimmed.isEmpty ? nil : draftBio.trimmed,
+                avatarUrl: draftAvatarUrl
             )
             withAnimation(.smooth(duration: 0.3)) { editMode = false }
         }
     }
 
     private func cancelEditing() {
+        selectedPhotoData = nil
+        selectedPhotoItem = nil
+        draftAvatarUrl = nil
         withAnimation(.smooth(duration: 0.3)) { editMode = false }
+    }
+
+    private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {
+        guard let item else { return }
+        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
+        guard let uiImage = UIImage(data: data),
+              let jpeg = uiImage.jpegData(compressionQuality: 0.8) else { return }
+
+        selectedPhotoData = jpeg
+        isUploadingPhoto = true
+        defer { isUploadingPhoto = false }
+
+        guard let client = SupabaseClientFactory.client(for: .current),
+              let userID = store.currentUserID else { return }
+
+        let path = "\(userID.uuidString)/\(UUID().uuidString).jpg"
+        do {
+            try await client.storage
+                .from("avatars")
+                .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: true))
+            let publicURL = try client.storage.from("avatars").getPublicURL(path: path)
+            draftAvatarUrl = publicURL.absoluteString
+        } catch {
+            // Upload failed — the photo preview stays but won't persist; saveProfile will use nil URL
+            draftAvatarUrl = nil
+        }
     }
 }
 
-private extension String {
-    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
-}
 
 #Preview {
     NavigationStack {

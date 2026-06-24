@@ -3,6 +3,7 @@
 //  On Board
 //
 
+import GoogleSignIn
 import SwiftUI
 
 let fontName: String = "ZalandoSansExpanded-Regular"
@@ -13,7 +14,9 @@ private enum AppLaunchContext {
     }
 
     static var boardStore: BoardStore {
-        isPreview ? BoardStore.previewBoard() : BoardStore()
+        (isPreview || !AppConfiguration.current.isSupabaseConfigured)
+            ? BoardStore.previewBoard()
+            : BoardStore()
     }
 
     @MainActor
@@ -33,6 +36,9 @@ private enum AppLaunchContext {
 
 @main
 struct On_BoardApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
+
     @State private var store = AppLaunchContext.boardStore
     @State private var network = NetworkMonitor()
     @State private var auth = AppLaunchContext.makeAuthStore()
@@ -57,6 +63,24 @@ struct On_BoardApp: App {
                 .environment(auth)
                 .environment(onboarding)
                 .environment(network)
+                .onOpenURL { url in
+                    // Let GoogleSignIn handle its own callback URL first.
+                    if GoogleSignInService.handle(url) { return }
+                    // Supabase OAuth deep-link callback.
+                    guard url.scheme == AppConfiguration.authRedirectURL.scheme else { return }
+                    _ = url
+                }
+                .onChange(of: auth.session) { _, session in
+                    if let userID = session?.userId {
+                        Task { await NotificationService.shared.onSignedIn(userID: userID) }
+                    } else {
+                        NotificationService.shared.onSignedOut()
+                    }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    guard phase == .active, let userID = auth.session?.userId else { return }
+                    Task { await NotificationService.shared.updateLastSeen(userID: userID) }
+                }
         }
     }
 }

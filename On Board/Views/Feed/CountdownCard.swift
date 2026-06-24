@@ -10,7 +10,6 @@ struct CountdownCard: View {
     let isArchived: Bool
 
     @Environment(BoardStore.self) private var store
-    @Environment(\.colorScheme) private var scheme
 
     private let weekFormatter: Date.FormatStyle = .dateTime
         .month(.abbreviated)
@@ -47,8 +46,8 @@ struct CountdownCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 200)
-        .background(cardBackground)
+        .frame(minHeight: 200)
+        .background(cardBackground())
     }
 
     @ViewBuilder
@@ -76,8 +75,8 @@ struct CountdownCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(height: 200)
-        .background(cardBackground)
+        .frame(minHeight: 200)
+        .background(cardBackground(clearingSoon: clearingSoon))
     }
 
     private func counterColumn(value: Int, label: String, clearingSoon: Bool) -> some View {
@@ -93,14 +92,27 @@ struct CountdownCard: View {
         }
     }
 
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .fill(Color.gray.opacity(scheme == .dark ? 0.30 : 0.22))
-            .shadow(
-                color: .black.opacity(scheme == .dark ? 0.45 : 0.18),
-                radius: 10,
-                x: 0,
-                y: 6
-            )
+    @ViewBuilder
+    private func cardBackground(clearingSoon: Bool = false) -> some View {
+        let border = clearingSoon ? Color.red.opacity(0.4) : Color.secondary.opacity(0.25)
+        if #available(iOS 26.0, *) {
+            Color.clear
+                .glassEffect(
+                    clearingSoon ? .regular.tint(Color.red.opacity(0.12)) : .regular,
+                    in: .rect(cornerRadius: 18, style: .continuous)
+                )
+                .clipShape(.rect(cornerRadius: 18, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(border, lineWidth: 0.9)
+                }
+        } else {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(border, lineWidth: 0.9)
+                }
+        }
     }
 }

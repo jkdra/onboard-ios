@@ -44,10 +44,22 @@ final class AuthStore {
         }
     }
 
-    func signInWithApple(idToken: String, fullName: String?) async {
+    func signInWithApple(idToken: String, nonce: String?, fullName: String?) async {
         state = .signingIn(.apple)
         do {
-            let session = try await service.signInWithApple(idToken: idToken, fullName: fullName)
+            let session = try await service.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
+            state = .signedIn(session)
+        } catch let error as AuthError {
+            state = .failed(error.localizedDescription)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    func signInWithGoogle() async {
+        state = .signingIn(.google)
+        do {
+            let session = try await service.signInWithGoogle()
             state = .signedIn(session)
         } catch let error as AuthError {
             state = .failed(error.localizedDescription)
@@ -72,12 +84,79 @@ final class AuthStore {
         }
     }
 
+    func sendEmailOTP(email: String) async throws {
+        try await service.sendEmailOTP(email: email)
+    }
+
+    func verifyEmailOTP(email: String, token: String) async {
+        state = .signingIn(.email)
+        do {
+            let session = try await service.verifyEmailOTP(email: email, token: token)
+            state = .signedIn(session)
+        } catch let error as AuthError {
+            state = .failed(error.localizedDescription)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    func linkApple(idToken: String, nonce: String?) async throws {
+        let session = try await service.linkApple(idToken: idToken, nonce: nonce)
+        state = .signedIn(session)
+    }
+
+    func linkGoogle() async throws {
+        let session = try await service.linkGoogle()
+        state = .signedIn(session)
+    }
+
+    func sendLinkPhoneOTP(phone: String) async throws {
+        try await service.sendLinkPhoneOTP(phone: phone)
+    }
+
+    func verifyLinkPhoneOTP(phone: String, token: String) async throws {
+        let session = try await service.verifyLinkPhoneOTP(phone: phone, token: token)
+        state = .signedIn(session)
+    }
+
+    func sendLinkEmailOTP(email: String) async throws {
+        try await service.sendLinkEmailOTP(email: email)
+    }
+
+    func verifyLinkEmailOTP(email: String, token: String) async throws {
+        let session = try await service.verifyLinkEmailOTP(email: email, token: token)
+        state = .signedIn(session)
+    }
+
+    func unlinkIdentity(_ identity: LinkedIdentity) async throws {
+        guard let session else {
+            throw AuthError.sessionRestoreFailed
+        }
+        guard session.canUnlinkIdentity(identity) else {
+            throw AuthError.cannotUnlinkLastSignInMethod
+        }
+        let updated = try await service.unlinkIdentity(id: identity.id)
+        state = .signedIn(updated)
+    }
+
+    func refreshLinkedMethods() async {
+        guard isSignedIn else { return }
+        do {
+            if let session = try await service.refreshAuthSession() {
+                state = .signedIn(session)
+            }
+        } catch {
+            // Keep the current session if refresh fails.
+        }
+    }
+
     func sendSchoolEmailVerification(to email: String) async throws {
         try await service.sendSchoolEmailVerification(to: email)
     }
 
     func verifySchoolEmailOTP(email: String, token: String) async throws {
         try await service.verifySchoolEmailOTP(email: email, token: token)
+        await refreshLinkedMethods()
     }
 
     func reportSessionExpired() async {
@@ -90,8 +169,11 @@ final class AuthStore {
     }
 
     func cancelSignIn() {
-        if case .signingIn = state {
+        switch state {
+        case .signingIn, .failed:
             state = .signedOut
+        default:
+            break
         }
     }
 

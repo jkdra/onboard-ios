@@ -33,6 +33,13 @@ struct AppConfiguration: Equatable, Sendable {
         return true
     }
 
+    /// Google via Supabase OAuth works when the backend is configured (native client ID optional).
+    nonisolated var isGoogleOAuthAvailable: Bool {
+        isSupabaseConfigured
+    }
+
+    nonisolated static let authRedirectURL = URL(string: "onboard://auth-callback")!
+
     private final class BundleMarker {}
 
     nonisolated static let current = load()

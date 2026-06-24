@@ -20,9 +20,7 @@ struct Profile: Identifiable, Hashable, Codable {
     let handle: String
     let displayName: String
     let bio: String?
-    /// Until image uploads land, we use a single emoji as the avatar.
-    /// Stored as `avatar_emoji` server-side.
-    let avatarEmoji: String
+    let avatarUrl: String?
     let joinedAt: Date
 
     enum CodingKeys: String, CodingKey {
@@ -30,7 +28,7 @@ struct Profile: Identifiable, Hashable, Codable {
         case handle
         case displayName = "display_name"
         case bio
-        case avatarEmoji = "avatar_emoji"
+        case avatarUrl = "avatar_url"
         case joinedAt = "created_at"
     }
 
@@ -39,14 +37,14 @@ struct Profile: Identifiable, Hashable, Codable {
         handle: String,
         displayName: String,
         bio: String? = nil,
-        avatarEmoji: String = "🌱",
+        avatarUrl: String? = nil,
         joinedAt: Date = .now
     ) {
         self.id = id
         self.handle = handle
         self.displayName = displayName
         self.bio = bio
-        self.avatarEmoji = avatarEmoji
+        self.avatarUrl = avatarUrl
         self.joinedAt = joinedAt
     }
 

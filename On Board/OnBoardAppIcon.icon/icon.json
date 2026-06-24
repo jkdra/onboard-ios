@@ -139,6 +139,14 @@
       "hidden" : false,
       "layers" : [
         {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.16291,0.61322,0.96783,1.00000"
+              }
+            }
+          ],
           "image-name" : "Bottom Note.svg",
           "name" : "Bottom Note",
           "opacity-specializations" : [

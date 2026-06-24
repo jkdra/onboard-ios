@@ -60,18 +60,14 @@ struct RootView: View {
 
     @ViewBuilder
     private var mainContent: some View {
-        if auth.isSignedIn {
-            if onboarding.isLoading || onboarding.loadState == .idle {
-                loadingView("Setting up your account…")
-            } else if onboarding.needsOnboarding {
-                OnboardingCoordinator()
-            } else if case .failed(let message) = onboarding.loadState {
-                onboardingErrorView(message)
-            } else {
-                ContentView()
-            }
+        if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
+            onboardingErrorView(message)
+        } else if auth.isSignedIn, onboarding.isComplete {
+            BoardListView()
         } else {
-            SignInView()
+            // Covers: not signed in, signed in + loading status, signed in + needs onboarding.
+            // The coordinator owns SignInView at its root and handles all transitions internally.
+            OnboardingCoordinator()
         }
     }
 
@@ -107,28 +103,20 @@ struct RootView: View {
 
         if let session = auth.session, onboarding.isComplete {
             store.setCurrentUser(id: session.userId)
-            if configuration.isSupabaseConfigured, network.isConnected {
-                await store.refresh(for: session.userId)
-            } else if !configuration.isSupabaseConfigured {
-                store.loadOfflinePreviewData()
+
+            if let boardId = onboarding.status?.boardId {
+                store.setBoard(id: boardId, name: onboarding.status?.boardName)
+            }
+
+            if configuration.isSupabaseConfigured {
+                if network.isConnected {
+                    await store.refresh(for: session.userId)
+                }
             }
         } else {
             store.clearCurrentUser()
             store.resetForSignOut()
-            if !configuration.isSupabaseConfigured, !auth.isSignedIn {
-                store.loadOfflinePreviewData()
-            }
         }
-    }
-
-    private func loadingView(_ message: String) -> some View {
-        VStack(spacing: 16) {
-            ProgressView()
-            Text(message)
-                .fontStyle(.subheadline)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func onboardingErrorView(_ message: String) -> some View {
@@ -168,6 +156,6 @@ private struct SessionSyncToken: Equatable {
             auth: AuthStore(service: MockAuthService()),
             network: NetworkMonitor()
         ))
-        .environment(BoardStore.sampleBoard())
+        .environment(BoardStore.previewBoard())
         .environment(NetworkMonitor())
 }

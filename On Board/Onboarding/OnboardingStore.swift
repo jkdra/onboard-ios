@@ -27,12 +27,14 @@ final class OnboardingStore {
     private let service: any OnboardingService
     private let auth: AuthStore
     private let network: NetworkMonitor
+    private var lastSyncedUserID: UUID?
 
     var isLoading: Bool { loadState == .loading }
-    var isComplete: Bool { status?.isComplete == true }
+    var hasResolvedStatus: Bool { status != nil }
+    var isComplete: Bool { status?.needsOnboarding == false }
     var needsOnboarding: Bool {
         guard let status else { return false }
-        return !status.isComplete
+        return status.needsOnboarding
     }
 
     init(service: any OnboardingService, auth: AuthStore, network: NetworkMonitor) {
@@ -42,9 +44,10 @@ final class OnboardingStore {
     }
 
     func reset() {
-        if let userID = auth.session?.userId {
+        if let userID = lastSyncedUserID ?? auth.session?.userId {
             OnboardingStatusCache.clear(for: userID)
         }
+        lastSyncedUserID = nil
         loadState = .idle
         status = nil
         isSubmitting = false
@@ -85,7 +88,14 @@ final class OnboardingStore {
             return
         }
 
-        if !force, loadState == .loaded, status != nil {
+        let userChanged = lastSyncedUserID != userID
+        if userChanged {
+            lastSyncedUserID = userID
+            status = nil
+            loadState = .idle
+        }
+
+        if !force, !userChanged, loadState == .loaded, status != nil {
             return
         }
 
@@ -170,7 +180,7 @@ final class OnboardingStore {
     }
 
     @discardableResult
-    func submitProfile(displayName: String, bio: String?, avatarEmoji: String) async -> Bool {
+    func submitProfile(displayName: String, bio: String?, avatarUrl: String? = nil) async -> Bool {
         guard ensureOnlineForSubmit() else { return false }
 
         isSubmitting = true
@@ -181,7 +191,7 @@ final class OnboardingStore {
             _ = try await service.completeProfile(
                 displayName: displayName,
                 bio: bio,
-                avatarEmoji: avatarEmoji
+                avatarUrl: avatarUrl
             )
             await refresh(force: true)
             return status?.onboardingStep == .schoolVerify

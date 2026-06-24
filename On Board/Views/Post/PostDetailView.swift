@@ -4,19 +4,45 @@
 //
 
 import SwiftUI
+import PhotosUI
 
 struct PostDetailView: View {
     let post: Post
 
-    @Environment(BoardStore.self) private var store
-    @State private var editMode = false
-    @State private var draftTitle = ""
-    @State private var draftDescription = ""
-    @State private var draftTone: PostTone
-    @State private var editingCommentID: UUID?
-    @State private var draftCommentBody = ""
-    @Environment(\.colorScheme) private var scheme
-    @Namespace private var postNamespace
+    @Environment(BoardStore.self) var store
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var scheme
+    @Namespace var postNamespace
+
+    // Post editing
+    @State var editMode = false
+    @State var draftTitle = ""
+    @State var draftDescription = ""
+    @State var draftTone: PostTone
+
+    // Comment editing / replying
+    @State var editingCommentID: UUID?
+    @State var draftCommentBody = ""
+    @State var replyingToCommentID: UUID?
+    @State var newCommentDraft = ""
+    @FocusState var isNewCommentFocused: Bool
+
+    // Image editing
+    @State var selectedEditPhotoItem: PhotosPickerItem?
+    @State var selectedEditPhotoData: Data?
+    @State var draftImageUrl: String?
+    @State var draftImageAspectRatio: Double?
+    @State var isUploadingEditImage = false
+    @State var uploadedEditImageUrl: String?
+    @State var uploadedEditAspectRatio: Double?
+
+    // UI
+    @State var showDeleteConfirmation = false
+    @State var alertError: PresentableAlertError?
+    @State var showImageViewer = false
+    @State var showHeartBurst = false
+    @State var heartTapLocation: CGPoint = CGPoint(x: 100, y: 50)
+    @State var heartRotation: Double = 0
 
     init(post: Post) {
         self.post = post
@@ -25,80 +51,66 @@ struct PostDetailView: View {
         _draftDescription = State(initialValue: post.description)
     }
 
-    private var livePost: Post {
+    // MARK: - Derived
+
+    var livePost: Post {
         store.post(with: post.id) ?? post
     }
 
-    private var tone: PostTone {
+    var tone: PostTone {
         editMode ? draftTone : livePost.tone
     }
 
-    private var canEdit: Bool {
+    var canEdit: Bool {
         store.canInteract(with: livePost) && store.canEdit(post: livePost)
     }
 
-    private var isReadOnly: Bool {
+    var isReadOnly: Bool {
         livePost.isReadOnly || !store.canInteract(with: livePost)
     }
 
-    private var isCommentEditing: Bool {
+    var isCommentEditing: Bool {
         editingCommentID != nil
     }
 
-    private var authorProfile: Profile {
+    var authorProfile: Profile {
         store.profile(forAuthor: livePost.author)
     }
 
-    private var selectedReaction: Binding<Reaction?> {
+    var selectedReaction: Binding<Reaction?> {
         Binding(
             get: { store.userReaction(for: livePost.id) },
             set: { store.setReaction(postId: livePost.id, reaction: $0) }
         )
     }
 
+    // MARK: - Body
+
     var body: some View {
+        let livePost = livePost
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                if editMode {
-                    VStack(spacing: 10) {
-                        EditingIndicator()
-                            .fontStyle(.title)
-                            .frame(maxWidth: .infinity)
-                        Text("Tap any element to edit.")
-                            .fontStyle(.body)
-                            .multilineTextAlignment(.center)
-                    }
-                    .safeAreaPadding()
-                    .background {
-                        Color(uiColor: .systemBackground)
-                        tone.color.opacity(scheme == .dark ? 0.25 : 0.3)
-                    }
-                    .ignoresSafeArea()
-                }
-
                 if !editMode {
                     postContent
                         .opacity(isCommentEditing ? 0.32 : 1)
-
                     Divider()
                         .opacity(isCommentEditing ? 0.32 : 1)
-
                     commentsSection
                 } else {
+                    Text("Tap any element to edit.")
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
+                    
                     TextField("Title", text: $draftTitle, axis: .vertical)
                         .fontStyle(.largeTitle)
                         .matchedGeometryEffect(id: "postTitle", in: postNamespace, anchor: .leading)
-
                     TextField("Description", text: $draftDescription, axis: .vertical)
                         .fontStyle(.body)
                         .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
-
-                    HStack {
-                        TonePicker(selection: $draftTone)
-                            .matchedGeometryEffect(id: "postBar", in: postNamespace, anchor: .leading)
-                        Spacer()
-                    }
-                    .transition(.opacity)
+                    editImageSection
+                        .transition(.opacity)
                 }
             }
             .safeAreaPadding(.horizontal)
@@ -112,209 +124,56 @@ struct PostDetailView: View {
                 .opacity(scheme == .dark ? 0.25 : 0.20)
                 .ignoresSafeArea()
                 .overlay {
-                    StripesOverlay(color: tone.color, opacity: 0.1)
-                        .offset(x: editMode || isCommentEditing ? 0 : 100)
-                        .opacity(editMode || isCommentEditing ? 1 : 0)
+                    AnimatedStripesView(
+                        color: tone.color,
+                        opacity: 0.1,
+                        isActive: editMode || isCommentEditing
+                    )
                 }
         }
         .animation(.smooth(duration: 0.3), value: tone)
-        .task(id: livePost.id) {
-            if store.isLive, store.comments(for: livePost.id).isEmpty {
-                await store.loadComments(for: livePost.id)
+        .task(id: livePost.id) { await store.loadComments(for: livePost.id) }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if !editMode {
+                PostActionBar(
+                    tone: tone,
+                    counts: livePost.reactionCounts,
+                    selectedReaction: selectedReaction,
+                    isInteractive: !isReadOnly && !isCommentEditing && !editMode,
+                    isRecord: isReadOnly
+                )
             }
+        }
+        .boardErrorHandling(alertError: $alertError)
+        .presentableErrorAlert(error: $alertError)
+        .confirmationDialog(
+            "Delete this post?",
+            isPresented: $showDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Post", role: .destructive) {
+                Task { if await store.deletePost(id: livePost.id) { dismiss() } }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes the post and its comments.")
         }
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            if isReadOnly && !editMode && !isCommentEditing {
-                ToolbarItem(placement: .principal) {
-                    Label("Archived Post", systemImage: "archivebox")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
-                        .labelStyle(.titleAndIcon)
-                }
-            }
-
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    if canEdit {
-                        Button {
-                            beginEditing()
-                        } label: {
-                            Label("Edit", systemImage: "pencil")
-                        }
-                    }
-                    Button {
-                        // share
-                    } label: {
-                        Label("Share", systemImage: "square.and.arrow.up")
-                    }
-                    if !canEdit {
-                        Button(role: .destructive) {
-                            // report
-                        } label: {
-                            Label("Report", systemImage: "flag")
-                        }
-                    }
-                } label: {
-                    Image(systemName: "ellipsis")
-                }
-                .disabled(editMode || isCommentEditing)
-            }
-
-            if editMode {
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        saveEdits()
-                    } label: {
-                        Label("Save", systemImage: "checkmark")
-                    }
-                }
-                ToolbarItem(placement: .bottomBar) { Spacer() }
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        cancelEditing()
-                    } label: {
-                        Label("Cancel", systemImage: "xmark")
-                    }
-                }
-            }
-
-            if isCommentEditing {
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        confirmCommentEditing()
-                    } label: {
-                        Label("Save", systemImage: "checkmark")
-                    }
-                }
-                ToolbarItem(placement: .bottomBar) { Spacer() }
-                ToolbarItem(placement: .bottomBar) {
-                    Button {
-                        cancelCommentEditing()
-                    } label: {
-                        Label("Cancel", systemImage: "xmark")
-                    }
-                }
+        .navigationBackDisabled(editMode)
+        .toolbar { toolbarContent }
+        .fullScreenCover(isPresented: $showImageViewer) {
+            if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
+                ImageViewerView(url: url)
+                    .navigationTransition(.zoom(sourceID: "postImage", in: postNamespace))
             }
         }
-    }
-
-    @ViewBuilder
-    private var postContent: some View {
-        NavigationLink(value: BoardRoute.profile(authorProfile)) {
-            Text("by \(livePost.author)")
-                .fontStyle(.caption)
-        }
-        .buttonStyle(.plain)
-
-        Text(livePost.title)
-            .fontStyle(.largeTitle)
-            .matchedGeometryEffect(id: "postTitle", in: postNamespace, anchor: .leading)
-
-        Text(livePost.description)
-            .fontStyle(.body)
-            .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
-
-        ReactionBar(
-            counts: livePost.reactionCounts,
-            tone: tone,
-            selected: selectedReaction,
-            isInteractive: !isReadOnly && !isCommentEditing
-        )
-        .matchedGeometryEffect(id: "postBar", in: postNamespace, anchor: .leading)
-    }
-
-    @ViewBuilder
-    private var commentsSection: some View {
-        Text("Comments")
-            .fontStyle(.title3)
-            .foregroundStyle(.primary)
-            .opacity(isCommentEditing ? 0.32 : 1)
-
-        if store.comments(for: livePost.id).isEmpty {
-            Text("no comments yet. start the thread.")
-                .fontStyle(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 12)
-        } else {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                ForEach(store.comments(for: livePost.id)) { comment in
-                    CommentView(
-                        postID: livePost.id,
-                        comment: comment,
-                        isInteractive: !isReadOnly,
-                        editingCommentID: editingCommentID,
-                        draftCommentBody: $draftCommentBody,
-                        onBeginEdit: beginCommentEditing,
-                        onConfirmEdit: confirmCommentEditing
-                    )
-                }
-            }
-        }
-    }
-
-    private func beginEditing() {
-        cancelCommentEditing()
-        draftTitle = livePost.title
-        draftDescription = livePost.description
-        draftTone = livePost.tone
-        withAnimation(.smooth(duration: 0.4)) { editMode = true }
-    }
-
-    private func saveEdits() {
-        Task {
-            await store.updatePost(
-                id: livePost.id,
-                title: draftTitle.trimmed,
-                description: draftDescription.trimmed,
-                tone: draftTone
-            )
-            withAnimation(.smooth(duration: 0.4)) { editMode = false }
-        }
-    }
-
-    private func cancelEditing() {
-        draftTitle = livePost.title
-        draftDescription = livePost.description
-        draftTone = livePost.tone
-        withAnimation(.smooth(duration: 0.4)) { editMode = false }
-    }
-
-    private func beginCommentEditing(commentID: UUID, body: String) {
-        editingCommentID = commentID
-        draftCommentBody = body
-    }
-
-    private func confirmCommentEditing() {
-        guard let editingCommentID else { return }
-        let trimmed = draftCommentBody.trimmed
-        guard !trimmed.isEmpty else { return }
-
-        Task {
-            await store.updateComment(
-                postID: livePost.id,
-                commentID: editingCommentID,
-                body: trimmed
-            )
-            withAnimation(.smooth(duration: 0.35)) {
-                self.editingCommentID = nil
-                draftCommentBody = ""
-            }
-        }
-    }
-
-    private func cancelCommentEditing() {
-        withAnimation(.smooth(duration: 0.35)) {
-            editingCommentID = nil
-            draftCommentBody = ""
+        .onChange(of: selectedEditPhotoItem) { _, item in
+            Task { await loadAndUploadEditImage(item) }
         }
     }
 }
 
-private extension String {
-    var trimmed: String { trimmingCharacters(in: .whitespacesAndNewlines) }
-}
+// MARK: - Previews
 
 #Preview("Active Post") {
     NavigationStack {
@@ -329,15 +188,16 @@ private extension String {
             )
         )
         .environment(BoardStore.previewBoard())
+        .environment(AuthStore(service: MockAuthService()))
     }
 }
 
 #Preview("Archived Post") {
     let store = BoardStore.previewBoard()
     let archivedPost = store.posts.first { $0.isReadOnly }!
-
     return NavigationStack {
         PostDetailView(post: archivedPost)
     }
     .environment(store)
+    .environment(AuthStore(service: MockAuthService()))
 }

@@ -28,6 +28,7 @@ final class BoardStore {
     var userReactions: [UUID: Reaction] = [:]
     var userCommentVotes: [UUID: CommentVote] = [:]
     private(set) var isLoading = false
+    private(set) var accessibleBoards: [Board] = []
     var loadError: String?
 
     // MARK: - Internals
@@ -35,11 +36,19 @@ final class BoardStore {
     var boardService: (any BoardService)?
     private var profileIndex = ProfileIndex(profiles: [])
     private var postsByWeek: [UUID: [Post]] = [:]
-    private var commentsByPostID: [UUID: [Comment]] = [:]
+    private var postsByID: [UUID: Post] = [:]
+    private var boardWeeksByID: [UUID: BoardWeek] = [:]
+    private(set) var archivedWeeks: [BoardWeek] = []
+    var commentsByPostID: [UUID: [Comment]] = [:]
     private var cachedFeedItemsByWeek: [UUID: [FeedItem]] = [:]
     private var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
     private var refreshTask: Task<Void, Never>?
     var reactionRealtimeListener: ReactionRealtimeListener?
+
+    // MARK: - Archive LRU
+
+    private static let maxCachedArchiveWeeks = 3
+    private var cachedArchiveWeekIDs: [UUID] = []
 
     private struct FeedItemsCacheKey: Equatable {
         let postSignatures: [String]
@@ -90,7 +99,15 @@ final class BoardStore {
         }
     }
 
-    /// Seeds local fixtures when Supabase is unavailable (e.g. signed-in dev builds).
+    func setBoard(id: UUID, name: String?) {
+        currentBoard = Board(id: id, name: name ?? currentBoard?.name ?? "On Board")
+    }
+
+    func clearLoadError() {
+        loadError = nil
+    }
+
+    /// Seeds local fixtures for Xcode previews only — not used in production flows.
     func loadOfflinePreviewData() {
         guard !isLive, activeBoardWeek == nil else { return }
 
@@ -101,11 +118,13 @@ final class BoardStore {
             commentsByPostID[post.id] = post.comments
         }
 
+        let weekStart = BoardSchedule.startOfWeek(containing: .now)
+        let nextWeekStart = Calendar.current.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart.addingTimeInterval(86_400 * 7)
         let week = BoardWeek(
             id: SampleBoardWeekID.active,
             boardId: SampleBoardID.main,
-            startsAt: .now.addingTimeInterval(-86_400 * 3),
-            endsAt: .now.addingTimeInterval(86_400 * 4),
+            startsAt: weekStart,
+            endsAt: nextWeekStart,
             status: .active
         )
         currentBoard = Board(id: SampleBoardID.main, name: "On Board")
@@ -121,10 +140,12 @@ final class BoardStore {
         boardWeeks = []
         activeBoardWeek = nil
         currentBoard = nil
+        accessibleBoards = []
         currentUserID = nil
         userReactions = [:]
         userCommentVotes = [:]
         commentsByPostID = [:]
+        cachedArchiveWeekIDs = []
         clearFeedItemsCache()
         loadError = nil
         Task { await stopReactionRealtime() }
@@ -132,6 +153,15 @@ final class BoardStore {
     }
 
     // MARK: - Network refresh
+
+    func refreshAccessibleBoards(for userID: UUID) async {
+        guard let boardService else { return }
+        do {
+            accessibleBoards = try await boardService.listAccessibleBoards(for: userID)
+        } catch {
+            // Non-critical — switcher falls back to currentBoard
+        }
+    }
 
     func refresh(for userID: UUID?) async {
         guard let boardService, let userID else { return }
@@ -158,9 +188,10 @@ final class BoardStore {
                     limit: 52,
                     offset: 0
                 )
-                apply(try await snapshot, archivedWeeks: try await archivedWeeks)
+                apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
+                await refreshAccessibleBoards(for: userID)
             } catch {
-                loadError = error.localizedDescription
+                loadError = Self.mapLoadError(error)
             }
         }
 
@@ -172,13 +203,55 @@ final class BoardStore {
     func loadArchivedWeek(_ week: BoardWeek, for userID: UUID?) async {
         guard let boardService, let userID else { return }
         guard week.boardId == currentBoardId else { return }
-        guard posts(for: week).isEmpty else { return }
+
+        if cachedArchiveWeekIDs.contains(week.id) {
+            cachedArchiveWeekIDs.removeAll { $0 == week.id }
+            cachedArchiveWeekIDs.append(week.id)
+            Task { await validateArchiveWeek(week, for: userID) }
+            return
+        }
 
         do {
             let loaded = try await boardService.fetchPosts(forWeek: week.id, userID: userID)
             mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
+            cachedArchiveWeekIDs.append(week.id)
+            evictOldArchiveWeeksIfNeeded()
         } catch {
-            loadError = error.localizedDescription
+            loadError = Self.mapLoadError(error)
+        }
+    }
+
+    private func evictOldArchiveWeeksIfNeeded() {
+        while cachedArchiveWeekIDs.count > Self.maxCachedArchiveWeeks {
+            evictArchiveWeekPosts(weekID: cachedArchiveWeekIDs.removeFirst())
+        }
+    }
+
+    private func evictArchiveWeekPosts(weekID: UUID) {
+        guard let weekPosts = postsByWeek[weekID] else { return }
+        let evictedIDs = Set(weekPosts.map(\.id))
+        posts.removeAll { evictedIDs.contains($0.id) }
+        for id in evictedIDs {
+            commentsByPostID.removeValue(forKey: id)
+            userReactions.removeValue(forKey: id)
+        }
+        rebuildCaches()
+    }
+
+    private func validateArchiveWeek(_ week: BoardWeek, for userID: UUID) async {
+        guard let boardService else { return }
+        do {
+            let loaded = try await boardService.fetchPosts(forWeek: week.id, userID: userID)
+            let cachedIDs = Set((postsByWeek[week.id] ?? []).map(\.id))
+            let loadedIDs = Set(loaded.posts.map(\.id))
+            guard cachedIDs != loadedIDs else { return }
+            let staleIDs = cachedIDs.subtracting(loadedIDs)
+            if !staleIDs.isEmpty {
+                posts.removeAll { staleIDs.contains($0.id) }
+            }
+            mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
+        } catch {
+            // Keep stale cache on network error
         }
     }
 
@@ -193,7 +266,7 @@ final class BoardStore {
                 userCommentVotes[commentID] = vote
             }
         } catch {
-            loadError = error.localizedDescription
+            loadError = Self.mapLoadError(error)
         }
     }
 
@@ -201,24 +274,12 @@ final class BoardStore {
         commentsByPostID[postID] ?? []
     }
 
-    /// Feed-safe post lookup — no comment threads attached.
+    /// Feed-safe post lookup — O(1) via postsByID index.
     func feedPost(id: UUID) -> Post? {
-        for weekPosts in postsByWeek.values {
-            if let post = weekPosts.first(where: { $0.id == id }) {
-                return post
-            }
-        }
-        return posts.first { $0.id == id }.map(stripForFeed)
+        postsByID[id]
     }
 
     // MARK: - Feed composition
-
-    var archivedWeeks: [BoardWeek] {
-        guard let currentBoardId else { return [] }
-        return boardWeeks
-            .filter { $0.boardId == currentBoardId && $0.status == .archived }
-            .sorted { $0.startsAt > $1.startsAt }
-    }
 
     func posts(for week: BoardWeek) -> [Post] {
         postsByWeek[week.id] ?? []
@@ -289,7 +350,7 @@ final class BoardStore {
     }
 
     func boardWeek(for id: UUID) -> BoardWeek? {
-        boardWeeks.first { $0.id == id }
+        boardWeeksByID[id]
     }
 
     func profile(id: UUID) -> Profile? {
@@ -319,7 +380,7 @@ final class BoardStore {
 
     // MARK: - Internal cache updates
 
-    func apply(_ snapshot: BoardSnapshot, archivedWeeks: [BoardWeek] = []) {
+    func apply(_ snapshot: BoardSnapshot, incomingArchivedWeeks: [BoardWeek] = []) {
         let priorPosts = posts
         let priorByID = Dictionary(uniqueKeysWithValues: priorPosts.map { ($0.id, $0) })
         let activeWeekID = snapshot.week.id
@@ -327,7 +388,7 @@ final class BoardStore {
 
         activeBoardWeek = snapshot.week
         currentBoard = Board(id: snapshot.week.boardId, name: currentBoard?.name ?? "On Board")
-        boardWeeks = [snapshot.week] + archivedWeeks
+        boardWeeks = [snapshot.week] + incomingArchivedWeeks
 
         posts = snapshot.posts.map(stripForFeed)
 
@@ -345,6 +406,8 @@ final class BoardStore {
 
         profiles = snapshot.profiles
         userReactions = snapshot.userReactions
+        let validWeekIDs = Set(boardWeeks.map(\.id))
+        cachedArchiveWeekIDs = cachedArchiveWeekIDs.filter { validWeekIDs.contains($0) }
         rebuildCaches()
         restartReactionRealtime()
     }
@@ -370,6 +433,7 @@ final class BoardStore {
     func rebuildCaches() {
         rebuildProfileIndex()
         rebuildPostsIndex()
+        rebuildBoardWeeksIndex()
     }
 
     func isOwned(by authorId: UUID?, authorHandle: String) -> Bool {
@@ -382,17 +446,32 @@ final class BoardStore {
         profileIndex = ProfileIndex(profiles: profiles)
     }
 
+    private func rebuildBoardWeeksIndex() {
+        boardWeeksByID = Dictionary(uniqueKeysWithValues: boardWeeks.map { ($0.id, $0) })
+        guard let currentBoardId else { archivedWeeks = []; return }
+        archivedWeeks = boardWeeks
+            .filter { $0.boardId == currentBoardId && $0.status == .archived }
+            .sorted { $0.startsAt > $1.startsAt }
+    }
+
     private func rebuildPostsIndex() {
         clearFeedItemsCache()
-        postsByWeek = Dictionary(grouping: posts.compactMap { post -> (UUID, Post)? in
-            guard let weekID = post.boardWeekId else { return nil }
-            return (weekID, stripForFeed(post))
-        }) { $0.0 }
-        .mapValues { pairs in pairs.map(\.1) }
+        var byWeek: [UUID: [Post]] = [:]
+        var byID: [UUID: Post] = [:]
+        for post in posts {
+            let feedPost = stripForFeed(post)
+            byID[feedPost.id] = feedPost
+            if let weekID = feedPost.boardWeekId {
+                byWeek[weekID, default: []].append(feedPost)
+            }
+        }
+        postsByWeek = byWeek
+        postsByID = byID
     }
 
     func patchPostInWeekCache(_ post: Post) {
         let feedPost = stripForFeed(post)
+        postsByID[feedPost.id] = feedPost
         guard let weekID = feedPost.boardWeekId,
               var weekPosts = postsByWeek[weekID],
               let index = weekPosts.firstIndex(where: { $0.id == feedPost.id }) else {
@@ -411,6 +490,28 @@ final class BoardStore {
     private func clearFeedItemsCache() {
         cachedFeedItemsByWeek = [:]
         feedItemsCacheKeys = [:]
+        postsByID = [:]
+    }
+
+    func removePost(id: UUID) {
+        posts.removeAll { $0.id == id }
+        commentsByPostID.removeValue(forKey: id)
+        userReactions.removeValue(forKey: id)
+        rebuildCaches()
+    }
+
+    func replaceComments(_ comments: [Comment], for postID: UUID) {
+        commentsByPostID[postID] = comments
+    }
+
+    static func mapLoadError(_ error: Error) -> String {
+        if let boardError = error as? BoardServiceError {
+            return boardError.localizedDescription
+        }
+        if SessionErrorClassifier.isSessionExpired(error) {
+            return AuthError.sessionExpired.localizedDescription
+        }
+        return error.localizedDescription
     }
 
     @discardableResult

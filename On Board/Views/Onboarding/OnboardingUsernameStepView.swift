@@ -7,7 +7,6 @@ import SwiftUI
 
 struct OnboardingUsernameStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
-    @Environment(\.colorScheme) private var scheme
 
     @State private var handle = ""
     @State private var availability: Availability = .idle
@@ -31,54 +30,45 @@ struct OnboardingUsernameStepView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Pick a username")
-                            .fontStyle(.largeTitle)
-                            .fontWeight(.heavy)
-                        Text("This is how people will find you on the board.")
-                            .fontStyle(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("This is how people will find you on the board.")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
 
-                    HStack(spacing: 8) {
-                        Text("@")
-                            .fontStyle(.title2)
-                            .foregroundStyle(.secondary)
-                        TextField("username", text: $handle)
-                            .fontStyle(.title2)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textContentType(.username)
-                            .onChange(of: handle) { _, _ in
-                                scheduleAvailabilityCheck()
-                            }
-                    }
-                    .textFieldStyle(.board)
-
-                    availabilityLabel
-
-                    Button {
-                        Task {
-                            await onboarding.submitUsername(trimmedHandle)
+                HStack(spacing: 8) {
+                    Text("@")
+                        .fontStyle(.title2)
+                        .foregroundStyle(.secondary)
+                    TextField("username", text: $handle)
+                        .fontStyle(.title2)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .textContentType(.username)
+                        .onChange(of: handle) { _, _ in
+                            scheduleAvailabilityCheck()
                         }
-                    } label: {
+                }
+                .textFieldStyle(.board)
+
+                availabilityLabel
+
+                Button {
+                    Task { await onboarding.submitUsername(trimmedHandle) }
+                } label: {
+                    if onboarding.isSubmitting {
+                        ProgressView().tint(.white)
+                    } else {
                         Label("Continue", systemImage: "arrow.right")
                     }
-                    .buttonStyle(.boardPrimary)
-                    .disabled(!canContinue)
                 }
-                .padding(20)
+                .buttonStyle(.boardPrimary)
+                .disabled(!canContinue)
             }
-            .background(onboardingBackground)
-            .navigationTitle("Welcome")
-            .navigationBarTitleDisplayMode(.inline)
-            .onAppear {
-                hydrateFromStatus()
-            }
+            .safeAreaPadding(.horizontal)
         }
+        .navigationTitle("Pick a username")
+        .onAppear { hydrateFromStatus() }
     }
 
     private func hydrateFromStatus() {
@@ -119,18 +109,6 @@ struct OnboardingUsernameStepView: View {
         }
     }
 
-    private var onboardingBackground: some View {
-        LinearGradient(
-            colors: [
-                Color.gray.opacity(scheme == .light ? 0.20 : 0.16),
-                Color(.systemBackground)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .ignoresSafeArea()
-    }
-
     private func scheduleAvailabilityCheck() {
         checkTask?.cancel()
         let candidate = trimmedHandle
@@ -162,10 +140,12 @@ struct OnboardingUsernameStepView: View {
 }
 
 #Preview {
-    OnboardingUsernameStepView()
-        .environment(OnboardingStore(
-            service: MockOnboardingService(),
-            auth: AuthStore(service: MockAuthService()),
-            network: NetworkMonitor()
-        ))
+    NavigationStack {
+        OnboardingUsernameStepView()
+    }
+    .environment(OnboardingStore(
+        service: MockOnboardingService(),
+        auth: AuthStore(service: MockAuthService()),
+        network: NetworkMonitor()
+    ))
 }

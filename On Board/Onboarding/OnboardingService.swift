@@ -44,6 +44,7 @@ enum OnboardingError: Error, Equatable, Sendable, LocalizedError {
             message
         }
     }
+
 }
 
 enum HandleCheckResult: Equatable, Sendable {
@@ -62,7 +63,7 @@ protocol OnboardingService: Sendable {
     func fetchStatus() async throws -> OnboardingStatus
     func checkHandleAvailable(_ handle: String) async throws -> Bool
     func completeUsername(_ handle: String) async throws -> OnboardingStep
-    func completeProfile(displayName: String, bio: String?, avatarEmoji: String) async throws -> OnboardingStep
+    func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep
     func lookupSchool(for email: String) async throws -> SchoolMatch?
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch
     func completeSchoolEmailVerification(_ email: String) async throws -> OnboardingStep

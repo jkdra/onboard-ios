@@ -14,82 +14,143 @@ struct ReactionBar: View {
     let tone: PostTone
     @Binding var selected: Reaction?
     var isInteractive: Bool = true
+    var isRecord: Bool = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
 
-    private let outerRadius: CGFloat = 20
+    private let outerRadius: CGFloat = 32
     private let innerRadius: CGFloat = 4
     private let interButtonSpacing: CGFloat = 4
 
     var body: some View {
-        Group {
-            if typeSize.isAccessibilitySize {
-                VStack(alignment: .leading, spacing: interButtonSpacing) {
-                    ForEach(Array(Reaction.allCases.enumerated()), id: \.element) { index, reaction in
-                        accessibleButton(for: reaction, position: position(at: index))
-                    }
-                }
-            } else {
-                HStack(spacing: interButtonSpacing) {
-                    ForEach(Array(Reaction.allCases.enumerated()), id: \.element) { index, reaction in
-                        button(for: reaction, position: position(at: index))
-                    }
+        reactionStrip
+            .sensoryFeedback(trigger: selected) { _, _ in
+                hapticsEnabled && isInteractive && !isRecord ? .impact(weight: .light) : nil
+            }
+            .allowsHitTesting(isInteractive && !isRecord)
+            .opacity(isRecord ? 1 : (isInteractive ? 1 : 0.85))
+    }
+
+    @ViewBuilder
+    private var reactionStrip: some View {
+        reactionLayout
+    }
+
+    @ViewBuilder
+    private var reactionLayout: some View {
+        if isRecord {
+            recordLayout
+        } else if typeSize.isAccessibilitySize {
+            accessibleMenu
+        } else {
+            HStack(spacing: interButtonSpacing) {
+                ForEach(Array(Reaction.defaultOrder.enumerated()), id: \.element) { index, reaction in
+                    button(for: reaction, position: position(at: index))
                 }
             }
         }
-        .sensoryFeedback(trigger: selected) { _, _ in
-            hapticsEnabled && isInteractive ? .impact(weight: .light) : nil
-        }
-        .allowsHitTesting(isInteractive)
-        .opacity(isInteractive ? 1 : 0.85)
     }
-    
-    private func accessibleButton(for reaction: Reaction, position: Position) -> some View {
-        let count = displayCount(for: reaction)
-        let isSelected = selected == reaction
-        return Button {
-            guard isInteractive else { return }
-            withAnimation(.smooth(duration: 0.2)) {
-                selected = isSelected ? nil : reaction
+
+    @ViewBuilder
+    private var recordLayout: some View {
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: RectangleCornerRadii(
+                topLeading: outerRadius, bottomLeading: outerRadius,
+                bottomTrailing: outerRadius, topTrailing: outerRadius
+            ),
+            style: .continuous
+        )
+        HStack(spacing: 0) {
+            ForEach(Array(Reaction.defaultOrder.enumerated()), id: \.element) { index, reaction in
+                let count = displayCount(for: reaction)
+                HStack(spacing: 5) {
+                    Text(reaction.emoji)
+                        .fontStyle(.caption)
+                    Text(count.abbreviated)
+                        .fontStyle(.caption)
+                        .opacity(0.75)
+                }
+                .foregroundStyle(.primary)
+                .frame(maxWidth: .infinity)
+
+                if index < Reaction.defaultOrder.count - 1 {
+                    Circle().foregroundStyle(.quaternary)
+                        .frame(width: 4, height: 4)
+                }
+            }
+        }
+        .padding()
+        .background {
+            if #available(iOS 26.0, *) {
+                Color.clear.glassEffect(.regular, in: shape)
+            } else {
+                shape.fill(Color(.systemBackground).opacity(0.45))
+            }
+        }
+    }
+
+    private var accessibleMenu: some View {
+        let currentReaction = selected
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: RectangleCornerRadii(
+                topLeading: outerRadius, bottomLeading: outerRadius,
+                bottomTrailing: outerRadius, topTrailing: outerRadius
+            ),
+            style: .continuous
+        )
+        return Menu {
+            ForEach(Reaction.defaultOrder, id: \.self) { reaction in
+                let count = displayCount(for: reaction)
+                Button {
+                    guard isInteractive else { return }
+                    withAnimation(.smooth(duration: 0.2)) {
+                        selected = currentReaction == reaction ? nil : reaction
+                    }
+                } label: {
+                    Label(
+                        "\(reaction.label)  \(count.abbreviated)",
+                        systemImage: currentReaction == reaction ? "checkmark" : ""
+                    )
+                }
+            }
+            if currentReaction != nil {
+                Divider()
+                Button(role: .destructive) {
+                    withAnimation(.smooth(duration: 0.2)) { selected = nil }
+                } label: {
+                    Label("Remove reaction", systemImage: "xmark")
+                }
             }
         } label: {
             HStack(spacing: 6) {
-                Text(reaction.emoji)
-                    .fontStyle(.caption)
-                Text(reaction.label)
-                    .fontStyle(.caption)
-                Divider()
-                Text(count.abbreviated)
-                    .fontStyle(.caption)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .contentTransition(.numericText(value: Double(count)))
-                    .animation(.snappy(duration: 0.35), value: count)
+                if let current = currentReaction {
+                    Text(current.emoji)
+                    Text(current.label)
+                        .fontStyle(.caption)
+                } else {
+                    Image(systemName: "heart.fill")
+                    Text("React")
+                        .fontStyle(.caption)
+                }
             }
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
-            .background(
-                UnevenRoundedRectangle(
-                    cornerRadii: position.accessibleCorners(outer: outerRadius, inner: innerRadius),
-                    style: .continuous
-                )
-                .fill(
-                    isSelected
-                    ? tone.color.opacity(scheme == .dark ? 0.55 : 0.40)
-                    : Color(.systemBackground).opacity(0.45)
-                )
-            )
+            .contentShape(shape)
+            .background(reactionBackground(shape: shape, isSelected: currentReaction != nil))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(reaction.label), \(count)")
-        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+        .disabled(!isInteractive)
+        .accessibilityLabel(currentReaction.map { "\($0.label) selected" } ?? "React")
     }
 
     private func button(for reaction: Reaction, position: Position) -> some View {
         let count = displayCount(for: reaction)
         let isSelected = selected == reaction
+        let shape = UnevenRoundedRectangle(
+            cornerRadii: position.corners(outer: outerRadius, inner: innerRadius),
+            style: .continuous
+        )
         return Button {
             guard isInteractive else { return }
             withAnimation(.smooth(duration: 0.2)) {
@@ -108,22 +169,31 @@ struct ReactionBar: View {
             }
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 12)
-            .background(
-                UnevenRoundedRectangle(
-                    cornerRadii: position.corners(outer: outerRadius, inner: innerRadius),
-                    style: .continuous
-                )
-                .fill(
-                    isSelected
-                    ? tone.color.opacity(scheme == .dark ? 0.55 : 0.40)
-                    : Color(.systemBackground).opacity(0.45)
-                )
-            )
+            .padding(.vertical)
+            .contentShape(shape)
+            .background(reactionBackground(shape: shape, isSelected: isSelected))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(reaction.label), \(count)")
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+
+    @ViewBuilder
+    private func reactionBackground(shape: UnevenRoundedRectangle, isSelected: Bool) -> some View {
+        if #available(iOS 26.0, *) {
+            Color.clear.glassEffect(
+                isSelected
+                ? .regular.tint(tone.color).interactive()
+                : .regular.interactive(),
+                in: shape
+            )
+        } else {
+            shape.fill(
+                isSelected
+                ? tone.color.opacity(scheme == .dark ? 0.55 : 0.40)
+                : Color(.systemBackground).opacity(0.45)
+            )
+        }
     }
 
     private func position(at index: Int) -> Position {
@@ -165,30 +235,5 @@ struct ReactionBar: View {
             }
         }
         
-        func accessibleCorners(outer: CGFloat, inner: CGFloat) -> RectangleCornerRadii {
-            switch self {
-                case .first:
-                    RectangleCornerRadii(
-                        topLeading: outer,
-                        bottomLeading: inner,
-                        bottomTrailing: inner,
-                        topTrailing: outer
-                    )
-                case .middle:
-                    RectangleCornerRadii(
-                        topLeading: inner,
-                        bottomLeading: inner,
-                        bottomTrailing: inner,
-                        topTrailing: inner
-                    )
-                case .last:
-                    RectangleCornerRadii(
-                        topLeading: inner,
-                        bottomLeading: outer,
-                        bottomTrailing: outer,
-                        topTrailing: inner
-                    )
-            }
-        }
     }
 }

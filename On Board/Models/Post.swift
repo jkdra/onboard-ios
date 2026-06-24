@@ -52,6 +52,15 @@ struct Post: Identifiable, Hashable, Codable {
     /// sorting and the "2h ago" labels.
     let createdAt: Date
 
+    /// Optional attached image. Stored in the `post-images` Supabase bucket as WebP.
+    let imageUrl: String?
+
+    /// Width / height of the attached image — used to size the image card in
+    /// the feed without waiting for the image to download.
+    let imageAspectRatio: Double?
+
+    var hasImage: Bool { imageUrl != nil }
+
     init(
         id: UUID = UUID(),
         authorId: UUID? = nil,
@@ -63,7 +72,9 @@ struct Post: Identifiable, Hashable, Codable {
         tone: PostTone = .random(),
         reactionCounts: [Reaction: Int] = [:],
         comments: [Comment] = [],
-        createdAt: Date = .now
+        createdAt: Date = .now,
+        imageUrl: String? = nil,
+        imageAspectRatio: Double? = nil
     ) {
         self.id = id
         self.authorId = authorId
@@ -76,6 +87,8 @@ struct Post: Identifiable, Hashable, Codable {
         self.reactionCounts = reactionCounts
         self.comments = comments
         self.createdAt = createdAt
+        self.imageUrl = imageUrl
+        self.imageAspectRatio = imageAspectRatio
     }
 
     func assigning(boardWeekId: UUID?, isReadOnly: Bool) -> Post {
@@ -90,7 +103,9 @@ struct Post: Identifiable, Hashable, Codable {
             tone: tone,
             reactionCounts: reactionCounts,
             comments: comments,
-            createdAt: createdAt
+            createdAt: createdAt,
+            imageUrl: imageUrl,
+            imageAspectRatio: imageAspectRatio
         )
     }
 

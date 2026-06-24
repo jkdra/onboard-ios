@@ -11,34 +11,67 @@ import Combine
 struct ContentView: View {
 
     @Environment(BoardStore.self) private var store
+    @Environment(AuthStore.self) private var auth
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
-    @State private var showSettings = false
-    @State private var path: [BoardRoute] = []
+    @Binding var navigationPath: NavigationPath
     @State private var showNewPost = false
     @State private var clearingSoon = false
+
+    init(navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
+        self._navigationPath = navigationPath
+    }
     @State private var pulseLowOpacity = false
+    @State private var alertError: PresentableAlertError?
     @Namespace private var cardNamespace
 
     var body: some View {
-        NavigationStack(path: $path) {
-            thisWeekFeed
-                .navigationDestination(for: BoardRoute.self, destination: routeDestination)
+        thisWeekFeed
+            .navigationDestination(for: BoardRoute.self, destination: routeDestination)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        navigationPath.removeLast(navigationPath.count)
+                    } label: {
+                        Image(systemName: "list.bullet")
+                    }
+                    .accessibilityLabel("Boards")
+                }
+            }
+            .sheet(isPresented: $showNewPost) { NewPostView() }
+            .boardErrorHandling(alertError: $alertError)
+            .presentableErrorAlert(error: $alertError)
+    }
+
+    private var feedHasPosts: Bool {
+        store.feedItems.contains { item in
+            if case .post = item { return true }
+            return false
         }
-        .preferredColorScheme(appearance.colorScheme)
-        .sheet(isPresented: $showSettings) { SettingsView() }
-        .sheet(isPresented: $showNewPost) { NewPostView() }
     }
 
     private var thisWeekFeed: some View {
-        ScrollView {
-            BoardFeedView(
-                items: store.feedItems,
-                cardNamespace: cardNamespace,
-                onNewPost: { showNewPost = true }
-            )
+        ZStack {
+            ScrollView {
+                BoardFeedView(
+                    items: store.feedItems,
+                    cardNamespace: cardNamespace,
+                    onNewPost: { showNewPost = true }
+                )
+
+                if store.isLive, !store.isLoading, !feedHasPosts {
+                    emptyFeedState
+                }
+            }
+
+            if store.isLoading, store.posts.isEmpty {
+                ProgressView("Loading your board…")
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            }
         }
         .background {
             if clearingSoon {
@@ -84,22 +117,12 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Menu {
-                    Button {
-                        showSettings = true
-                    } label: {
-                        Label("Settings", systemImage: "gearshape")
-                    }
-
-                    Button {
-                        path.append(.archive)
-                    } label: {
-                        Label("Archive", systemImage: "archivebox")
-                    }
+                Button {
+                    navigationPath.append(BoardRoute.archive)
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
                 }
-                .accessibilityLabel("More")
+                .accessibilityLabel("Archive")
             }
         }
     }
@@ -124,16 +147,109 @@ struct ContentView: View {
     private func updateClearingSoon() {
         clearingSoon = BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt)
     }
+
+    private var emptyFeedState: some View {
+        Group {
+            if store.activeBoardWeek != nil {
+                // Board loaded, no posts yet
+                VStack(spacing: 12) {
+                    Text("Nothing posted yet")
+                        .fontStyle(.headline)
+                    Text("Be the first to pin something to this week's board.")
+                        .fontStyle(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+            } else {
+                // Board didn't load — show retry
+                VStack(spacing: 16) {
+                    Text("Couldn't load board")
+                        .fontStyle(.headline)
+                    Text("Pull down to try again.")
+                        .fontStyle(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                    Button("Retry") {
+                        Task { await store.refresh(for: store.currentUserID) }
+                    }
+                    .buttonStyle(.boardPrimary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 80)
+        .padding(.horizontal, 24)
+    }
 }
 
-#Preview("This Week") {
-    ContentView()
-        .environment(BoardStore.previewBoard())
-        .environment(AuthStore(service: MockAuthService()))
+#Preview("Mock Feed") {
+    NavigationStack {
+        ContentView()
+            .environment(BoardStore.previewBoard())
+            .environment(AuthStore(service: MockAuthService()))
+    }
 }
 
-#Preview("Archive Flow") {
-    ContentView()
-        .environment(BoardStore.previewBoard())
-        .environment(AuthStore(service: MockAuthService()))
+#Preview("Live Feed") {
+    LiveFeedPreview()
+}
+
+private struct LiveFeedPreview: View {
+    @State private var auth: AuthStore
+    @State private var onboarding: OnboardingStore
+    @State private var store: BoardStore
+
+    init() {
+        let a = AuthStore(service: AuthServiceFactory.make())
+        let n = NetworkMonitor()
+        _auth = State(wrappedValue: a)
+        _onboarding = State(wrappedValue: OnboardingStore(
+            service: OnboardingServiceFactory.make(),
+            auth: a,
+            network: n
+        ))
+        _store = State(wrappedValue: BoardStore(
+            boardService: BoardServiceFactory.make(configuration: AppConfiguration.current)
+        ))
+    }
+
+    @State private var didRestore = false
+
+    var body: some View {
+        if AppConfiguration.current.isSupabaseConfigured {
+            Group {
+                if !didRestore {
+                    ProgressView("Restoring session…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if auth.session == nil {
+                    ContentUnavailableView(
+                        "Sign in first",
+                        systemImage: "person.crop.circle.badge.exclamationmark",
+                        description: Text("Run the app, sign in, then reopen this preview.")
+                    )
+                } else {
+                    ContentView()
+                        .environment(store)
+                        .environment(auth)
+                }
+            }
+            .task {
+                await auth.restoreSession()
+                didRestore = true
+                guard let session = auth.session else { return }
+                store.setCurrentUser(id: session.userId)
+                await onboarding.refreshIfOnline()
+                if let boardId = onboarding.status?.boardId {
+                    store.setBoard(id: boardId, name: onboarding.status?.boardName)
+                }
+                await store.refresh(for: session.userId)
+            }
+        } else {
+            ContentUnavailableView(
+                "Supabase not configured",
+                systemImage: "key.slash",
+                description: Text("Add Secrets.xcconfig with SUPABASE_URL and SUPABASE_ANON_KEY.")
+            )
+        }
+    }
 }

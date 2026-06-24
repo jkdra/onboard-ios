@@ -9,14 +9,16 @@ enum AuthProvider: String, Codable, CaseIterable, Identifiable, Sendable {
     case apple
     case google
     case phone
+    case email
 
     var id: String { rawValue }
 
-    var label: String {
+    nonisolated var label: String {
         switch self {
         case .apple: "Apple"
         case .google: "Google"
         case .phone: "Phone"
+        case .email: "Email"
         }
     }
 
@@ -25,6 +27,7 @@ enum AuthProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         case .apple: "apple.logo"
         case .google: "g.circle.fill"
         case .phone: "phone.fill"
+        case .email: "envelope.fill"
         }
     }
 
@@ -33,11 +36,27 @@ enum AuthProvider: String, Codable, CaseIterable, Identifiable, Sendable {
         case .apple: "Sign in with Apple"
         case .google: "Google"
         case .phone: "Phone number"
+        case .email: "Email"
         }
     }
 
-    /// Providers shown on the primary sign-in screen.
+    /// Providers shown on the primary sign-in screen (phone is default; email is a secondary toggle).
     static var signInOptions: [AuthProvider] {
-        [.phone, .apple, .google]
+        [.phone, .email, .apple, .google]
+    }
+
+    /// OAuth providers that can be linked or unlinked in account settings.
+    static var linkableOAuthProviders: [AuthProvider] {
+        [.apple, .google]
+    }
+
+    init?(supabaseProvider: String) {
+        switch supabaseProvider.lowercased() {
+        case "apple": self = .apple
+        case "google": self = .google
+        case "phone": self = .phone
+        case "email": self = .email
+        default: return nil
+        }
     }
 }

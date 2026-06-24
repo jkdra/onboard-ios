@@ -53,7 +53,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return .profile
     }
 
-    func completeProfile(displayName: String, bio: String?, avatarEmoji: String) async throws -> OnboardingStep {
+    func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep {
         try await Task.sleep(for: .milliseconds(180))
         guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
             throw OnboardingError.notAuthenticated
@@ -68,7 +68,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         status = status.updating(
             displayName: normalizedName,
             bio: bio?.trimmingCharacters(in: .whitespacesAndNewlines),
-            avatarEmoji: avatarEmoji.isEmpty ? "🌱" : avatarEmoji,
+            avatarUrl: avatarUrl,
             onboardingStep: .schoolVerify
         )
         save(status, for: userID)
@@ -127,7 +127,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             handle: status.handle,
             displayName: status.displayName,
             bio: status.bio,
-            avatarEmoji: status.avatarEmoji,
+            avatarUrl: status.avatarUrl,
             onboardingStep: .waitlist,
             onboardingCompletedAt: status.onboardingCompletedAt,
             waitlistJoinedAt: status.waitlistJoinedAt,
@@ -195,7 +195,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
                 handle: profile.handle,
                 displayName: profile.displayName,
                 bio: profile.bio,
-                avatarEmoji: profile.avatarEmoji,
+                avatarUrl: profile.avatarUrl,
                 onboardingStep: .complete,
                 onboardingCompletedAt: profile.joinedAt,
                 waitlistJoinedAt: profile.joinedAt,
@@ -212,7 +212,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             handle: "u_\(userID.uuidString.prefix(12).replacingOccurrences(of: "-", with: "").lowercased())",
             displayName: "New member",
             bio: nil,
-            avatarEmoji: "🌱",
+            avatarUrl: nil,
             onboardingStep: .username,
             onboardingCompletedAt: nil,
             waitlistJoinedAt: nil,
@@ -238,7 +238,7 @@ private extension OnboardingStatus {
         handle: String? = nil,
         displayName: String? = nil,
         bio: String?? = nil,
-        avatarEmoji: String? = nil,
+        avatarUrl: String?? = nil,
         onboardingStep: OnboardingStep? = nil,
         onboardingCompletedAt: Date?? = nil,
         waitlistJoinedAt: Date?? = nil,
@@ -253,7 +253,7 @@ private extension OnboardingStatus {
             handle: handle ?? self.handle,
             displayName: displayName ?? self.displayName,
             bio: bio ?? self.bio,
-            avatarEmoji: avatarEmoji ?? self.avatarEmoji,
+            avatarUrl: avatarUrl ?? self.avatarUrl,
             onboardingStep: onboardingStep ?? self.onboardingStep,
             onboardingCompletedAt: onboardingCompletedAt ?? self.onboardingCompletedAt,
             waitlistJoinedAt: waitlistJoinedAt ?? self.waitlistJoinedAt,

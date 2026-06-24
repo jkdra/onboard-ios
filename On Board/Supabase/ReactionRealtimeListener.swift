@@ -45,7 +45,7 @@ final class ReactionRealtimeListener {
             table: "reactions"
         )
 
-        await channel.subscribe()
+        try? await channel.subscribeWithError()
 
         for await change in changes {
             if Task.isCancelled { break }

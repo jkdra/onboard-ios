@@ -51,7 +51,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         return step
     }
 
-    func completeProfile(displayName: String, bio: String?, avatarEmoji: String) async throws -> OnboardingStep {
+    func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep {
         let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedName.isEmpty else {
             throw OnboardingError.profileIncomplete
@@ -60,7 +60,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         struct Params: Encodable {
             let pDisplayName: String
             let pBio: String?
-            let pAvatarEmoji: String
+            let pAvatarUrl: String?
         }
 
         let client = try requireClient()
@@ -70,7 +70,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
                 params: Params(
                     pDisplayName: normalizedName,
                     pBio: bio?.trimmingCharacters(in: .whitespacesAndNewlines),
-                    pAvatarEmoji: avatarEmoji
+                    pAvatarUrl: avatarUrl
                 )
             )
             .execute()

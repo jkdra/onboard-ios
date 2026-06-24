@@ -13,9 +13,12 @@ enum AuthError: Error, Equatable, Sendable, LocalizedError {
     case sessionExpired
     case networkUnavailable
     case accountDeletionFailed(String)
+    case cannotUnlinkLastSignInMethod
+    case identityAlreadyLinked(AuthProvider)
+    case invalidPhoneNumber
     case unknown(String)
 
-    var errorDescription: String? {
+    nonisolated var errorDescription: String? {
         switch self {
         case .notConfigured:
             "Sign-in is not configured yet. Copy Secrets.xcconfig.example to Secrets.xcconfig and add your Supabase keys."
@@ -31,6 +34,12 @@ enum AuthError: Error, Equatable, Sendable, LocalizedError {
             "You're offline. Connect to the internet and try again."
         case .accountDeletionFailed(let message):
             message
+        case .cannotUnlinkLastSignInMethod:
+            "Add a phone number, email, or another sign-in method before removing this one. You can also delete your account from Account Management."
+        case .identityAlreadyLinked(let provider):
+            "\(provider.label) is already linked to your account."
+        case .invalidPhoneNumber:
+            "Enter a valid phone number with country code, e.g. +1 555 555 0100."
         case .unknown(let message):
             message
         }

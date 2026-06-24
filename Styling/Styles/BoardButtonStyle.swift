@@ -66,11 +66,4 @@ extension ButtonStyle where Self == BoardButtonStyle {
     static var boardSecondary: BoardButtonStyle { BoardButtonStyle(variant: .secondary) }
     static var boardDestructive: BoardButtonStyle { BoardButtonStyle(variant: .destructive) }
 
-    static func boardPrimary(tone: PostTone) -> BoardButtonStyle {
-        BoardButtonStyle(variant: .primary, tone: tone)
-    }
-
-    static func boardSecondary(tone: PostTone) -> BoardButtonStyle {
-        BoardButtonStyle(variant: .secondary, tone: tone)
-    }
 }

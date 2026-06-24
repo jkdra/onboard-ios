@@ -49,25 +49,6 @@ struct ArchiveView: View {
         }
         .navigationTitle("Archive")
         .navigationBarTitleDisplayMode(.inline)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ArchiveWeekdayHeader()
-                .padding(.horizontal, 4)
-                .padding(.vertical, 6)
-                .frame(maxWidth: .infinity)
-                .background {
-                    if #available(iOS 26.0, *) {
-                        Capsule()
-                            .foregroundStyle(.clear)
-                            .glassEffect(.regular, in: .capsule(style: .circular))
-                    } else {
-                        Rectangle()
-                            .fill(.ultraThinMaterial)
-                            .ignoresSafeArea(edges: .horizontal)
-                    }
-                }
-                .safeAreaPadding(.horizontal)
-                
-        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let selectedWeek = selectedBoardWeek {
                 weekFooter(for: selectedWeek)
@@ -102,44 +83,40 @@ struct ArchiveView: View {
 
     @ViewBuilder
     private func weekFooter(for week: BoardWeek) -> some View {
-        VStack(spacing: 12) {
-            Text(weekSummary(for: week))
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 20)
+        let postCount = store.posts(for: week).count
+        let fmt: Date.FormatStyle = .dateTime.month(.abbreviated).day()
+        let dateRange = "\(week.startsAt.formatted(fmt)) – \(week.endsAt.formatted(fmt))"
 
-            Group {
-                if week.status == .active {
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label(openWeekLabel(for: week), systemImage: "arrow.left.circle.fill")
-                    }
-                } else {
-                    NavigationLink(value: BoardRoute.archivedWeek(week)) {
-                        Label(openWeekLabel(for: week), systemImage: "arrow.right.circle.fill")
-                    }
+        VStack(spacing: 10) {
+            HStack(spacing: 12) {
+                Label(dateRange, systemImage: "calendar")
+
+                if postCount > 0 || week.status == .archived {
+                    Divider().frame(height: 12)
+                    Label(postCount == 1 ? "1 post" : "\(postCount) posts", systemImage: "doc.text")
                 }
             }
-            .buttonStyle(.boardSecondary)
-            .padding(.horizontal, 24)
+            .fontStyle(.footnote)
+            .foregroundStyle(.secondary)
+            .labelStyle(.titleAndIcon)
+
+            if week.status == .active {
+                Button {
+                    dismiss()
+                } label: {
+                    Label("Back to This Week", systemImage: "arrow.left.circle.fill")
+                }
+                .buttonStyle(.boardSecondary)
+            } else {
+                NavigationLink(value: BoardRoute.archivedWeek(week)) {
+                    Label("Open Week", systemImage: "arrow.right.circle.fill")
+                }
+                .buttonStyle(.boardSecondary)
+            }
         }
+        .padding(.horizontal, 24)
         .padding(.top, 12)
         .padding(.bottom, 8)
-    }
-
-    private func weekSummary(for week: BoardWeek) -> String {
-        let posts = store.posts(for: week).count
-        let formatter: Date.FormatStyle = .dateTime.month(.abbreviated).day()
-        let start = week.startsAt.formatted(formatter)
-        let end = week.endsAt.formatted(formatter)
-        let status = week.status == .active ? "This week" : "Archived"
-        return "\(status) · \(start) – \(end) · \(posts) posts"
-    }
-
-    private func openWeekLabel(for week: BoardWeek) -> String {
-        week.status == .active ? "Back to This Week" : "Open Week"
     }
 }
 

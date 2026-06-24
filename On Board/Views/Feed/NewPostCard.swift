@@ -13,7 +13,7 @@ struct NewPostCard: View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .stroke(style: strokeStyle)
             .foregroundStyle(.secondary.opacity(0.45))
-            .frame(height: 200)
+            .frame(minHeight: 200)
             .overlay {
                 ZStack {
                     Circle()

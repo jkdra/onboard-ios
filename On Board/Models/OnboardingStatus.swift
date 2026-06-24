@@ -10,7 +10,7 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
     let handle: String
     let displayName: String
     let bio: String?
-    let avatarEmoji: String
+    let avatarUrl: String?
     let onboardingStep: OnboardingStep
     let onboardingCompletedAt: Date?
     let waitlistJoinedAt: Date?
@@ -20,7 +20,31 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
     let boardId: UUID?
     let boardName: String?
 
+    /// Raw DB step — may read `complete` for users grandfathered by migration before picking a handle.
     var isComplete: Bool { onboardingStep == .complete }
+
+    /// Step the app should route to. Defends against the server reporting `complete`
+    /// for users that never actually finished onboarding (e.g. a fresh OIDC sign-in
+    /// where the profile trigger short-circuits to `complete`).
+    var effectiveOnboardingStep: OnboardingStep {
+        guard onboardingStep == .complete else { return onboardingStep }
+
+        if HandleRules.isProvisional(handle) {
+            return .username
+        }
+
+        if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return .profile
+        }
+
+        if verifiedSchoolEmail == nil, waitlistJoinedAt == nil, boardId == nil {
+            return .schoolVerify
+        }
+
+        return .complete
+    }
+
+    var needsOnboarding: Bool { effectiveOnboardingStep != .complete }
 }
 
 enum HandleRules {
