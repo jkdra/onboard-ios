@@ -21,6 +21,5 @@ jobs:
             -scheme "On Board" \
             -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=latest" \
             CODE_SIGNING_ALLOWED=NO \
-            IPHONEOS_DEPLOYMENT_TARGET=18.0 \
             -only-testing:"On BoardTests" \
             test
