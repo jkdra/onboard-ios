@@ -7,6 +7,7 @@ import Foundation
 import Testing
 @testable import On_Board
 
+@MainActor
 struct BoardScheduleTests {
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -37,6 +38,7 @@ struct BoardScheduleTests {
     }
 }
 
+@MainActor
 struct IntAbbreviatedTests {
     @Test func leavesSmallNumbersUnchanged() {
         #expect(999.abbreviated == "999")
@@ -47,6 +49,7 @@ struct IntAbbreviatedTests {
     }
 }
 
+@MainActor
 struct AppConfigurationTests {
     @Test func treatsEmptySupabaseValuesAsUnconfigured() {
         let config = AppConfiguration(
@@ -88,6 +91,7 @@ struct AppConfigurationTests {
     }
 }
 
+@MainActor
 struct PhoneNumberNormalizerTests {
     @Test func formatsTenDigitUSNumbers() {
         #expect(PhoneNumberNormalizer.e164(from: "5555550100") == "+15555550100")
@@ -107,6 +111,7 @@ struct PhoneNumberNormalizerTests {
     }
 }
 
+@MainActor
 struct MockAuthServiceTests {
     @Test func signInPersistsAndRestoresSession() async throws {
         let defaults = UserDefaults(suiteName: "MockAuthServiceTests")!
@@ -168,6 +173,7 @@ struct MockAuthServiceTests {
     }
 }
 
+@MainActor
 struct AuthSessionTests {
     @Test func countsSignInMethodsForUnlinkGuardrails() {
         let appleOnly = AuthSession(
@@ -207,6 +213,25 @@ struct AuthStoreTests {
         await auth.signOut()
         #expect(!auth.isSignedIn)
     }
+}
+
+private final class MockBoardService: BoardService, @unchecked Sendable {
+    func listAccessibleBoards(for userID: UUID) async throws -> [Board] { throw BoardServiceError.notConfigured }
+    func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot { throw BoardServiceError.notConfigured }
+    func listArchivedWeeks(boardID: UUID, limit: Int, offset: Int) async throws -> [BoardWeek] { throw BoardServiceError.notConfigured }
+    func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { throw BoardServiceError.notConfigured }
+    func fetchComments(for postID: UUID) async throws -> CommentThread { throw BoardServiceError.notConfigured }
+    func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
+    func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post {
+        Post(authorId: authorID, boardWeekId: weekID, title: title, description: description, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio)
+    }
+    func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { throw BoardServiceError.notConfigured }
+    func deletePost(id: UUID) async throws {}
+    func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws {}
+    func updateComment(id: UUID, body: String) async throws {}
+    func deleteComment(id: UUID) async throws {}
+    func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {}
+    func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { throw BoardServiceError.notConfigured }
 }
 
 struct BoardStoreTests {
@@ -255,7 +280,8 @@ struct BoardStoreTests {
             posts: [],
             profiles: [Profile.samples[0]],
             currentUserID: SampleProfileID.maya,
-            activeBoardWeek: activeWeek
+            activeBoardWeek: activeWeek,
+            boardService: MockBoardService()
         )
         let succeeded = await store.addPost(title: "hello", description: "world", tone: .blue)
         #expect(succeeded)
@@ -374,6 +400,7 @@ struct BoardStoreTests {
     }
 }
 
+@MainActor
 struct ProfileIndexTests {
     @Test func looksUpByHandleCaseInsensitively() {
         let index = ProfileIndex(profiles: Profile.samples)
@@ -382,6 +409,7 @@ struct ProfileIndexTests {
     }
 }
 
+@MainActor
 struct CommentTreeBuilderTests {
     @Test func buildsNestedReplies() {
         let rootID = UUID()
@@ -416,6 +444,7 @@ struct CommentTreeBuilderTests {
     }
 }
 
+@MainActor
 struct RemotePostRowTests {
     @Test func decodesPostsWithMetaShape() throws {
         let json = """
@@ -461,6 +490,7 @@ struct RemotePostRowTests {
     }
 }
 
+@MainActor
 struct SupabaseClientFactoryTests {
     @Test func returnsNilWhenUnconfigured() {
         let config = AppConfiguration(
@@ -484,6 +514,7 @@ struct SupabaseClientFactoryTests {
     }
 }
 
+@MainActor
 struct SupabaseAuthServiceTests {
     @Test func throwsWhenSupabaseIsNotConfigured() async {
         let service = SupabaseAuthService(
@@ -505,6 +536,7 @@ struct SupabaseAuthServiceTests {
     }
 }
 
+@MainActor
 struct HandleRulesTests {
     @Test func acceptsValidHandles() {
         #expect(HandleRules.isValid("maya.c"))
@@ -524,6 +556,7 @@ struct HandleRulesTests {
     }
 }
 
+@MainActor
 struct MockOnboardingServiceTests {
     @Test func phoneUserStartsAtUsername() async throws {
         let defaults = UserDefaults(suiteName: "MockOnboardingPhone")!
@@ -550,7 +583,7 @@ struct MockOnboardingServiceTests {
         var status = try await onboarding.fetchStatus()
         #expect(status.onboardingStep == .profile)
 
-        _ = try await onboarding.completeProfile(displayName: "New Tester", bio: "Hello", avatarEmoji: "✨")
+        _ = try await onboarding.completeProfile(displayName: "New Tester", bio: "Hello", avatarUrl: nil)
         status = try await onboarding.fetchStatus()
         #expect(status.onboardingStep == .schoolVerify)
 
@@ -565,6 +598,7 @@ struct MockOnboardingServiceTests {
     }
 }
 
+@MainActor
 struct SchoolEmailRulesTests {
     @Test func acceptsEduAddresses() {
         #expect(SchoolEmailRules.isValid("student@example.edu"))
@@ -592,13 +626,13 @@ struct OnboardingStoreTests {
         #expect(!store.needsOnboarding)
     }
 
-    @Test func provisionalCompleteProfileStillNeedsOnboarding() {
+    @Test @MainActor func provisionalCompleteProfileStillNeedsOnboarding() {
         let status = OnboardingStatus(
             id: UUID(),
             handle: "u_abc123def456",
             displayName: "New member",
             bio: nil,
-            avatarEmoji: "🌱",
+            avatarUrl: nil,
             onboardingStep: .complete,
             onboardingCompletedAt: .now,
             waitlistJoinedAt: nil,

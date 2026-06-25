@@ -462,6 +462,7 @@
 				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
+				PRODUCT_MODULE_NAME = On_Board;
 				PRODUCT_NAME = "On Board: The Community Board";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -502,6 +503,7 @@
 				);
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
+				PRODUCT_MODULE_NAME = On_Board;
 				PRODUCT_NAME = "On Board: The Community Board";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

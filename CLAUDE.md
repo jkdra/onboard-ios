@@ -10,13 +10,13 @@ On Board is a campus bulletin board iOS app built with SwiftUI + Supabase. Stude
 
 ```bash
 # Build
-xcodebuild -scheme "On Board" -destination "generic/platform=iOS Simulator,name=iPhone 16"
+xcodebuild -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5"
 
-# Run all tests
-xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16"
+# Run all tests (disable parallel testing to avoid clone crashes)
+xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5" -parallel-testing-enabled NO
 
 # Run a single test (uses Swift Testing, not XCTest)
-xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16" -only-testing "On BoardTests/On_BoardTests/refreshMarksCompleteForSampleAppleUser"
+xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5" -only-testing "On BoardTests/OnboardingStoreTests/refreshMarksCompleteForSampleAppleUser"
 ```
 
 The app targets iOS 18+ as its minimum deployment target. iOS 26 APIs (e.g. `glassEffect`) are used where available via `#available(iOS 26.0, *)` guards with fallbacks for older OS versions.

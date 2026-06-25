@@ -1,83 +1,49 @@
-# On Board (iOS)
+# On Board
 
-A campus bulletin board for weekly posts, reactions, and comments. Built with SwiftUI and Supabase. Students join a weekly board, post anonymously, react, and comment — the board clears every Monday at midnight.
+A campus bulletin board for iOS. Students post  to a shared board that resets every Monday at midnight — one week, one community, then gone.
 
-## Requirements
+## What it does
 
-- Xcode 16+ (iOS 18 minimum deployment target)
-- Optional: [Supabase CLI](https://supabase.com/docs/guides/cli) for database migrations
+Every week, a fresh board opens for a school campus. Anyone who's joined can post a short note, react to others' posts, and leave comments. At midnight on Monday the board clears and a new one begins.
 
-## Getting started
+**Core loop:**
+- Sign in with phone, email, Apple, or Google
+- Complete a one-time onboarding: pick a handle, verify your school email, join the waitlist if your campus isn't live yet
+- Post anonymously to the active board — your handle is visible, but nothing else ties back to you
+- React (like, hug, laugh, or spark) and comment in threaded replies
+- Watch the countdown — when it hits zero, everything resets
 
-1. Clone the repo and open `On Board.xcodeproj` in Xcode.
-2. Select the **On Board** scheme and run on a simulator or device.
+## How it's built
 
-The app runs in **mock mode** without any backend keys: auth, onboarding, and board previews all work offline. A live Supabase backend is required for real posts, comments, and push notifications.
+**SwiftUI + Supabase.** The app targets iOS 18 and uses iOS 26 APIs (liquid glass, etc.) where available with graceful fallbacks.
 
-### Live Supabase backend (maintainers)
+Auth supports phone OTP, email magic link, Sign in with Apple, and Google Sign-In. Multiple providers can be linked to a single account, with guardrails that prevent unlinking your last sign-in method.
 
-1. Copy the secrets template:
+Board data is fetched via Supabase RPC and kept in an in-memory store. Reactions update in real time via a Supabase Realtime subscription. All mutations are applied optimistically and rolled back on error.
 
-   ```bash
-   cp Secrets.xcconfig.example Secrets.xcconfig
-   ```
+Push notifications fire on four schedules: a Monday reset announcement, mid-week re-engagement for users who haven't seen new posts, a Sunday nudge, and a "clearing soon" alert in the final hours before reset.
 
-2. Fill in `Secrets.xcconfig` with your project URL and anon key (never commit this file).
+Onboarding is a linear state machine: handle → profile → school email verification → waitlist (if applicable) → done. Users who signed in with Apple or Google before picking a handle are detected and routed back through the username step automatically.
 
-3. Apply migrations to your Supabase project:
+## Code structure
 
-   ```bash
-   supabase login
-   supabase link --project-ref YOUR_PROJECT_REF
-   supabase db push
-   ```
-
-4. In the Supabase Dashboard, enable **Realtime** for the `reactions` table (Database → Publications → `supabase_realtime`).
-
-5. Configure auth providers in the Supabase Dashboard:
-   - **Phone** (SMS OTP) — primary sign-in method
-   - **Email** (magic link / OTP) — secondary sign-in method
-   - **Apple** — native Sign in with Apple (capability already enabled in `On Board.entitlements`)
-   - **Google** — enable the Google provider; uses Supabase OAuth in a browser sheet
-   - Under **Authentication → URL Configuration**, add redirect URL: `onboard://auth-callback`
-   - Enable **manual linking** to let users attach Apple/Google to an existing phone or email account
-
-6. Configure push notifications:
-   - In **Project Settings → Edge Functions**, add secrets: `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_BUNDLE_ID`, and `CRON_SECRET`
-   - Deploy the Edge Function: `supabase functions deploy send-notifications`
-   - Set up the four `pg_cron` jobs via the SQL Editor (see `CLAUDE.md` for schedules)
-   - For App Store distribution, change `api.sandbox.push.apple.com` → `api.push.apple.com` in the Edge Function
-
-## Project layout
-
-| Path | Purpose |
-|------|---------|
-| `On Board/` | SwiftUI app source |
-| `On Board/Auth/` | Auth state machine, providers, sign-in coordinators |
-| `On Board/Notifications/` | APNs registration, device token upload, last-seen tracking |
-| `On Board/Onboarding/` | Onboarding flow and step views |
-| `On Board/Store/` | BoardStore — posts, reactions, comments |
-| `On Board/Supabase/` | Supabase service implementations and JSON adapters |
-| `On Board/Views/` | All SwiftUI views |
-| `Styling/` | Shared fonts, button styles, navigation chrome |
-| `supabase/migrations/` | Ordered SQL migrations (source of truth for schema) |
-| `Secrets.xcconfig.example` | Template for local API keys |
-
-## Database
-
-Migrations live in `supabase/migrations/` and must be applied in filename order. Use `supabase db push` on a linked project. Never edit migration files after they've been applied to a shared environment — add a new file instead.
-
-## Fonts
-
-The app bundles **Zalando Sans** under `Styling/Font/`. Confirm you have redistribution rights before making the repository public.
-
-## Contributing
-
-- Do not commit `Secrets.xcconfig`, `.env` files, or `supabase/.temp/`.
-- SQL changes belong in new timestamped files under `supabase/migrations/`.
-- Without Supabase keys, contributors can build and test auth/onboarding UI against mocks. Board data and push notifications require live backend keys.
-- Push notification delivery requires a physical device — the Simulator cannot receive APNs.
+```
+On Board/          SwiftUI app
+  Auth/            Sign-in flow, session management, provider linking
+  Store/           BoardStore — posts, reactions, comments, realtime
+  Onboarding/      Onboarding state machine and step views
+  Notifications/   APNs registration and push scheduling
+  Supabase/        Network layer, JSON decoders, RPC calls
+  Views/           All SwiftUI views
+  Models/          Data types
+  Utilities/       Board schedule math, phone normalizer, handle rules
+Styling/           Shared fonts, button styles, nav chrome
+supabase/
+  migrations/      SQL schema (source of truth)
+  functions/       Edge Functions for push notification delivery
+On BoardTests/     Swift Testing unit tests
+```
 
 ## License
 
-Add your license here before making the repository public.
+All rights reserved. This code is public for reference only — not for reuse or redistribution.
