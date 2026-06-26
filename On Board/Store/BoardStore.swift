@@ -13,6 +13,19 @@
 import Foundation
 import Observation
 
+// One instance per post. FeedGridCard observes proxy.post / proxy.reaction directly,
+// so any mutation (reaction tap, realtime count update, tone change) only re-renders
+// that specific card — not the whole feed.
+@Observable
+final class PostStateProxy {
+    var post: Post
+    var reaction: Reaction?
+    init(post: Post, reaction: Reaction? = nil) {
+        self.post = post
+        self.reaction = reaction
+    }
+}
+
 @Observable
 @MainActor
 final class BoardStore {
@@ -44,6 +57,8 @@ final class BoardStore {
     private var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
     private var refreshTask: Task<Void, Never>?
     var reactionRealtimeListener: ReactionRealtimeListener?
+    // Keyed per-post so only the reacted card re-renders, not the whole feed.
+    private(set) var postProxies: [UUID: PostStateProxy] = [:]
 
     // MARK: - Archive LRU
 
@@ -144,6 +159,7 @@ final class BoardStore {
         currentUserID = nil
         userReactions = [:]
         userCommentVotes = [:]
+        postProxies = [:]
         commentsByPostID = [:]
         cachedArchiveWeekIDs = []
         clearFeedItemsCache()
@@ -235,6 +251,7 @@ final class BoardStore {
             commentsByPostID.removeValue(forKey: id)
             userReactions.removeValue(forKey: id)
         }
+        postProxies = postProxies.filter { !evictedIDs.contains($0.key) }
         rebuildCaches()
     }
 
@@ -414,8 +431,16 @@ final class BoardStore {
 
     func mergeWeekPosts(_ loadedPosts: [Post], reactions: [UUID: Reaction]) {
         let existingIDs = Set(posts.map(\.id))
-        posts.append(contentsOf: loadedPosts.filter { !existingIDs.contains($0.id) }.map(stripForFeed))
+        let newPosts = loadedPosts.filter { !existingIDs.contains($0.id) }
+        posts.append(contentsOf: newPosts.map(stripForFeed))
         userReactions.merge(reactions) { _, new in new }
+        // Add proxies for newly merged posts in one dict assignment
+        var updated = postProxies
+        for post in newPosts where updated[post.id] == nil {
+            let feedPost = stripForFeed(post)
+            updated[feedPost.id] = PostStateProxy(post: feedPost, reaction: reactions[feedPost.id])
+        }
+        postProxies = updated
         rebuildCaches()
     }
 
@@ -434,6 +459,7 @@ final class BoardStore {
         rebuildProfileIndex()
         rebuildPostsIndex()
         rebuildBoardWeeksIndex()
+        rebuildPostProxies()
     }
 
     func isOwned(by authorId: UUID?, authorHandle: String) -> Bool {
@@ -472,6 +498,7 @@ final class BoardStore {
     func patchPostInWeekCache(_ post: Post) {
         let feedPost = stripForFeed(post)
         postsByID[feedPost.id] = feedPost
+        postProxies[feedPost.id]?.post = feedPost
         guard let weekID = feedPost.boardWeekId,
               var weekPosts = postsByWeek[weekID],
               let index = weekPosts.firstIndex(where: { $0.id == feedPost.id }) else {
@@ -512,6 +539,21 @@ final class BoardStore {
             return AuthError.sessionExpired.localizedDescription
         }
         return error.localizedDescription
+    }
+
+    private func rebuildPostProxies() {
+        var updated: [UUID: PostStateProxy] = [:]
+        for post in posts {
+            let feedPost = stripForFeed(post)
+            if let existing = postProxies[feedPost.id] {
+                existing.post = feedPost
+                existing.reaction = userReactions[feedPost.id]
+                updated[feedPost.id] = existing
+            } else {
+                updated[feedPost.id] = PostStateProxy(post: feedPost, reaction: userReactions[feedPost.id])
+            }
+        }
+        postProxies = updated
     }
 
     @discardableResult

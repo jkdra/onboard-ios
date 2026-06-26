@@ -10,6 +10,8 @@ struct GridCard: View {
     var userReaction: Reaction?
     var cardNamespace: Namespace.ID? = nil
     var cardRotation: Double = 0
+    var isLeadingColumn: Bool = false
+    var columnWidth: CGFloat = 0
 
     @Environment(BoardStore.self) private var store
     @Environment(\.colorScheme) private var scheme
@@ -22,7 +24,22 @@ struct GridCard: View {
     private var tone: PostTone { post.tone }
     private var cardHeight: CGFloat { typeSize.isAccessibilitySize ? 300 : 200 }
 
+    // MARK: - Body
+
     var body: some View {
+        cardView
+            .overlay(alignment: stickerCorner.alignment) {
+                if let reaction = userReaction, let user = store.currentUser {
+                    ReactionStickerPill(reaction: reaction, profile: user, tone: tone)
+                        .offset(x: stickerCorner.overhangX, y: stickerCorner.overhangY)
+                        .rotationEffect(.degrees(pillRotation))
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var cardView: some View {
         if post.hasImage {
             imageBundle
         } else {
@@ -34,13 +51,52 @@ struct GridCard: View {
         }
     }
 
+    // MARK: - Sticker pill placement
+
+    private enum Corner {
+        case topLeading, topTrailing
+
+        var alignment: Alignment {
+            switch self {
+            case .topLeading: .topLeading
+            case .topTrailing: .topTrailing
+            }
+        }
+
+        var overhangX: CGFloat {
+            switch self {
+            case .topLeading: -13
+            case .topTrailing: 13
+            }
+        }
+
+        var overhangY: CGFloat { -13 }
+
+        // Tilt as if anchored at the bottom — top leans outward away from card center
+        var pillRotationAngle: Double {
+            switch self {
+            case .topLeading: -6
+            case .topTrailing: 6
+            }
+        }
+    }
+
+    private var stickerCorner: Corner {
+        guard !typeSize.isAccessibilitySize else { return .topTrailing }
+        return isLeadingColumn ? .topTrailing : .topLeading
+    }
+
+    private var pillRotation: Double {
+        guard rotationEnabled && !typeSize.isAccessibilitySize && !reduceMotion else { return 0 }
+        return stickerCorner.pillRotationAngle
+    }
+
     // MARK: - Stacked bundle (image on top, post card peeking below)
 
     private var imageBundle: some View {
         VStack(spacing: -peekAmount) {
             imageCard
                 .rotationEffect(.degrees(imageCounterRotation))
-                .matchedTransitionSource(id: post.id, in: cardNamespace)
 
             postCardContent
                 .frame(height: cardHeight)
@@ -48,6 +104,7 @@ struct GridCard: View {
                 .zIndex(1)
                 .animation(.smooth(duration: 0.35), value: post.tone)
         }
+        .matchedTransitionSource(id: post.id, in: cardNamespace)
     }
 
     private var imageCounterRotation: Double {
@@ -58,7 +115,7 @@ struct GridCard: View {
     @ViewBuilder
     private var imageCard: some View {
         if let urlString = post.imageUrl, let url = URL(string: urlString) {
-            BoardAsyncImage(url: url, tone: tone, contentMode: .fill)
+            BoardAsyncImage(url: url, tone: tone, contentMode: .fill, targetWidth: columnWidth > 0 ? columnWidth : nil)
                 .frame(maxWidth: .infinity)
                 .frame(height: imageCardHeight)
                 .clipped()
@@ -76,12 +133,11 @@ struct GridCard: View {
     }
 
     private var imageCardHeight: CGFloat {
-        guard let ratio = post.imageAspectRatio, ratio > 0 else { return 200 }
-        let colWidth = (UIScreen.main.bounds.width - 44) / 2
-        return min(colWidth / CGFloat(ratio), 300)
+        guard let ratio = post.imageAspectRatio, ratio > 0, columnWidth > 0 else { return 200 }
+        return min(columnWidth / CGFloat(ratio), 300)
     }
 
-    // MARK: - Post card content (shared between plain and bundle variants)
+    // MARK: - Post card content
 
     private var postCardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -113,15 +169,15 @@ struct GridCard: View {
         }
     }
 
-    // MARK: - Reactions
+    // MARK: - Reactions row (always top 3 by count; user's reaction shown via sticker pill only)
 
     private var topReactionsRow: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             ForEach(Array(displayedReactions.enumerated()), id: \.element.reaction) { idx, entry in
                 if idx > 0 {
-                    Rectangle()
+                    Circle()
                         .fill(.secondary.opacity(0.35))
-                        .frame(width: 1, height: 10)
+                        .frame(width: 4, height: 4)
                 }
                 reactionChip(entry)
             }
@@ -130,9 +186,8 @@ struct GridCard: View {
         .animation(.snappy(duration: 0.35), value: displayedReactions.map(\.reaction))
     }
 
-    @ViewBuilder
     private func reactionChip(_ entry: ReactionDisplayEntry) -> some View {
-        let label = HStack(spacing: 4) {
+        HStack(spacing: 4) {
             Text(entry.reaction.emoji)
                 .fontStyle(.caption2)
             Text(entry.count.abbreviated)
@@ -143,61 +198,19 @@ struct GridCard: View {
                 .animation(.snappy(duration: 0.35), value: entry.count)
         }
         .foregroundStyle(.secondary)
-
-        if entry.isUserSelection {
-            label
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(tone.color.opacity(scheme == .dark ? 0.28 : 0.16))
-                )
-                .overlay(
-                    Capsule(style: .continuous)
-                        .stroke(tone.color.opacity(0.45), lineWidth: 0.9)
-                )
-        } else {
-            label
-                .frame(maxWidth: .infinity)
-        }
+        .frame(maxWidth: .infinity)
     }
 
     private var displayedReactions: [ReactionDisplayEntry] {
-        let ranked = Reaction.defaultOrder.enumerated().map { offset, reaction in
-            (offset: offset, reaction: reaction, count: post.reactionCounts[reaction] ?? 0)
-        }
-        .sorted { lhs, rhs in
-            if lhs.count != rhs.count { return lhs.count > rhs.count }
-            return lhs.offset < rhs.offset
-        }
-
-        var entries: [ReactionDisplayEntry] = []
-
-        if let userReaction {
-            entries.append(
-                ReactionDisplayEntry(
-                    reaction: userReaction,
-                    count: post.reactionCounts[userReaction] ?? 0,
-                    isUserSelection: true
-                )
-            )
-        }
-
-        for item in ranked where entries.count < 3 {
-            if item.reaction == userReaction { continue }
-            entries.append(
-                ReactionDisplayEntry(
-                    reaction: item.reaction,
-                    count: item.count,
-                    isUserSelection: false
-                )
-            )
-        }
-
-        return entries
+        Array(
+            Reaction.defaultOrder
+                .map { ReactionDisplayEntry(reaction: $0, count: post.reactionCounts[$0] ?? 0) }
+                .sorted { $0.count > $1.count }
+                .prefix(3)
+        )
     }
 
-    // MARK: - Background
+    // MARK: - Card background
 
     @ViewBuilder
     private var cardBackground: some View {
@@ -219,10 +232,31 @@ struct GridCard: View {
     }
 }
 
+// MARK: - Reaction sticker pill
+
+private struct ReactionStickerPill: View {
+    let reaction: Reaction
+    let profile: Profile
+    let tone: PostTone
+
+    var body: some View {
+        HStack(spacing: 3) {
+            AvatarView(profile: profile, size: .xsmall)
+            Text(reaction.emoji)
+                .font(.system(size: 11))
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Capsule(style: .continuous).fill(tone.color))
+        .allowsHitTesting(false)
+    }
+}
+
+// MARK: - Supporting types
+
 private struct ReactionDisplayEntry: Equatable {
     let reaction: Reaction
     let count: Int
-    let isUserSelection: Bool
 }
 
 /// Resolves a feed card from the store by ID so reaction and tone updates re-render only this cell.
@@ -230,17 +264,21 @@ struct FeedGridCard: View {
     let postID: UUID
     var cardNamespace: Namespace.ID? = nil
     var cardRotation: Double = 0
+    var isLeadingColumn: Bool = false
+    var columnWidth: CGFloat = 0
     @Environment(BoardStore.self) private var store
 
     var body: some View {
-        if let post = store.feedPost(id: postID) {
+        if let proxy = store.postProxies[postID] {
             GridCard(
-                post: post,
-                userReaction: store.userReaction(for: postID),
+                post: proxy.post,
+                userReaction: proxy.reaction,
                 cardNamespace: cardNamespace,
-                cardRotation: cardRotation
+                cardRotation: cardRotation,
+                isLeadingColumn: isLeadingColumn,
+                columnWidth: columnWidth
             )
-            .id("\(postID.uuidString)-\(post.tone.rawValue)")
+            .id("\(postID.uuidString)-\(proxy.post.tone.rawValue)")
         }
     }
 }

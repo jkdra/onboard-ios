@@ -14,6 +14,7 @@ struct BoardFeedView: View {
     let items: [FeedItem]
     var cardNamespace: Namespace.ID
     var onNewPost: (() -> Void)?
+    var isResetting: Bool = false
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -22,8 +23,14 @@ struct BoardFeedView: View {
 
     @State private var appeared = false
     @State private var rotations: [String: Double] = [:]
+    @State private var leftColumn: [FeedItem] = []
+    @State private var rightColumn: [FeedItem] = []
+    @State private var containerWidth: CGFloat = 0
 
     private let rowSpacing: CGFloat = 16
+
+    // Outer 16pt padding ×2 + 12pt inter-column gap = 44pt of non-content width.
+    private var columnWidth: CGFloat { max(0, (containerWidth - 44) / 2) }
 
     // MARK: - Body
 
@@ -36,12 +43,19 @@ struct BoardFeedView: View {
             }
         }
         .safeAreaPadding(.bottom, 64)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+            guard newWidth != containerWidth else { return }
+            containerWidth = newWidth
+            recomputeColumns()
+        }
         .onAppear {
             seedRotationsIfNeeded()
+            recomputeColumnsIfNeeded()
             appeared = true
         }
         .onChange(of: items.count) { _, _ in
             seedRotationsForNewItems()
+            recomputeColumns()
         }
     }
 
@@ -50,16 +64,18 @@ struct BoardFeedView: View {
     private let rightColumnOffset: CGFloat = 64
 
     private var masonryGrid: some View {
-        let (left, right) = distributeToColumns(masonryItems)
+        // Use cached columns; compute once on first render before onAppear fires.
+        var left = leftColumn, right = rightColumn
+        if left.isEmpty { (left, right) = distributeToColumns(masonryItems) }
         return HStack(alignment: .top, spacing: 12) {
             LazyVStack(spacing: rowSpacing) {
                 ForEach(Array(left.enumerated()), id: \.element.id) { idx, item in
-                    masonryCell(item: item, animationIndex: idx * 2)
+                    masonryCell(item: item, animationIndex: idx * 2, isLeadingColumn: true)
                 }
             }
             LazyVStack(spacing: rowSpacing) {
                 ForEach(Array(right.enumerated()), id: \.element.id) { idx, item in
-                    masonryCell(item: item, animationIndex: idx * 2 + 1)
+                    masonryCell(item: item, animationIndex: idx * 2 + 1, isLeadingColumn: false)
                 }
             }
             .padding(.top, rightColumnOffset)
@@ -70,22 +86,37 @@ struct BoardFeedView: View {
     private var accessibleStack: some View {
         LazyVStack(spacing: rowSpacing) {
             ForEach(Array(masonryItems.enumerated()), id: \.element.id) { idx, item in
-                masonryCell(item: item, animationIndex: idx)
+                masonryCell(item: item, animationIndex: idx, isLeadingColumn: false)
             }
         }
         .padding(.horizontal, 16)
     }
 
     @ViewBuilder
-    private func masonryCell(item: FeedItem, animationIndex: Int) -> some View {
+    private func masonryCell(item: FeedItem, animationIndex: Int, isLeadingColumn: Bool) -> some View {
         let rot = useRotation ? rotation(for: item) : 0
-        feedItemView(for: item, cardRotation: rot)
+        let flyX: CGFloat = isLeadingColumn ? -320 : 320
+        feedItemView(for: item, cardRotation: rot, isLeadingColumn: isLeadingColumn)
             .rotationEffect(.degrees(rot))
+            // Entrance animation
             .opacity(appeared ? 1 : 0)
             .scaleEffect(appeared ? 1 : 0.94)
             .animation(
                 reduceMotion ? .none : .smooth(duration: 0.4).delay(Double(animationIndex) * 0.025),
                 value: appeared
+            )
+            // Reset fly-off — stacks multiplicatively with entrance opacity
+            .offset(x: isResetting ? flyX : 0, y: isResetting ? -700 : 0)
+            .rotationEffect(
+                .degrees(isResetting ? (isLeadingColumn ? -28 : 28) : 0),
+                anchor: .bottom
+            )
+            .opacity(isResetting ? 0 : 1)
+            .animation(
+                reduceMotion ? .none :
+                    .spring(duration: 0.5, bounce: 0.1)
+                    .delay(Double(animationIndex) * 0.07),
+                value: isResetting
             )
     }
 
@@ -111,22 +142,22 @@ struct BoardFeedView: View {
 
     private func estimatedHeight(for item: FeedItem) -> CGFloat {
         let base: CGFloat = 200
-        guard case .post(let postID, _) = item,
+        guard columnWidth > 0,
+              case .post(let postID, _) = item,
               let post = store.feedPost(id: postID),
               let ratio = post.imageAspectRatio, ratio > 0 else { return base }
-        let colWidth = (UIScreen.main.bounds.width - 44) / 2
-        let imageHeight = min(colWidth / CGFloat(ratio), 300)
+        let imageHeight = min(columnWidth / CGFloat(ratio), 300)
         return base + imageHeight - 16 // 16 = peekAmount
     }
 
     // MARK: - Item rendering
 
     @ViewBuilder
-    private func feedItemView(for item: FeedItem, cardRotation: Double = 0) -> some View {
+    private func feedItemView(for item: FeedItem, cardRotation: Double = 0, isLeadingColumn: Bool = false) -> some View {
         switch item {
         case .post(let postID, _):
             NavigationLink(value: BoardRoute.post(postID)) {
-                FeedGridCard(postID: postID, cardNamespace: cardNamespace, cardRotation: cardRotation)
+                FeedGridCard(postID: postID, cardNamespace: cardNamespace, cardRotation: cardRotation, isLeadingColumn: isLeadingColumn, columnWidth: columnWidth)
             }
             .buttonStyle(.plain)
         case .countdown(let week, let isArchived):
@@ -148,6 +179,15 @@ struct BoardFeedView: View {
 
     private func rotation(for item: FeedItem) -> Double {
         rotations[item.id, default: 0]
+    }
+
+    private func recomputeColumns() {
+        (leftColumn, rightColumn) = distributeToColumns(masonryItems)
+    }
+
+    private func recomputeColumnsIfNeeded() {
+        guard leftColumn.isEmpty else { return }
+        recomputeColumns()
     }
 
     private func seedRotationsIfNeeded() {

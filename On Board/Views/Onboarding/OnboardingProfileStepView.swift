@@ -49,6 +49,10 @@ struct OnboardingProfileStepView: View {
                         .foregroundStyle(.secondary)
 
                     HStack(spacing: 14) {
+                        // Capture @MainActor state before the @Sendable PhotosPicker label closure.
+                        // SwiftUI re-evaluates body on every state change, so captures stay fresh.
+                        let photoData = selectedPhotoData
+                        let uploading = isUploadingPhoto
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             ZStack {
                                 Circle()
@@ -56,18 +60,18 @@ struct OnboardingProfileStepView: View {
                                     .frame(width: 64, height: 64)
                                     .overlay(
                                         Circle().stroke(
-                                            selectedPhotoData != nil ? Color.accentColor : Color.secondary.opacity(0.25),
-                                            lineWidth: selectedPhotoData != nil ? 2 : 1
+                                            photoData != nil ? Color.accentColor : Color.secondary.opacity(0.25),
+                                            lineWidth: photoData != nil ? 2 : 1
                                         )
                                     )
 
-                                if let data = selectedPhotoData, let uiImage = UIImage(data: data) {
+                                if let data = photoData, let uiImage = UIImage(data: data) {
                                     Image(uiImage: uiImage)
                                         .resizable()
                                         .scaledToFill()
                                         .frame(width: 64, height: 64)
                                         .clipShape(Circle())
-                                } else if isUploadingPhoto {
+                                } else if uploading {
                                     ProgressView()
                                 } else {
                                     Image(systemName: "person.circle.fill")

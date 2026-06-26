@@ -74,6 +74,39 @@ enum BoardSchedule {
         return nextMonday.timeIntervalSince(now)
     }
 
+    /// True during the final hour before the weekly board reset.
+    static func isWithinFinalHour(
+        weekEnd: Date? = nil,
+        from now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let remaining: TimeInterval?
+        if let weekEnd {
+            remaining = secondsUntilWeekEnd(weekEnd, from: now)
+        } else {
+            remaining = secondsUntilNextMonday(from: now, calendar: calendar)
+        }
+        guard let remaining else { return false }
+        return remaining > 0 && remaining < 3_600
+    }
+
+    /// Banner text shown in the final hour. Returns nil when more than an hour remains.
+    static func finalHourBannerText(
+        weekEnd: Date? = nil,
+        from now: Date = .now,
+        calendar: Calendar = .current
+    ) -> String? {
+        guard isWithinFinalHour(weekEnd: weekEnd, from: now, calendar: calendar) else { return nil }
+        let t = timeRemaining(weekEnd: weekEnd, from: now, calendar: calendar)
+        if t.hours > 0 {
+            return "Board clears in \(t.hours)h \(t.minutes)m"
+        } else if t.minutes > 1 {
+            return "Board clears in \(t.minutes) minutes"
+        } else {
+            return "Board clears very soon"
+        }
+    }
+
     /// True during the final 12 hours before the weekly board reset.
     static func isClearingSoon(
         weekEnd: Date? = nil,

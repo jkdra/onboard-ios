@@ -40,12 +40,13 @@ struct On_BoardApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var store = AppLaunchContext.boardStore
-    @State private var network = NetworkMonitor()
-    @State private var auth = AppLaunchContext.makeAuthStore()
+    @State private var network: NetworkMonitor
+    @State private var auth: AuthStore
     @State private var onboarding: OnboardingStore
 
     init() {
         NavigationBarAppearance.configureIfNeeded()
+        OnBoardImagePipeline.configure()
         let authStore = AppLaunchContext.makeAuthStore()
         let networkMonitor = NetworkMonitor()
         _auth = State(wrappedValue: authStore)
@@ -66,9 +67,7 @@ struct On_BoardApp: App {
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }
-                    // Supabase OAuth deep-link callback.
-                    guard url.scheme == AppConfiguration.authRedirectURL.scheme else { return }
-                    _ = url
+                    // Supabase OAuth deep-link callback — SDK handles it internally.
                 }
                 .onChange(of: auth.session) { _, session in
                     if let userID = session?.userId {
@@ -78,7 +77,9 @@ struct On_BoardApp: App {
                     }
                 }
                 .onChange(of: scenePhase) { _, phase in
-                    guard phase == .active, let userID = auth.session?.userId else { return }
+                    guard phase == .active else { return }
+                    NotificationService.shared.clearBadge()
+                    guard let userID = auth.session?.userId else { return }
                     Task { await NotificationService.shared.updateLastSeen(userID: userID) }
                 }
         }

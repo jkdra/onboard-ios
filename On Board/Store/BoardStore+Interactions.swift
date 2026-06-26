@@ -340,6 +340,9 @@ extension BoardStore {
 
         posts[postIndex].reactionCounts = counts
         patchPostInWeekCache(posts[postIndex])
+        // Mirror to proxy — mutates proxy.reaction only, not the proxies dict,
+        // so only the affected FeedGridCard re-renders.
+        postProxies[postId]?.reaction = reaction
     }
 
     private func applyCommentVoteChange(

@@ -8,14 +8,14 @@
 import Foundation
 
 enum BoardJSON {
-    nonisolated(unsafe) static let decoder: JSONDecoder = {
+    nonisolated static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         decoder.dateDecodingStrategy = .custom(parseDate)
         return decoder
     }()
 
-    nonisolated(unsafe) static let encoder: JSONEncoder = {
+    nonisolated static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.keyEncodingStrategy = .convertToSnakeCase
         encoder.dateEncodingStrategy = .iso8601

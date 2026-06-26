@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import Combine
 
 struct ContentView: View {
 
@@ -19,6 +18,8 @@ struct ContentView: View {
     @Binding var navigationPath: NavigationPath
     @State private var showNewPost = false
     @State private var clearingSoon = false
+    @State private var isWithinFinalHour = false
+    @State private var boardIsResetting = false
 
     init(navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
         self._navigationPath = navigationPath
@@ -46,20 +47,16 @@ struct ContentView: View {
             .presentableErrorAlert(error: $alertError)
     }
 
-    private var feedHasPosts: Bool {
-        store.feedItems.contains { item in
-            if case .post = item { return true }
-            return false
-        }
-    }
-
     private var thisWeekFeed: some View {
-        ZStack {
+        let feedItems = store.feedItems
+        let feedHasPosts = feedItems.contains { if case .post = $0 { return true }; return false }
+        return ZStack {
             ScrollView {
                 BoardFeedView(
-                    items: store.feedItems,
+                    items: feedItems,
                     cardNamespace: cardNamespace,
-                    onNewPost: { showNewPost = true }
+                    onNewPost: { showNewPost = true },
+                    isResetting: boardIsResetting
                 )
 
                 if store.isLive, !store.isLoading, !feedHasPosts {
@@ -112,8 +109,17 @@ struct ContentView: View {
         .onChange(of: store.activeBoardWeek?.endsAt) { _, _ in
             updateClearingSoon()
         }
-        .onReceive(Timer.publish(every: 60, on: .main, in: .common).autoconnect()) { _ in
-            updateClearingSoon()
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                updateClearingSoon()
+            }
+        }
+        .task(id: store.activeBoardWeek?.endsAt) {
+            guard let endsAt = store.activeBoardWeek?.endsAt, endsAt > .now else { return }
+            try? await Task.sleep(for: .seconds(endsAt.timeIntervalSinceNow))
+            guard !Task.isCancelled else { return }
+            await triggerBoardReset()
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -145,7 +151,21 @@ struct ContentView: View {
     }
 
     private func updateClearingSoon() {
-        clearingSoon = BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt)
+        let weekEnd = store.activeBoardWeek?.endsAt
+        clearingSoon = BoardSchedule.isClearingSoon(weekEnd: weekEnd)
+        isWithinFinalHour = BoardSchedule.isWithinFinalHour(weekEnd: weekEnd)
+    }
+
+    private func triggerBoardReset() async {
+        showNewPost = false
+        if !navigationPath.isEmpty { navigationPath.removeLast(navigationPath.count) }
+        try? await Task.sleep(for: .milliseconds(400))
+        boardIsResetting = true
+        let postCount = store.feedItems.filter { if case .post = $0 { return true }; return false }.count
+        let animDuration = Double(max(postCount, 1)) * 0.07 + 0.7
+        try? await Task.sleep(for: .seconds(animDuration))
+        await store.refresh(for: store.currentUserID)
+        boardIsResetting = false
     }
 
     private var emptyFeedState: some View {

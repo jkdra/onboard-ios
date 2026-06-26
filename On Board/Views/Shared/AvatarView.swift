@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Nuke
 import NukeUI
 
 enum AvatarSize {
@@ -37,15 +38,17 @@ struct AvatarView: View {
 
     var body: some View {
         ZStack {
+            // Flat fill rather than .thinMaterial — a blurred UIVisualEffectView
+            // per avatar is wasted GPU at these sizes (up to ~30 on a feed screen).
             Circle()
-                .fill(.thinMaterial)
+                .fill(Color(.secondarySystemFill))
                 .frame(width: size.diameter, height: size.diameter)
                 .overlay(
                     Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1)
                 )
 
             if let urlString = profile.avatarUrl, let url = URL(string: urlString) {
-                LazyImage(url: url) { state in
+                LazyImage(request: OnBoardImagePipeline.request(url: url, width: size.diameter)) { state in
                     if let image = state.image {
                         image
                             .resizable()

@@ -39,10 +39,14 @@ final class NotificationService {
         Task { await upload(tokenData: captured, userID: userID) }
     }
 
+    func clearBadge() {
+        Task { try? await UNUserNotificationCenter.current().setBadgeCount(0) }
+    }
+
     // Call on every app foreground to keep last_seen_at fresh.
     func updateLastSeen(userID: UUID) async {
         guard let client = SupabaseClientFactory.client(for: .current) else { return }
-        try? await client
+        _ = try? await client
             .from("profiles")
             .update(LastSeenPayload(lastSeenAt: .now))
             .eq("id", value: userID.uuidString)
@@ -61,7 +65,7 @@ final class NotificationService {
     private func upload(tokenData: Data, userID: UUID) async {
         let hex = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
         guard let client = SupabaseClientFactory.client(for: .current) else { return }
-        try? await client
+        _ = try? await client
             .rpc("register_device_token", params: ["p_token": hex])
             .execute()
     }

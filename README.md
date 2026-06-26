@@ -1,6 +1,11 @@
 # On Board
 
-A campus bulletin board for iOS. Students post  to a shared board that resets every Monday at midnight — one week, one community, then gone.
+![Platform](https://img.shields.io/badge/platform-iOS%2018%2B-black?logo=apple&logoColor=white)
+![Swift](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)
+![Supabase](https://img.shields.io/badge/Supabase-2.46-3ECF8E?logo=supabase&logoColor=white)
+![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)
+
+A campus bulletin board for iOS. Students post to a shared board that resets every Monday at midnight — one week, one community, then gone.
 
 ## What it does
 

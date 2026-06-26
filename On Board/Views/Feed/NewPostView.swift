@@ -15,12 +15,16 @@ struct NewPostView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var title = ""
     @State private var content = ""
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
+    @State private var isWithinFinalHour = false
+    @State private var finalHourBannerText: String?
+    @State private var pulseLowOpacity = false
 
     // Image attachment
     @State private var selectedPhotoItem: PhotosPickerItem?
@@ -42,6 +46,21 @@ struct NewPostView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    if let bannerText = finalHourBannerText {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock.badge.exclamationmark.fill")
+                                .foregroundStyle(.red)
+                            Text(bannerText + " — your post may not get reactions")
+                                .fontStyle(.footnote)
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.red.opacity(0.10), in: RoundedRectangle(cornerRadius: 12))
+                        .overlay(RoundedRectangle(cornerRadius: 12).stroke(.red.opacity(0.25), lineWidth: 0.8))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
                     TextField("Title", text: $title, axis: .vertical)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...3)
@@ -78,8 +97,22 @@ struct NewPostView: View {
                     AnimatedStripesView(
                         color: previewTone?.color ?? .primary,
                         opacity: previewTone == nil ? 0.05 : 0.10,
-                        isActive: true
+                        isActive: focus != nil
                     )
+                    if isWithinFinalHour {
+                        LinearGradient(
+                            colors: [Color.red.opacity(pulseLowOpacity ? 0.08 : 0.22), Color.clear],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .onAppear {
+                            guard !reduceMotion else { return }
+                            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
+                                pulseLowOpacity = true
+                            }
+                        }
+                    }
                 }
                 .animation(.smooth(duration: 0.3), value: previewTone)
             }
@@ -95,7 +128,17 @@ struct NewPostView: View {
                 }
                 ToolbarItem(placement: .bottomBar) { Spacer() }
             }
-            .onAppear { focus = .title }
+            .onAppear {
+                focus = .title
+                updateClearingState()
+            }
+            .task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(60))
+                    updateClearingState()
+                }
+            }
+            .animation(.smooth(duration: 0.3), value: isWithinFinalHour)
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
             .onChange(of: selectedPhotoItem) { _, item in
@@ -109,9 +152,10 @@ struct NewPostView: View {
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
+                let hasImage = selectedPhotoData != nil
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                     Label(
-                        selectedPhotoData == nil ? "Add Image" : "Change Image",
+                        hasImage ? "Change Image" : "Add Image",
                         systemImage: "photo.badge.plus"
                     )
                 }
@@ -198,6 +242,14 @@ struct NewPostView: View {
         selectedPhotoData = nil
         uploadedImageUrl = nil
         uploadedAspectRatio = nil
+    }
+
+    // MARK: - Clearing state
+
+    private func updateClearingState() {
+        let weekEnd = store.activeBoardWeek?.endsAt
+        isWithinFinalHour = BoardSchedule.isWithinFinalHour(weekEnd: weekEnd)
+        finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd)
     }
 
     // MARK: - Submit

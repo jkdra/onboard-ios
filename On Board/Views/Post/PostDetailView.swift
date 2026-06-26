@@ -39,6 +39,7 @@ struct PostDetailView: View {
     // UI
     @State var showDeleteConfirmation = false
     @State var alertError: PresentableAlertError?
+    @State private var clearingBannerText: String?
     @State var showImageViewer = false
     @State var showHeartBurst = false
     @State var heartTapLocation: CGPoint = CGPoint(x: 100, y: 50)
@@ -75,6 +76,10 @@ struct PostDetailView: View {
 
     var authorProfile: Profile {
         store.profile(forAuthor: livePost.author)
+    }
+
+    private func updateClearingBanner() {
+        clearingBannerText = BoardSchedule.finalHourBannerText(weekEnd: store.activeBoardWeek?.endsAt)
     }
 
     var selectedReaction: Binding<Reaction?> {
@@ -142,6 +147,31 @@ struct PostDetailView: View {
                     isInteractive: !isReadOnly && !isCommentEditing && !editMode,
                     isRecord: isReadOnly
                 )
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let text = clearingBannerText {
+                HStack(spacing: 8) {
+                    Image(systemName: "clock.badge.exclamationmark.fill")
+                        .foregroundStyle(.red)
+                    Text(text)
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial)
+                .overlay(Rectangle().frame(height: 0.5).foregroundStyle(.red.opacity(0.4)), alignment: .bottom)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: clearingBannerText != nil)
+        .onAppear { updateClearingBanner() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                updateClearingBanner()
             }
         }
         .boardErrorHandling(alertError: $alertError)
