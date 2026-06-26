@@ -1,23 +1,88 @@
 {
-  "features" : [
-    "refractivity"
-  ],
-  "fill" : {
-    "solid" : "display-p3:0.98926,0.93896,0.86914,1.00000"
-  },
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : "automatic",
   "groups" : [
     {
-      "blur-material" : 0.2,
+      "hidden" : true,
+      "layers" : [
+        {
+          "image-name" : "Artboard2@3x.png",
+          "name" : "Artboard2@3x",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : 0.1,
+      "hidden" : false,
       "layers" : [
         {
           "fill-specializations" : [
             {
               "appearance" : "dark",
               "value" : {
-                "linear-gradient" : [
-                  "extended-gray:1.00000,1.00000",
-                  "display-p3:0.98926,0.93896,0.86914,1.00000"
-                ]
+                "solid" : "display-p3:0.43604,0.60596,0.72461,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "display-p3:0.47442,0.47730,0.50062,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "BlueRect 2.svg",
+          "name" : "BlueRect 2",
+          "position" : {
+            "scale" : 0.52,
+            "translation-in-points" : [
+              -113.99909068336365,
+              -73.710341549605
+            ]
+          }
+        }
+      ],
+      "position" : {
+        "scale" : 1,
+        "translation-in-points" : [
+          0,
+          0
+        ]
+      },
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.52
+      }
+    },
+    {
+      "blur-material" : 0,
+      "hidden" : false,
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "display-p3:0.98926,0.93896,0.86914,1.00000"
               }
             },
             {
@@ -38,14 +103,9 @@
           }
         }
       ],
-      "refractivity" : {
-        "depth" : 0.01171875,
-        "enabled" : true,
-        "strength" : 0.1103515625
-      },
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.6
+        "opacity" : 0.5
       },
       "translucency" : {
         "enabled" : true,
@@ -53,50 +113,11 @@
       }
     },
     {
-      "blur-material" : 0.1,
+      "blur-material" : 0.15,
+      "hidden" : false,
       "layers" : [
         {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "linear-gradient" : [
-                  "display-p3:0.43604,0.60596,0.72461,1.00000",
-                  "display-p3:0.43604,0.60596,0.72461,1.00000"
-                ]
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "display-p3:0.47442,0.47730,0.50062,1.00000"
-              }
-            }
-          ],
-          "image-name" : "BlueRect 2.svg",
-          "name" : "BlueRect 2",
-          "position" : {
-            "scale" : 0.52,
-            "translation-in-points" : [
-              -113.99909068336365,
-              -73.710341549605
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.6
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.52
-      }
-    },
-    {
-      "layers" : [
-        {
-          "glass" : false,
+          "hidden" : false,
           "image-name" : "notepad lines.svg",
           "name" : "notepad lines",
           "opacity-specializations" : [
@@ -118,43 +139,13 @@
           }
         }
       ],
-      "opacity-specializations" : [
-        {
-          "appearance" : "dark",
-          "value" : 0.25
-        }
-      ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.6
-      },
-      "translucency" : {
-        "enabled" : false,
-        "value" : 0.2
-      }
-    },
-    {
-      "layers" : [
-        {
-          "hidden" : true,
-          "image-name" : "Artboard2@3x.png",
-          "name" : "Artboard2@3x",
-          "position" : {
-            "scale" : 0.17,
-            "translation-in-points" : [
-              0,
-              0
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.6
+        "opacity" : 0.5
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.2
+        "value" : 0.5
       }
     }
   ],
