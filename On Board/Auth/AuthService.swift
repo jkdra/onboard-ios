@@ -13,8 +13,6 @@ protocol AuthService: Sendable {
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession
     func sendEmailOTP(email: String) async throws
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession
-    func sendSchoolEmailVerification(to email: String) async throws
-    func verifySchoolEmailOTP(email: String, token: String) async throws
     func linkApple(idToken: String, nonce: String?) async throws -> AuthSession
     func linkGoogle() async throws -> AuthSession
     func sendLinkPhoneOTP(phone: String) async throws

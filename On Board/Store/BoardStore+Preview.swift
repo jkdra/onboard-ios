@@ -23,7 +23,7 @@ extension BoardStore {
         let now = Date()
         let mainBoard = Board(
             id: SampleBoardID.main,
-            name: "On Board",
+            name: "Preview Campus",
             createdAt: now.addingTimeInterval(-86_400 * 38)
         )
 

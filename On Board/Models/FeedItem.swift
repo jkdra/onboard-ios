@@ -11,7 +11,7 @@ import Foundation
 /// posts so they share the same staggered, rotated, lazy-grid layout.
 /// `id` returns stable string keys for non-post cases so `ForEach`
 /// keeps view identity across rebuilds.
-enum FeedItem: Identifiable {
+enum FeedItem: Identifiable, Equatable {
     case post(id: Post.ID, tone: PostTone)
     case countdown(week: BoardWeek?, isArchived: Bool)
     case newPost

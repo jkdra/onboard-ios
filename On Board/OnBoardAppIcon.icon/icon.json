@@ -1,6 +1,11 @@
 {
   "color-space-for-untagged-svg-colors" : "display-p3",
-  "fill" : "automatic",
+  "fill" : {
+    "linear-gradient" : [
+      "display-p3:0.98783,0.94095,0.86922,1.00000",
+      "display-p3:0.95783,0.92960,0.80889,1.00000"
+    ]
+  },
   "groups" : [
     {
       "hidden" : true,
@@ -113,17 +118,18 @@
       }
     },
     {
-      "blur-material" : 0.15,
+      "blur-material" : null,
       "hidden" : false,
       "layers" : [
         {
+          "glass" : false,
           "hidden" : false,
           "image-name" : "notepad lines.svg",
           "name" : "notepad lines",
           "opacity-specializations" : [
             {
               "appearance" : "dark",
-              "value" : 0.93
+              "value" : 0.15
             },
             {
               "appearance" : "tinted",
@@ -144,7 +150,7 @@
         "opacity" : 0.5
       },
       "translucency" : {
-        "enabled" : true,
+        "enabled" : false,
         "value" : 0.5
       }
     }

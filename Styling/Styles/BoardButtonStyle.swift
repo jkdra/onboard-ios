@@ -36,12 +36,12 @@ struct BoardButtonStyle: ButtonStyle {
     }
 
     private var accent: Color {
-        tone?.color ?? .accentColor
+        tone?.color ?? .primary
     }
 
     private var foregroundColor: Color {
         switch variant {
-        case .primary, .destructive: .white
+        case .primary, .destructive: Color(uiColor: .systemBackground)
         case .secondary: .primary
         }
     }
@@ -65,5 +65,4 @@ extension ButtonStyle where Self == BoardButtonStyle {
     static var boardPrimary: BoardButtonStyle { BoardButtonStyle(variant: .primary) }
     static var boardSecondary: BoardButtonStyle { BoardButtonStyle(variant: .secondary) }
     static var boardDestructive: BoardButtonStyle { BoardButtonStyle(variant: .destructive) }
-
 }

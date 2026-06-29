@@ -106,7 +106,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return match
     }
 
-    func completeSchoolEmailVerification(_ email: String) async throws -> OnboardingStep {
+    func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep {
+        _ = token  // OTP not validated in mock; any code succeeds
         try await Task.sleep(for: .milliseconds(180))
         guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
             throw OnboardingError.notAuthenticated

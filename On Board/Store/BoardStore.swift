@@ -164,8 +164,9 @@ final class BoardStore {
         cachedArchiveWeekIDs = []
         clearFeedItemsCache()
         loadError = nil
-        Task { await stopReactionRealtime() }
-        rebuildCaches()
+        let listenerToStop = reactionRealtimeListener
+        reactionRealtimeListener = nil
+        Task { await listenerToStop?.stop() }
     }
 
     // MARK: - Network refresh
@@ -304,9 +305,14 @@ final class BoardStore {
 
     func feedItems(for week: BoardWeek) -> [FeedItem] {
         let weekPosts = posts(for: week)
+        // Posting closes for the final hour before the board clears, so nobody can be
+        // mid-compose when the weekly reset wipes the week. ContentView's 60s tick
+        // re-reads feedItems, so the new-post entry disappears within a minute of the cutoff.
+        let canPost = canInteract(with: week)
+            && !BoardSchedule.isWithinFinalHour(weekEnd: week.endsAt)
         let cacheKey = FeedItemsCacheKey(
             postSignatures: weekPosts.map { "\($0.id.uuidString)-\($0.tone.rawValue)" },
-            canInteract: canInteract(with: week)
+            canInteract: canPost
         )
 
         if feedItemsCacheKeys[week.id] == cacheKey,
@@ -315,7 +321,7 @@ final class BoardStore {
         }
 
         var items: [FeedItem] = [.countdown(week: week, isArchived: week.isReadOnly)]
-        if canInteract(with: week) {
+        if canPost {
             items.append(.newPost)
         }
         items += weekPosts.map { .post(id: $0.id, tone: $0.tone) }
@@ -328,6 +334,19 @@ final class BoardStore {
     var feedItems: [FeedItem] {
         guard let activeBoardWeek else { return [] }
         return feedItems(for: activeBoardWeek)
+    }
+
+    var hasFeedPosts: Bool {
+        feedItems.contains { if case .post = $0 { return true }; return false }
+    }
+
+    var currentBoardWeeks: [BoardWeek] {
+        guard let boardID = currentBoardId else { return boardWeeks }
+        return boardWeeks.filter { $0.boardId == boardID }
+    }
+
+    var clearingBannerText: String? {
+        BoardSchedule.finalHourBannerText(weekEnd: activeBoardWeek?.endsAt)
     }
 
     var canInteractWithBoard: Bool {

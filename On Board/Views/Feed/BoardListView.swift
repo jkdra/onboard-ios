@@ -2,69 +2,41 @@
 //  BoardListView.swift
 //  On Board
 //
-//  Root board-picker. Navigates into ContentView for the selected board.
-//  Saves and restores the last-viewed board so the app opens directly to it.
+//  Root board-picker. Shows a persistent sidebar on iPad/Mac; collapses
+//  to a full-screen stack on iPhone. Saves and restores the last-viewed
+//  board so the app opens directly to it.
 //
 
 import SwiftUI
+import NukeUI
 
 struct BoardListView: View {
     @Environment(BoardStore.self) private var store
-    @Environment(AuthStore.self) private var auth
     @Environment(OnboardingStore.self) private var onboarding
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
-    @AppStorage("lastViewedBoardID") private var lastViewedBoardID: String = ""
-    @State private var path = NavigationPath()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @State private var selectedBoardID: String?
     @State private var showSettings = false
 
-    // Placeholder boards to demonstrate the multi-board concept
-    private let discoveryBoards: [(name: String, members: String)] = [
-        ("Stanford University",  "2.4k members"),
-        ("MIT",                  "1.8k members"),
-        ("Cornell University",   "3.1k members"),
-    ]
-
     var body: some View {
-        NavigationStack(path: $path) {
-            List {
-                // Active board
+        NavigationSplitView {
+            List(selection: $selectedBoardID) {
                 if let board = store.currentBoard {
                     Section {
                         boardRow(
                             id: board.id.uuidString,
                             name: board.name,
-                            detail: "Your active board",
-                            icon: "building.2.fill",
+                            members: nil,
                             isJoined: true
                         )
-                    } header: {
-                        Text("Your boards")
-                            .fontStyle(.footnote)
+                        .tag(board.id.uuidString)
                     }
-                }
-
-                // Discovery
-                Section {
-                    ForEach(discoveryBoards, id: \.name) { board in
-                        boardRow(
-                            id: board.name,        // placeholder ID
-                            name: board.name,
-                            detail: board.members,
-                            icon: "building.2",
-                            isJoined: false
-                        )
-                    }
-                } header: {
-                    Text("Discover")
-                        .fontStyle(.footnote)
                 }
             }
             .navigationTitle("Your Boards")
-            .navigationDestination(for: String.self) { boardID in
-                ContentView(navigationPath: $path)
-                    .onAppear { lastViewedBoardID = boardID }
-            }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { showSettings = true } label: {
@@ -73,15 +45,17 @@ struct BoardListView: View {
                     .accessibilityLabel("Settings")
                 }
             }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+            .fullScreenCover(isPresented: $showSettings) {
+                SettingsView()
+                    .environment(\.dynamicTypeSize, dynamicTypeSize)
+            }
+        } detail: {
+            ContentView()
         }
         .preferredColorScheme(appearance.colorScheme)
         .onAppear {
-            // Restore last-viewed board — skip the list and open directly
-            if path.isEmpty,
-               let board = store.currentBoard,
-               lastViewedBoardID == board.id.uuidString {
-                path.append(board.id.uuidString)
+            if selectedBoardID == nil, let board = store.currentBoard {
+                selectedBoardID = board.id.uuidString
             }
         }
     }
@@ -92,19 +66,19 @@ struct BoardListView: View {
     private var profileAvatar: some View {
         if let urlString = onboarding.status?.avatarUrl,
            let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
+            LazyImage(request: OnBoardImagePipeline.request(url: url, width: 30)) { state in
+                if let image = state.image {
                     image
                         .resizable()
                         .scaledToFill()
                         .frame(width: 30, height: 30)
                         .clipShape(Circle())
-                default:
+                } else {
                     Image(systemName: "person.circle")
                         .font(.title3)
                 }
             }
+            .frame(width: 30, height: 30)
         } else {
             Image(systemName: "person.circle")
                 .font(.title3)
@@ -116,48 +90,46 @@ struct BoardListView: View {
     private func boardRow(
         id: String,
         name: String,
-        detail: String,
-        icon: String,
+        members: String?,
         isJoined: Bool
     ) -> some View {
-        Button {
-            if isJoined { path.append(id) }
-        } label: {
-            HStack(spacing: 14) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundStyle(isJoined ? Color.accentColor : .secondary)
-                    .frame(width: 32)
+        HStack(spacing: 8) {
+            Text(name)
+                .fontStyle(.subheadline)
+                .foregroundStyle(.primary)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(name)
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(.primary)
-                    Text(detail)
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            Spacer(minLength: 12)
 
-                Spacer()
-
-                if isJoined {
+            if isJoined {
+                if horizontalSizeClass == .compact {
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.tertiary)
                 } else {
-                    Text("Join")
-                        .fontStyle(.caption)
-                        .foregroundStyle(Color.accentColor)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Color.accentColor.opacity(0.12), in: Capsule())
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(Color.primary)
+                        .font(.body)
                 }
+            } else if let members {
+                HStack(spacing: 4) {
+                     Image(systemName: "person.3.fill")
+                        .font(.caption2)
+                    Text(members)
+                        .fontStyle(.caption)
+                }
+                .foregroundStyle(.secondary)
+
+                Text("Join")
+                    .fontStyle(.caption)
+                    .foregroundStyle(Color.primary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.primary.opacity(0.12), in: Capsule())
             }
-            .padding(.vertical, 2)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
     }
 }
 

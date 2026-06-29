@@ -7,35 +7,100 @@ import SwiftUI
 
 struct OnboardingWaitlistStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(\.colorScheme) private var scheme
+
+    @State private var appeared = false
 
     private var hasJoined: Bool {
         onboarding.status?.waitlistJoinedAt != nil
     }
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 12) {
-                Text(hasJoined ? "You're on the list!" : "You're almost On Board!")
-                    .fontStyle(.largeTitle)
-                    .multilineTextAlignment(.center)
+            VStack(spacing: 28) {
+                iconHeader
+                    .scaleEffect(appeared ? 1 : 0.7)
+                    .opacity(appeared ? 1 : 0)
 
-                Text(
-                    hasJoined
-                        ? "We'll send you a notification when your spot opens up. Keep an eye out."
-                        : "On Board is rolling out periodically. Join the waitlist and we'll let you know when you're in."
-                )
-                .fontStyle(.body)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 8)
+                textBlock
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 12)
+
+                infoChips
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 8)
+
+                actionArea
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 8)
             }
 
+            Spacer()
+        }
+        .safeAreaPadding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .navigationBarBackButtonHidden(true)
+        .onAppear {
+            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) {
+                appeared = true
+            }
+        }
+    }
+
+    // MARK: - Header icon
+
+    private var iconHeader: some View {
+        ZStack {
+            Circle()
+                .fill(.thinMaterial)
+                .frame(width: 76, height: 76)
+                .shadow(
+                    color: .black.opacity(scheme == .dark ? 0.45 : 0.12),
+                    radius: 14, x: 0, y: 7
+                )
+            Image(systemName: hasJoined ? "checkmark.circle.fill" : "pin.fill")
+                .font(.title.weight(.bold))
+                .foregroundStyle(hasJoined ? Color.green : Color.accentColor)
+                .rotationEffect(.degrees(hasJoined ? 0 : -30))
+                .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
+        }
+    }
+
+    // MARK: - Text
+
+    private var textBlock: some View {
+        VStack(spacing: 10) {
+            Text(hasJoined ? "You're on the list!" : "You're almost On Board!")
+                .fontStyle(.largeTitle)
+                .fontWeight(.heavy)
+                .multilineTextAlignment(.center)
+
+            Text(
+                hasJoined
+                    ? "We'll send you a notification when your spot opens up. Keep an eye out."
+                    : "On Board is rolling out periodically. Join the waitlist and we'll let you know when you're in."
+            )
+            .fontStyle(.body)
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .padding(.horizontal, 8)
+        }
+    }
+
+    // MARK: - Info chips
+
+    @ViewBuilder
+    private var infoChips: some View {
+        VStack(spacing: 8) {
             if let schoolName = onboarding.status?.schoolName {
                 Text(schoolName)
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .background(Capsule(style: .continuous).fill(.thinMaterial))
             }
 
             if let handle = onboarding.status?.handle {
@@ -45,30 +110,26 @@ struct OnboardingWaitlistStepView: View {
                     .padding(.vertical, 10)
                     .background(Capsule(style: .continuous).fill(.thinMaterial))
             }
-
-            if !hasJoined {
-                Button {
-                    Task { await onboarding.joinWaitlist() }
-                } label: {
-                    if onboarding.isSubmitting {
-                        ProgressView().tint(.white)
-                    } else {
-                        Label("Join the waitlist", systemImage: "bell.badge.fill")
-                    }
-                }
-                .buttonStyle(.boardPrimary)
-                .disabled(onboarding.isSubmitting)
-            } else {
-                Label("You're on the waitlist", systemImage: "checkmark.circle.fill")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
         }
-        .safeAreaPadding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .navigationBarBackButtonHidden(true)
+    }
+
+    // MARK: - Action
+
+    @ViewBuilder
+    private var actionArea: some View {
+        if !hasJoined {
+            Button {
+                Task { await onboarding.joinWaitlist() }
+            } label: {
+                LoadingButtonLabel("Join the waitlist", systemImage: "bell.badge.fill", isLoading: onboarding.isSubmitting)
+            }
+            .buttonStyle(.boardPrimary)
+            .disabled(onboarding.isSubmitting)
+        } else {
+            Label("You're on the waitlist", systemImage: "checkmark.circle.fill")
+                .fontStyle(.subheadline)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 

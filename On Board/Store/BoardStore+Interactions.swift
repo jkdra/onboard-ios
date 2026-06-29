@@ -25,6 +25,12 @@ extension BoardStore {
         imageAspectRatio: Double? = nil
     ) async -> Bool {
         guard canInteractWithBoard, let user = currentUser else { return false }
+        // Backstop for the final-hour posting freeze (the UI hides the entry, this blocks any
+        // composer left open from before the cutoff).
+        guard !BoardSchedule.isWithinFinalHour(weekEnd: activeBoardWeek?.endsAt) else {
+            loadError = "Posting is closed for the final hour before the board clears."
+            return false
+        }
         guard let boardService, let weekID = activeBoardWeek?.id else {
             loadError = isLive
                 ? "No active board week is available."
@@ -57,10 +63,10 @@ extension BoardStore {
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?
-    ) async {
+    ) async -> Bool {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
-              canEdit(post: posts[index]) else { return }
+              canEdit(post: posts[index]) else { return false }
 
         let existing = posts[index]
 
@@ -81,7 +87,7 @@ extension BoardStore {
                 imageAspectRatio: imageAspectRatio
             )
             replacePost(at: index, with: updated)
-            return
+            return true
         }
 
         do {
@@ -94,8 +100,10 @@ extension BoardStore {
                 imageAspectRatio: imageAspectRatio
             )
             replacePost(at: index, with: updated)
+            return true
         } catch {
             loadError = Self.mapLoadError(error)
+            return false
         }
     }
 
@@ -135,6 +143,22 @@ extension BoardStore {
             return false
         }
 
+        let tempID = UUID()
+        let optimistic = Comment(
+            id: tempID,
+            authorId: user.id,
+            author: user.handle,
+            body: trimmed
+        )
+
+        if let parentID = parentCommentID {
+            _ = mutateComments(for: postID) { comments in
+                insertReply(optimistic, parentID: parentID, into: &comments)
+            }
+        } else {
+            commentsByPostID[postID, default: []].append(optimistic)
+        }
+
         do {
             try await boardService.createComment(
                 postID: postID,
@@ -146,9 +170,26 @@ extension BoardStore {
             await loadComments(for: postID)
             return true
         } catch {
+            _ = mutateComments(for: postID) { comments in
+                removeComment(commentID: tempID, from: &comments)
+            }
             loadError = Self.mapLoadError(error)
             return false
         }
+    }
+
+    @discardableResult
+    private func insertReply(_ reply: Comment, parentID: UUID, into comments: inout [Comment]) -> Bool {
+        for index in comments.indices {
+            if comments[index].id == parentID {
+                comments[index].replies.append(reply)
+                return true
+            }
+            if insertReply(reply, parentID: parentID, into: &comments[index].replies) {
+                return true
+            }
+        }
+        return false
     }
 
     func updateComment(postID: UUID, commentID: UUID, body: String) async {
@@ -242,7 +283,6 @@ extension BoardStore {
         if previous == reaction { return }
 
         applyReactionChange(
-            postIndex: index,
             postId: postId,
             previous: previous,
             reaction: reaction
@@ -258,7 +298,6 @@ extension BoardStore {
                 )
             } catch {
                 applyReactionChange(
-                    postIndex: index,
                     postId: postId,
                     previous: reaction,
                     reaction: previous
@@ -321,11 +360,15 @@ extension BoardStore {
     }
 
     private func applyReactionChange(
-        postIndex: Int,
         postId: UUID,
         previous: Reaction?,
         reaction: Reaction?
     ) {
+        // Re-resolve the index by id on every apply: between the optimistic update and an
+        // async rollback the posts array can be rewritten (refresh, realtime delete, archive
+        // eviction), so a captured Int index could be out of bounds (crash) or point at a
+        // different post (silent count corruption).
+        guard let postIndex = posts.firstIndex(where: { $0.id == postId }) else { return }
         var counts = posts[postIndex].reactionCounts
 
         if let previous {

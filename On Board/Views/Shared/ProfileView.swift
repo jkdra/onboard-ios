@@ -20,6 +20,9 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Namespace private var profileNamespace
 
+    private let displayNameLimit = 50
+    private let bioLimit = 300
+
     @State private var editMode = false
     @State private var draftDisplayName = ""
     @State private var draftHandle = ""
@@ -61,6 +64,12 @@ struct ProfileView: View {
                                     .fontStyle(.title)
                                     .fontWeight(.heavy)
                                     .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                                if draftDisplayName.count >= Int(Double(displayNameLimit) * 0.8) {
+                                    Text("\(draftDisplayName.count)/\(displayNameLimit)")
+                                        .fontStyle(.caption2)
+                                        .foregroundStyle(draftDisplayName.count > displayNameLimit ? Color.red : Color.orange)
+                                        .monospacedDigit()
+                                }
                                 TextField("username", text: $draftHandle, axis: .vertical)
                                     .fontStyle(.subheadline)
                                     .foregroundStyle(.secondary)
@@ -82,6 +91,12 @@ struct ProfileView: View {
                             .fontStyle(.body)
                             .foregroundStyle(.primary)
                             .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
+                        if draftBio.count >= Int(Double(bioLimit) * 0.8) {
+                            Text("\(draftBio.count)/\(bioLimit)")
+                                .fontStyle(.caption2)
+                                .foregroundStyle(draftBio.count > bioLimit ? Color.red : Color.orange)
+                                .monospacedDigit()
+                        }
                     }
 
                     HStack(spacing: 6) {
@@ -94,6 +109,7 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .safeAreaPadding()
             }
+            .scrollDismissesKeyboard(.interactively)
             .background {
                 AnimatedStripesView(isActive: editMode)
             }
@@ -108,6 +124,7 @@ struct ProfileView: View {
             }
             .navigationBackDisabled(editMode)
             .interactiveDismissDisabled(editMode)
+            .keyboardDoneToolbar()
             .toolbar {
                 if editMode {
                     ToolbarItem(placement: .topBarLeading) {
@@ -120,6 +137,7 @@ struct ProfileView: View {
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { saveProfile() } label: { Label("Save", systemImage: "checkmark") }
+                            .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
                     }
                 } else {
                     if presentation == .sheet {
@@ -157,7 +175,7 @@ struct ProfileView: View {
                         .font(.footnote.weight(.semibold))
                         .foregroundStyle(.white)
                         .frame(width: 28, height: 28)
-                        .background(Color.accentColor)
+                        .background(Color.primary)
                         .clipShape(Circle())
                         .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
                 }
@@ -204,8 +222,11 @@ struct ProfileView: View {
     private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        guard let uiImage = UIImage(data: data),
-              let jpeg = uiImage.jpegData(compressionQuality: 0.8) else { return }
+        // Decode + JPEG-encode off the main actor so picking an avatar doesn't hitch the UI.
+        let jpeg: Data? = await Task.detached(priority: .userInitiated) {
+            UIImage(data: data)?.jpegData(compressionQuality: 0.8)
+        }.value
+        guard let jpeg else { return }
 
         selectedPhotoData = jpeg
         isUploadingPhoto = true

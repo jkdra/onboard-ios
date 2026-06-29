@@ -14,7 +14,7 @@ struct OnboardingSchoolEmailStepView: View {
     @State private var codeSent = false
     @State private var lookupState: LookupState = .idle
     @State private var lookupTask: Task<Void, Never>?
-    @State private var resendCooldown = 0
+    @State private var resendCooldown = OTPCooldown()
 
     private enum LookupState: Equatable {
         case idle
@@ -58,11 +58,7 @@ struct OnboardingSchoolEmailStepView: View {
                     Button {
                         Task { await verifyCode() }
                     } label: {
-                        if onboarding.isSubmitting {
-                            ProgressView().tint(.white)
-                        } else {
-                            Label("Verify email", systemImage: "checkmark.seal.fill")
-                        }
+                        LoadingButtonLabel("Verify email", systemImage: "checkmark.seal.fill", isLoading: onboarding.isSubmitting)
                     }
                     .buttonStyle(.boardPrimary)
                     .disabled(onboarding.isSubmitting || otpCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -71,8 +67,8 @@ struct OnboardingSchoolEmailStepView: View {
                         Text("Didn't get it?")
                             .fontStyle(.footnote)
                             .foregroundStyle(.secondary)
-                        if resendCooldown > 0 {
-                            Text("Resend in \(resendCooldown)s")
+                        if !resendCooldown.canResend {
+                            Text("Resend in \(resendCooldown.secondsRemaining)s")
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.secondary)
                         } else {
@@ -91,7 +87,7 @@ struct OnboardingSchoolEmailStepView: View {
                     Button("Use a different email") {
                         codeSent = false
                         otpCode = ""
-                        resendCooldown = 0
+                        resendCooldown.reset()
                         lookupState = .idle
                     }
                     .fontStyle(.footnote)
@@ -100,11 +96,7 @@ struct OnboardingSchoolEmailStepView: View {
                     Button {
                         Task { await sendCode() }
                     } label: {
-                        if onboarding.isSubmitting {
-                            ProgressView().tint(.white)
-                        } else {
-                            Label("Send verification code", systemImage: "envelope.fill")
-                        }
+                        LoadingButtonLabel("Send verification code", systemImage: "envelope.fill", isLoading: onboarding.isSubmitting)
                     }
                     .buttonStyle(.boardPrimary)
                     .disabled(!canSendCode)
@@ -112,7 +104,11 @@ struct OnboardingSchoolEmailStepView: View {
             }
             .safeAreaPadding(.horizontal)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .disabled(onboarding.isSubmitting)
+        .keyboardDoneToolbar()
         .navigationTitle("Verify your school")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             if email.isEmpty {
                 email = onboarding.status?.pendingSchoolEmail
@@ -212,31 +208,22 @@ struct OnboardingSchoolEmailStepView: View {
                     boardName: $0.boardName ?? "On Board"
                 )
             } ?? matchedSchool
-            startResendCooldown()
+            resendCooldown.start(duration: 30)
         }
     }
 
     private func resendCode() async {
+        guard resendCooldown.canResend else { return }
         otpCode = ""
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
-            startResendCooldown()
+            resendCooldown.start(duration: 30)
         }
     }
 
     private func verifyCode() async {
         let token = otpCode.trimmingCharacters(in: .whitespacesAndNewlines)
         _ = await onboarding.verifySchoolEmail(normalizedEmail, code: token)
-    }
-
-    private func startResendCooldown() {
-        resendCooldown = 30
-        Task {
-            while resendCooldown > 0 {
-                try? await Task.sleep(for: .seconds(1))
-                resendCooldown = max(0, resendCooldown - 1)
-            }
-        }
     }
 }
 

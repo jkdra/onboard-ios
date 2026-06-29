@@ -10,7 +10,7 @@ import SwiftUI
 
 public enum FontStyle {
     case largeTitle, title, title2, title3, headline, body, callout, subheadline, footnote, caption, caption2
-    
+
     var size: CGFloat {
         switch self {
             case .largeTitle: return 30
@@ -26,14 +26,14 @@ public enum FontStyle {
             case .caption2: return 10
         }
     }
-    
+
     var weight: Font.Weight {
         switch self {
             case .largeTitle: .bold
             case .title: .bold
             case .title2: .regular
             case .title3: .bold
-            case .headline:.semibold
+            case .headline: .semibold
             case .body: .regular
             case .callout: .regular
             case .subheadline: .semibold
@@ -42,7 +42,7 @@ public enum FontStyle {
             case .caption2: .regular
         }
     }
-    
+
     var opacity: Double {
         switch self {
             case .largeTitle: 1
@@ -58,30 +58,52 @@ public enum FontStyle {
             case .caption2: 1
         }
     }
-    
+
     var originalStyle: Font.TextStyle {
         switch self {
-            case .largeTitle: Font.TextStyle.largeTitle
-            case .title: Font.TextStyle.title
-            case .title2: Font.TextStyle.title2
-            case .title3: Font.TextStyle.title3
-            case .headline: Font.TextStyle.headline
-            case .body: Font.TextStyle.body
-            case .callout: Font.TextStyle.callout
-            case .subheadline: Font.TextStyle.subheadline
-            case .footnote: Font.TextStyle.footnote
-            case .caption: Font.TextStyle.caption
-            case .caption2: Font.TextStyle.caption2
+            case .largeTitle: .largeTitle
+            case .title: .title
+            case .title2: .title2
+            case .title3: .title3
+            case .headline: .headline
+            case .body: .body
+            case .callout: .callout
+            case .subheadline: .subheadline
+            case .footnote: .footnote
+            case .caption: .caption
+            case .caption2: .caption2
         }
+    }
+
+    // Expanded for title-tier styles; standard for body/UI text.
+    var fontFamilyName: String {
+        switch self {
+            case .largeTitle, .title, .title2, .title3, .headline:
+                return "ZalandoSansExpanded-Regular"
+            case .body, .callout, .subheadline, .footnote, .caption, .caption2:
+                return "ZalandoSansSemiExpanded-Regular"
+        }
+    }
+}
+
+private struct FontStyleModifier: ViewModifier {
+    let style: FontStyle
+
+    // Reflects the system "Increase Contrast" accessibility setting. When it's on,
+    // we drop the decorative opacity reduction (footnote 0.5, body/callout 0.8) and
+    // render text at full opacity so low-contrast text meets the user's request.
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        content
+            .font(.custom(style.fontFamilyName, size: style.size, relativeTo: style.originalStyle))
+            .fontWeight(style.weight)
+            .opacity(contrast == .increased ? 1 : style.opacity)
     }
 }
 
 extension View {
     public func fontStyle(_ style: FontStyle) -> some View {
-        self
-            .font(.custom(fontName, size: style.size, relativeTo: style.originalStyle))
-            .fontWeight(style.weight)
-            .opacity(style.opacity)
+        modifier(FontStyleModifier(style: style))
     }
 }
-

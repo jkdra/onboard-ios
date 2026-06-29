@@ -96,7 +96,7 @@ struct CommentView: View {
     private var inlineReplyComposer: some View {
         HStack(alignment: .top, spacing: 8) {
             TextField("Write a reply…", text: $replyDraft, axis: .vertical)
-                .fontStyle(.subheadline)
+                .fontStyle(.callout)
                 .focused($isReplyFocused)
 
             VStack(spacing: 4) {
@@ -111,7 +111,7 @@ struct CommentView: View {
                             .foregroundStyle(
                                 replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                     ? Color.secondary.opacity(0.4)
-                                    : Color.accentColor
+                                    : Color.primary
                             )
                     }
                 }
@@ -161,11 +161,21 @@ struct CommentView: View {
                 HStack(alignment: .firstTextBaseline) {
                     Text(authorProfile.displayName)
                         .fontStyle(.caption)
-                        .fontWeight(.semibold)
+                        .fontWeight(.bold)
                         .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                     Text("@\(authorProfile.handle)")
                         .fontStyle(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    Text("· \(comment.createdAt.boardRelativeAge)")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .layoutPriority(1)
 
                     Spacer()
 
@@ -191,22 +201,17 @@ struct CommentView: View {
 
                 if isBeingEdited {
                     TextField("Comment", text: $draftCommentBody, axis: .vertical)
-                        .fontStyle(.subheadline)
+                        .fontStyle(.callout)
                         .foregroundStyle(.primary)
                         .textFieldStyle(.plain)
                         .lineLimit(1...8)
                         .focused($isEditorFocused)
-                        .submitLabel(.done)
-                        .onSubmit { onConfirmEdit?() }
-                        .onChange(of: draftCommentBody) { _, newValue in
-                            guard newValue.hasSuffix("\n") else { return }
-                            draftCommentBody = String(newValue.dropLast())
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                            onConfirmEdit?()
-                        }
+                        // Multi-line editing: confirmed via the toolbar "Save" button. Return
+                        // inserts a newline instead of submitting, so a pasted line break or a
+                        // deliberate paragraph no longer silently ends the edit.
                 } else {
                     Text(comment.body)
-                        .fontStyle(.subheadline)
+                        .fontStyle(.callout)
                         .foregroundStyle(.primary)
                         .overlay {
                             Image(systemName: "heart.fill")
@@ -219,21 +224,24 @@ struct CommentView: View {
                                 .allowsHitTesting(false)
                                 .position(heartTapLocation)
                         }
-                        .simultaneousGesture(
-                            DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                                .onChanged { value in heartTapLocation = value.startLocation }
+                        // A single SpatialTapGesture carries both the count and the tap
+                        // location, so we no longer need a separate min-distance-0 drag to
+                        // capture the location — that drag was what cancelled the double-tap.
+                        .gesture(
+                            SpatialTapGesture(count: 2, coordinateSpace: .local)
+                                .onEnded { value in
+                                    guard isInteractive, editingCommentID == nil else { return }
+                                    heartTapLocation = value.location
+                                    guard store.userCommentVote(for: comment.id) != .like else { return }
+                                    store.setCommentVote(commentID: comment.id, postID: postID, vote: .like)
+                                    heartRotation = Double.random(in: -5...5)
+                                    showHeartBurst = true
+                                    Task {
+                                        try? await Task.sleep(for: .milliseconds(700))
+                                        showHeartBurst = false
+                                    }
+                                }
                         )
-                        .onTapGesture(count: 2) {
-                            guard isInteractive, editingCommentID == nil else { return }
-                            guard store.userCommentVote(for: comment.id) != .like else { return }
-                            store.setCommentVote(commentID: comment.id, postID: postID, vote: .like)
-                            heartRotation = Double.random(in: -5...5)
-                            showHeartBurst = true
-                            Task {
-                                try? await Task.sleep(for: .milliseconds(700))
-                                showHeartBurst = false
-                            }
-                        }
                 }
 
                 if !isBeingEdited {

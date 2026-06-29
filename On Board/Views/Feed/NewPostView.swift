@@ -32,12 +32,14 @@ struct NewPostView: View {
     @State private var uploadedImageUrl: String?
     @State private var uploadedAspectRatio: Double?
     @State private var isUploadingImage = false
+    @State private var isSubmitting = false
 
     @FocusState private var focus: Field?
     private enum Field { case title, content }
 
     private var canSubmit: Bool {
-        !title.trimmed.isEmpty && !content.trimmed.isEmpty && !isUploadingImage
+        !title.trimmed.isEmpty && !content.trimmed.isEmpty
+            && !isUploadingImage && !isSubmitting && !isWithinFinalHour
     }
 
     private var previewTone: PostTone? { selectedTone }
@@ -50,7 +52,7 @@ struct NewPostView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.badge.exclamationmark.fill")
                                 .foregroundStyle(.red)
-                            Text(bannerText + " — your post may not get reactions")
+                            Text(bannerText + " — posting is closed")
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.primary)
                         }
@@ -80,7 +82,7 @@ struct NewPostView: View {
                     Button {
                         submit()
                     } label: {
-                        Label("Post", systemImage: "tray.and.arrow.up.fill")
+                        LoadingButtonLabel("Post", systemImage: "tray.and.arrow.up.fill", isLoading: isSubmitting)
                     }
                     .buttonStyle(.boardPrimary)
                     .disabled(!canSubmit)
@@ -89,6 +91,8 @@ struct NewPostView: View {
                 }
                 .padding(20)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .disabled(isSubmitting)
             .background {
                 ZStack {
                     (previewTone?.color ?? Color.gray)
@@ -97,7 +101,7 @@ struct NewPostView: View {
                     AnimatedStripesView(
                         color: previewTone?.color ?? .primary,
                         opacity: previewTone == nil ? 0.05 : 0.10,
-                        isActive: focus != nil
+                        isActive: true
                     )
                     if isWithinFinalHour {
                         LinearGradient(
@@ -127,6 +131,13 @@ struct NewPostView: View {
                     TonePicker(selection: $selectedTone, showBackground: false)
                 }
                 ToolbarItem(placement: .bottomBar) { Spacer() }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button { KeyboardDismisser.dismiss() } label: {
+                        Text("Done").fontWeight(.semibold)
+                    }
+                    .accessibilityLabel("Dismiss keyboard")
+                }
             }
             .onAppear {
                 focus = .title
@@ -204,34 +215,23 @@ struct NewPostView: View {
         guard let item else { return }
 
         guard let rawData = try? await item.loadTransferable(type: Data.self),
-              let uiImage = UIImage(data: rawData) else { return }
+              UIImage(data: rawData) != nil else { return }
+
+        // Show the original immediately as a preview (UIImage can't display its own WebP output).
+        selectedPhotoData = rawData
+
+        guard let userID = store.currentUserID else { return }
 
         isUploadingImage = true
         defer { isUploadingImage = false }
 
-        // Encode as WebP client-side — smaller and faster to upload
-        guard let webpData = ImageEncoder.webpData(from: uiImage, quality: 0.82, maxDimension: 2048) else {
-            selectedPhotoData = rawData // still show preview, but no URL
-            return
-        }
-
-        let ratio = ImageEncoder.aspectRatio(of: webpData)
-        // Show preview using original data (UIImage can't display its own WebP output easily)
-        selectedPhotoData = rawData
-
-        guard let client = SupabaseClientFactory.client(for: .current),
-              let userID = store.currentUserID else { return }
-
-        let path = "\(userID.uuidString)/\(UUID().uuidString).webp"
-        do {
-            try await client.storage
-                .from("post-images")
-                .upload(path, data: webpData, options: FileOptions(contentType: "image/webp", upsert: false))
-            let publicURL = try client.storage.from("post-images").getPublicURL(path: path)
-            uploadedImageUrl = publicURL.absoluteString
-            uploadedAspectRatio = ratio
-        } catch {
-            // Upload failed — post goes text-only; preview stays so user sees their image
+        // Encode (WebP, downscaled) + upload via the shared helper, which now runs the
+        // CPU-heavy encode OFF the main actor so the composer doesn't hitch.
+        if let result = await uploadPostImageData(rawData: rawData, userID: userID) {
+            uploadedImageUrl = result.url
+            uploadedAspectRatio = result.aspectRatio
+        } else {
+            // Encode/upload failed — post goes text-only; preview stays so user sees their image.
             uploadedImageUrl = nil
             uploadedAspectRatio = nil
         }
@@ -257,6 +257,7 @@ struct NewPostView: View {
     private func submit() {
         guard canSubmit else { return }
         let resolvedTone = selectedTone ?? .random()
+        isSubmitting = true
         Task {
             let succeeded = await store.addPost(
                 title: title.trimmed,
@@ -265,6 +266,7 @@ struct NewPostView: View {
                 imageUrl: uploadedImageUrl,
                 imageAspectRatio: uploadedAspectRatio
             )
+            isSubmitting = false
             guard succeeded else { return }
             didSubmit = true
             dismiss()

@@ -22,6 +22,7 @@ struct SignInView: View {
     }
 
     @Environment(AuthStore.self) private var auth
+    @Environment(OnboardingStore.self) private var onboarding
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.colorScheme) private var scheme
 
@@ -37,8 +38,22 @@ struct SignInView: View {
     @State private var isVerifyingOTP = false
     @State private var appleRawNonce: String?
     @State private var appeared = false
+    /// The provider whose sign-in succeeded and is now waiting on onboarding status
+    /// to resolve. Keeps that button's spinner running through the post-sign-in
+    /// window so we never swap in a separate loading screen here.
+    @State private var resolvingProvider: AuthProvider?
 
     private let otpCooldownSeconds = 60
+
+    /// True from the moment sign-in succeeds until onboarding status is known —
+    /// the page is disabled and the tapped button keeps spinning during it.
+    private var isResolvingPostSignIn: Bool {
+        auth.isSignedIn && !onboarding.hasResolvedStatus
+    }
+
+    private func isResolving(_ provider: AuthProvider) -> Bool {
+        resolvingProvider == provider && isResolvingPostSignIn
+    }
 
     private var usesLiveBackend: Bool {
         AppConfiguration.current.isSupabaseConfigured
@@ -79,6 +94,10 @@ struct SignInView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollBounceBehavior(.basedOnSize)
         .ignoresSafeArea(edges: .top)
+        // Fresh sign-in: keep the form interactive-locked (not swapped for a loading
+        // screen) until onboarding status resolves and the coordinator pushes the next step.
+        .disabled(isResolvingPostSignIn)
+        .keyboardDoneToolbar()
         .presentableErrorAlert(error: $alertError) {
             clearAuthFailureIfNeeded()
         }
@@ -88,6 +107,18 @@ struct SignInView: View {
         }
         .onChange(of: credentialMode) { _, _ in
             resetOTPSession()
+        }
+        // Once status resolves (or auth drops out), stop holding the button spinner.
+        .onChange(of: onboarding.hasResolvedStatus) { _, resolved in
+            if resolved { resolvingProvider = nil }
+        }
+        .onChange(of: auth.state) { _, state in
+            switch state {
+            case .signedOut, .failed:
+                resolvingProvider = nil
+            default:
+                break
+            }
         }
         .onAppear {
             withAnimation(.spring(duration: 0.75, bounce: 0.22).delay(0.08)) {
@@ -250,13 +281,13 @@ struct SignInView: View {
                     Text("Verify Code")
                         .fontStyle(.headline)
                     Spacer()
-                    if isSigningInCredential || isVerifyingOTP {
+                    if isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) {
                         ProgressView().tint(.white)
                     }
                 }
             }
             .buttonStyle(.boardPrimary)
-            .disabled(isSigningInCredential || isVerifyingOTP || !OTPCodeInput.isComplete(otpCode))
+            .disabled(isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) || !OTPCodeInput.isComplete(otpCode))
             .accessibilityLabel("Verify code")
             .transition(.move(edge: .bottom).combined(with: .opacity))
         } else {
@@ -343,6 +374,7 @@ struct SignInView: View {
                 let fullName = credential.fullName?.formatted()
                 let nonce = appleRawNonce
                 Task {
+                    await MainActor.run { resolvingProvider = .apple }
                     await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
                     await MainActor.run { appleRawNonce = nil }
                 }
@@ -352,13 +384,13 @@ struct SignInView: View {
         .frame(height: 50)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            if isSigningIn {
+            if isSigningIn || isResolving(.apple) {
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(Color.black.opacity(0.15))
                 ProgressView()
             }
         }
-        .disabled(isSigningIn)
+        .disabled(isSigningIn || isResolving(.apple))
         .accessibilityLabel("Sign in with Apple")
     }
 
@@ -370,6 +402,7 @@ struct SignInView: View {
             let isSigningIn = if case .signingIn(.google) = auth.state { true } else { false }
 
             Button {
+                resolvingProvider = .google
                 Task { await auth.signInWithGoogle() }
             } label: {
                 HStack(spacing: 10) {
@@ -377,13 +410,13 @@ struct SignInView: View {
                     Text("Continue with Google")
                         .fontStyle(.headline)
                     Spacer()
-                    if isSigningIn { ProgressView() }
+                    if isSigningIn || isResolving(.google) { ProgressView() }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 14)
             }
             .buttonStyle(.boardSecondary)
-            .disabled(isSigningIn)
+            .disabled(isSigningIn || isResolving(.google))
             .accessibilityLabel("Continue with Google")
         } else {
             HStack(spacing: 10) {
@@ -454,6 +487,10 @@ struct SignInView: View {
         case .email:
             if case .signingIn(.email) = auth.state { true } else { false }
         }
+    }
+
+    private var credentialProvider: AuthProvider {
+        credentialMode == .phone ? .phone : .email
     }
 
     private var otpSentMessage: String {
@@ -529,6 +566,7 @@ struct SignInView: View {
         }
 
         isVerifyingOTP = true
+        resolvingProvider = credentialProvider
         defer { isVerifyingOTP = false }
 
         let token = OTPCodeInput.sanitized(otpCode)
@@ -546,8 +584,14 @@ struct SignInView: View {
 }
 
 #Preview {
-    SignInView()
-        .environment(AuthStore(service: MockAuthService()))
+    let auth = AuthStore(service: MockAuthService())
+    return SignInView()
+        .environment(auth)
+        .environment(OnboardingStore(
+            service: MockOnboardingService(),
+            auth: auth,
+            network: NetworkMonitor()
+        ))
         .environment(BoardStore.sampleBoard())
         .environment(NetworkMonitor())
 }

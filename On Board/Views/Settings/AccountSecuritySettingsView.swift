@@ -242,7 +242,7 @@ struct AccountSecuritySettingsView: View {
                 } else {
                     Text("Link")
                         .fontStyle(.subheadline)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.primary)
                 }
             }
         }
@@ -264,7 +264,7 @@ struct AccountSecuritySettingsView: View {
                 } else {
                     Text("Link")
                         .fontStyle(.subheadline)
-                        .foregroundStyle(Color.accentColor)
+                        .foregroundStyle(Color.primary)
                 }
             }
         }

@@ -1,7 +1,7 @@
 # On Board
 
 ![Platform](https://img.shields.io/badge/platform-iOS%2018%2B-black?logo=apple&logoColor=white)
-![Swift](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)
+![Swift](https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white)
 ![Supabase](https://img.shields.io/badge/Supabase-2.46-3ECF8E?logo=supabase&logoColor=white)
 ![License](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)
 

@@ -226,16 +226,6 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         return try await mapSession(using: client, session: session)
     }
 
-    func sendSchoolEmailVerification(to email: String) async throws {
-        let client = try requireClient()
-        try await client.auth.update(user: UserAttributes(email: email))
-    }
-
-    func verifySchoolEmailOTP(email: String, token: String) async throws {
-        let client = try requireClient()
-        try await client.auth.verifyOTP(email: email, token: token, type: .emailChange)
-    }
-
     func signOut() async throws {
         let client = try requireClient()
         try await client.auth.signOut()

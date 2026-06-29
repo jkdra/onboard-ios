@@ -21,6 +21,8 @@ struct OnboardingUsernameStepView: View {
         case offline
     }
 
+    private let handleLimit = 32
+
     private var trimmedHandle: String {
         handle.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -36,38 +38,46 @@ struct OnboardingUsernameStepView: View {
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
 
-                HStack(spacing: 8) {
-                    Text("@")
-                        .fontStyle(.title2)
-                        .foregroundStyle(.secondary)
-                    TextField("username", text: $handle)
-                        .fontStyle(.title2)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .textContentType(.username)
-                        .onChange(of: handle) { _, _ in
-                            scheduleAvailabilityCheck()
-                        }
+                VStack(alignment: .trailing, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text("@")
+                            .fontStyle(.title2)
+                            .foregroundStyle(.secondary)
+                        TextField("username", text: $handle)
+                            .fontStyle(.title2)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .textContentType(.username)
+                            .onChange(of: handle) { _, _ in
+                                scheduleAvailabilityCheck()
+                            }
+                    }
+                    .textFieldStyle(.board)
+                    if trimmedHandle.count >= Int(Double(handleLimit) * 0.75) {
+                        Text("\(trimmedHandle.count)/\(handleLimit)")
+                            .fontStyle(.caption2)
+                            .foregroundStyle(trimmedHandle.count >= handleLimit ? Color.red : Color.orange)
+                            .monospacedDigit()
+                    }
                 }
-                .textFieldStyle(.board)
 
                 availabilityLabel
 
                 Button {
                     Task { await onboarding.submitUsername(trimmedHandle) }
                 } label: {
-                    if onboarding.isSubmitting {
-                        ProgressView().tint(.white)
-                    } else {
-                        Label("Continue", systemImage: "arrow.right")
-                    }
+                    LoadingButtonLabel("Continue", systemImage: "arrow.right", isLoading: onboarding.isSubmitting)
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(!canContinue)
             }
             .safeAreaPadding(.horizontal)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .disabled(onboarding.isSubmitting)
+        .keyboardDoneToolbar()
         .navigationTitle("Pick a username")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear { hydrateFromStatus() }
     }
 

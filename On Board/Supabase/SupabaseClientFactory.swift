@@ -10,8 +10,13 @@ import Foundation
 import Supabase
 
 enum SupabaseClientFactory {
+    // The client is cached process-wide and built lazily on first use. `client(for:)` is
+    // `nonisolated` and is called from several actors (MainActor views, the off-main service
+    // initializers, NotificationService), so the cache is guarded by a lock to avoid a data
+    // race / double-construction on concurrent first access.
     private nonisolated(unsafe) static var cachedClient: SupabaseClient?
     private nonisolated(unsafe) static var cachedKey: String?
+    private nonisolated static let lock = NSLock()
 
     nonisolated static func client(for configuration: AppConfiguration) -> SupabaseClient? {
         guard configuration.isSupabaseConfigured,
@@ -23,6 +28,10 @@ enum SupabaseClientFactory {
         }
 
         let cacheKey = "\(url.absoluteString)|\(key)"
+
+        lock.lock()
+        defer { lock.unlock() }
+
         if cachedKey == cacheKey, let cachedClient {
             return cachedClient
         }

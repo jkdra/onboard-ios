@@ -34,12 +34,12 @@ struct CountdownCard: View {
 
             if let week {
                 Text("\(week.startsAt.formatted(weekFormatter)) – \(week.endsAt.formatted(weekFormatter))")
-                    .fontStyle(.subheadline)
+                    .fontStyle(.callout)
                     .foregroundStyle(.secondary)
             }
 
             Text("This week's posts are read-only. See what people had to say at the time.")
-                .fontStyle(.subheadline)
+                .fontStyle(.callout)
                 .foregroundStyle(.secondary)
 
             Spacer(minLength: 0)
@@ -62,7 +62,7 @@ struct CountdownCard: View {
                 .fontWeight(.heavy)
                 .foregroundStyle(.primary)
             Text(!clearingSoon ? "The board resets every monday at midnight." : "The board's clearing tonight! Last chance to post and comment!")
-                .fontStyle(.subheadline)
+                .fontStyle(.callout)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -87,7 +87,7 @@ struct CountdownCard: View {
                 .contentTransition(.numericText(value: Double(value)))
                 .animation(.snappy(duration: 0.4), value: value)
             Text(label)
-                .fontStyle(.subheadline)
+                .font(.custom("ZalandoSansSemiExpanded-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(clearingSoon ? .red : .secondary)
         }
     }

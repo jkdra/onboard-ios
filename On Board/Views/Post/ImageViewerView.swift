@@ -39,16 +39,22 @@ struct ImageViewerView: View {
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .gesture(zoomGesture)
                             .simultaneousGesture(panGesture)
-                            .onTapGesture(count: 2) {
-                                withAnimation(.smooth(duration: 0.3)) {
-                                    if scale > 1 {
-                                        scale = 1
-                                        panOffset = .zero
-                                    } else {
-                                        scale = 2
+                            // Double-tap must be simultaneous with the zoom/pan gestures above;
+                            // a plain `.onTapGesture(count: 2)` loses gesture arbitration to them
+                            // and never fires.
+                            .simultaneousGesture(
+                                TapGesture(count: 2)
+                                    .onEnded {
+                                        withAnimation(.smooth(duration: 0.3)) {
+                                            if scale > 1 {
+                                                scale = 1
+                                                panOffset = .zero
+                                            } else {
+                                                scale = 2
+                                            }
+                                        }
                                     }
-                                }
-                            }
+                            )
                     } else if state.error != nil {
                         Image(systemName: "photo.badge.exclamationmark")
                             .font(.largeTitle)

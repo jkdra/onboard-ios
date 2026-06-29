@@ -48,7 +48,7 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         case archivedAt
     }
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         boardId = try container.decodeIfPresent(UUID.self, forKey: .boardId) ?? SampleBoardID.main

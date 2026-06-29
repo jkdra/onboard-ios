@@ -150,15 +150,6 @@ final class AuthStore {
         }
     }
 
-    func sendSchoolEmailVerification(to email: String) async throws {
-        try await service.sendSchoolEmailVerification(to: email)
-    }
-
-    func verifySchoolEmailOTP(email: String, token: String) async throws {
-        try await service.verifySchoolEmailOTP(email: email, token: token)
-        await refreshLinkedMethods()
-    }
-
     func reportSessionExpired() async {
         try? await service.signOut()
         state = .failed(AuthError.sessionExpired.localizedDescription)

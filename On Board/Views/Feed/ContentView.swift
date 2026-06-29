@@ -15,41 +15,47 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
-    @Binding var navigationPath: NavigationPath
-    @State private var showNewPost = false
-    @State private var clearingSoon = false
-    @State private var isWithinFinalHour = false
-    @State private var boardIsResetting = false
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    init(navigationPath: Binding<NavigationPath> = .constant(NavigationPath())) {
-        self._navigationPath = navigationPath
-    }
+    @State private var navigationPath = NavigationPath()
+    @State private var showNewPost = false
+    @State private var timerTick = 0
+    @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
     @State private var alertError: PresentableAlertError?
     @Namespace private var cardNamespace
 
+    private var clearingSoon: Bool {
+        BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt)
+    }
+
     var body: some View {
-        thisWeekFeed
-            .navigationDestination(for: BoardRoute.self, destination: routeDestination)
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        navigationPath.removeLast(navigationPath.count)
-                    } label: {
-                        Image(systemName: "list.bullet")
+        NavigationStack(path: $navigationPath) {
+            thisWeekFeed
+                .navigationDestination(for: BoardRoute.self, destination: routeDestination)
+                .navigationBarBackButtonHidden(true)
+                .toolbar {
+                    if horizontalSizeClass == .compact {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                navigationPath = NavigationPath()
+                                dismiss()
+                            } label: {
+                                Image(systemName: "list.bullet")
+                            }
+                            .accessibilityLabel("Boards")
+                        }
                     }
-                    .accessibilityLabel("Boards")
                 }
-            }
-            .sheet(isPresented: $showNewPost) { NewPostView() }
-            .boardErrorHandling(alertError: $alertError)
-            .presentableErrorAlert(error: $alertError)
+                .sheet(isPresented: $showNewPost) { NewPostView() }
+                .boardErrorHandling(alertError: $alertError)
+                .presentableErrorAlert(error: $alertError)
+        }
     }
 
     private var thisWeekFeed: some View {
         let feedItems = store.feedItems
-        let feedHasPosts = feedItems.contains { if case .post = $0 { return true }; return false }
         return ZStack {
             ScrollView {
                 BoardFeedView(
@@ -59,7 +65,7 @@ struct ContentView: View {
                     isResetting: boardIsResetting
                 )
 
-                if store.isLive, !store.isLoading, !feedHasPosts {
+                if store.isLive, !store.isLoading, !store.hasFeedPosts {
                     emptyFeedState
                 }
             }
@@ -105,14 +111,10 @@ struct ContentView: View {
             await store.refresh(for: store.currentUserID)
         }
         .navigationTitle("This Week")
-        .onAppear { updateClearingSoon() }
-        .onChange(of: store.activeBoardWeek?.endsAt) { _, _ in
-            updateClearingSoon()
-        }
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(60))
-                updateClearingSoon()
+                timerTick &+= 1
             }
         }
         .task(id: store.activeBoardWeek?.endsAt) {
@@ -148,12 +150,6 @@ struct ContentView: View {
         case .profile(let profile):
             ProfileView(profile: profile, presentation: .navigation)
         }
-    }
-
-    private func updateClearingSoon() {
-        let weekEnd = store.activeBoardWeek?.endsAt
-        clearingSoon = BoardSchedule.isClearingSoon(weekEnd: weekEnd)
-        isWithinFinalHour = BoardSchedule.isWithinFinalHour(weekEnd: weekEnd)
     }
 
     private func triggerBoardReset() async {
@@ -203,11 +199,9 @@ struct ContentView: View {
 }
 
 #Preview("Mock Feed") {
-    NavigationStack {
-        ContentView()
-            .environment(BoardStore.previewBoard())
-            .environment(AuthStore(service: MockAuthService()))
-    }
+    ContentView()
+        .environment(BoardStore.previewBoard())
+        .environment(AuthStore(service: MockAuthService()))
 }
 
 #Preview("Live Feed") {

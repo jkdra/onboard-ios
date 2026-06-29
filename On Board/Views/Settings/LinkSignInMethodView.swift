@@ -66,8 +66,10 @@ struct LinkSignInMethodView: View {
 
                 Section {
                     if otpSent {
-                        Button("Verify and link") {
+                        Button {
                             Task { await verify() }
+                        } label: {
+                            LoadingButtonLabel("Verify and link", isLoading: isVerifying, spinnerTint: .accentColor)
                         }
                         .disabled(isVerifying || !OTPCodeInput.isComplete(otpCode))
 
@@ -83,18 +85,28 @@ struct LinkSignInMethodView: View {
                         }
                         .fontStyle(.footnote)
                     } else {
-                        Button("Send code") {
+                        Button {
                             Task { await send(isResend: false) }
+                        } label: {
+                            LoadingButtonLabel("Send code", isLoading: isSending, spinnerTint: .accentColor)
                         }
                         .disabled(isSending || normalizedValue.isEmpty)
                     }
                 }
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(mode == .phone ? "Link Phone" : "Link Email")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
+                }
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button { KeyboardDismisser.dismiss() } label: {
+                        Text("Done").fontWeight(.semibold)
+                    }
+                    .accessibilityLabel("Dismiss keyboard")
                 }
             }
             .presentableErrorAlert(error: $alertError)

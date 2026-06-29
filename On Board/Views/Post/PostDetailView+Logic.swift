@@ -48,7 +48,7 @@ extension PostDetailView {
         Task {
             let effectiveImageUrl = uploadedEditImageUrl ?? draftImageUrl
             let effectiveAspectRatio = uploadedEditAspectRatio ?? draftImageAspectRatio
-            await store.updatePost(
+            let succeeded = await store.updatePost(
                 id: livePost.id,
                 title: draftTitle.trimmed,
                 description: draftDescription.trimmed,
@@ -56,6 +56,7 @@ extension PostDetailView {
                 imageUrl: effectiveImageUrl,
                 imageAspectRatio: effectiveAspectRatio
             )
+            guard succeeded else { return }
             withAnimation(.smooth(duration: 0.4)) { editMode = false }
         }
     }

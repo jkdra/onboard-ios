@@ -66,7 +66,7 @@ protocol OnboardingService: Sendable {
     func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep
     func lookupSchool(for email: String) async throws -> SchoolMatch?
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch
-    func completeSchoolEmailVerification(_ email: String) async throws -> OnboardingStep
+    func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep
     func joinWaitlist() async throws -> OnboardingStep
 }
 

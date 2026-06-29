@@ -36,7 +36,7 @@ struct RemotePostRow: Decodable, Sendable {
         case imageAspectRatio
     }
 
-    init(from decoder: Decoder) throws {
+    nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         boardWeekId = try container.decode(UUID.self, forKey: .boardWeekId)
@@ -70,23 +70,23 @@ struct RemotePostRow: Decodable, Sendable {
         )
     }
 
-    private static func decodeReactionCounts(
+    nonisolated private static func decodeReactionCounts(
         from container: KeyedDecodingContainer<CodingKeys>
     ) -> [Reaction: Int] {
         guard let raw = try? container.decode([String: Int].self, forKey: .reactionCounts) else {
             return [:]
         }
-
         var counts: [Reaction: Int] = [:]
         for (key, value) in raw {
-            switch key {
-            case "love":
-                counts[.like, default: 0] += value
-            default:
-                if let reaction = Reaction(rawValue: key) {
-                    counts[reaction, default: 0] += value
-                }
+            let reaction: Reaction? = switch key {
+            case "like":    .like
+            case "dislike": .dislike
+            case "laugh":   .laugh
+            case "hug":     .hug
+            case "love":    .like   // legacy alias
+            default:        nil
             }
+            if let reaction { counts[reaction, default: 0] += value }
         }
         return counts
     }

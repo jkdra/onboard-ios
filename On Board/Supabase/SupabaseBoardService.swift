@@ -154,7 +154,14 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
             let imageAspectRatio: Double?
         }
 
-        struct InsertedID: Decodable { let id: UUID }
+        struct InsertedID: Decodable {
+            let id: UUID
+            nonisolated init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                id = try c.decode(UUID.self, forKey: .id)
+            }
+            private enum CodingKeys: String, CodingKey { case id }
+        }
 
         let inserted: InsertedID = try await client
             .from("posts")
@@ -311,18 +318,20 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         bio: String?,
         avatarUrl: String?
     ) async throws -> Profile {
-        struct Update: Encodable {
-            let displayName: String
-            let handle: String
-            let bio: String?
-            let avatarUrl: String?
+        struct Params: Encodable {
+            let pDisplayName: String
+            let pHandle: String
+            let pBio: String?
+            let pAvatarUrl: String?
         }
 
         let profile: Profile = try await client
-            .from("profiles")
-            .update(Update(displayName: displayName, handle: handle, bio: bio, avatarUrl: avatarUrl))
-            .eq("id", value: id.uuidString)
-            .select()
+            .rpc("update_profile", params: Params(
+                pDisplayName: displayName,
+                pHandle: handle,
+                pBio: bio,
+                pAvatarUrl: avatarUrl
+            ))
             .single()
             .execute()
             .value

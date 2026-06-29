@@ -16,12 +16,26 @@ struct OnboardingProfileStepView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
     @State private var isUploadingPhoto = false
+    @State private var photoUploadFailed = false
     @FocusState private var focus: Field?
 
     private enum Field { case displayName, bio }
 
+    private let displayNameLimit = 50
+    private let bioLimit = 300
+
     private var canContinue: Bool {
-        !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !onboarding.isSubmitting
+        !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !onboarding.isSubmitting
+            && displayName.count <= displayNameLimit
+            && bio.count <= bioLimit
+    }
+
+    private func charCountColor(count: Int, limit: Int) -> Color {
+        let ratio = Double(count) / Double(limit)
+        if ratio >= 1.0 { return .red }
+        if ratio >= 0.8 { return .orange }
+        return .secondary
     }
 
     var body: some View {
@@ -31,15 +45,33 @@ struct OnboardingProfileStepView: View {
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
 
-                TextField("Display name", text: $displayName, axis: .vertical)
-                    .fontStyle(.largeTitle)
-                    .lineLimit(1...2)
-                    .focused($focus, equals: .displayName)
+                VStack(alignment: .trailing, spacing: 2) {
+                    TextField("Display name", text: $displayName, axis: .vertical)
+                        .fontStyle(.largeTitle)
+                        .lineLimit(1...2)
+                        .focused($focus, equals: .displayName)
+                    if displayName.count >= Int(Double(displayNameLimit) * 0.8) {
+                        Text("\(displayName.count)/\(displayNameLimit)")
+                            .fontStyle(.caption2)
+                            .foregroundStyle(charCountColor(count: displayName.count, limit: displayNameLimit))
+                            .monospacedDigit()
+                            .animation(.easeInOut(duration: 0.15), value: displayName.count)
+                    }
+                }
 
-                TextField("A short bio", text: $bio, axis: .vertical)
-                    .lineLimit(2...5)
-                    .focused($focus, equals: .bio)
-                    .fontStyle(.body)
+                VStack(alignment: .trailing, spacing: 2) {
+                    TextField("A short bio", text: $bio, axis: .vertical)
+                        .lineLimit(2...5)
+                        .focused($focus, equals: .bio)
+                        .fontStyle(.body)
+                    if bio.count >= Int(Double(bioLimit) * 0.8) {
+                        Text("\(bio.count)/\(bioLimit)")
+                            .fontStyle(.caption2)
+                            .foregroundStyle(charCountColor(count: bio.count, limit: bioLimit))
+                            .monospacedDigit()
+                            .animation(.easeInOut(duration: 0.15), value: bio.count)
+                    }
+                }
 
                 Divider()
 
@@ -53,15 +85,16 @@ struct OnboardingProfileStepView: View {
                         // SwiftUI re-evaluates body on every state change, so captures stay fresh.
                         let photoData = selectedPhotoData
                         let uploading = isUploadingPhoto
+                        let hasPhoto = photoData != nil && avatarUrl != nil
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             ZStack {
                                 Circle()
-                                    .fill(.thinMaterial)
+                                    .fill(Color(.secondarySystemFill))
                                     .frame(width: 64, height: 64)
                                     .overlay(
                                         Circle().stroke(
-                                            photoData != nil ? Color.accentColor : Color.secondary.opacity(0.25),
-                                            lineWidth: photoData != nil ? 2 : 1
+                                            hasPhoto ? Color.primary.opacity(0.5) : Color.secondary.opacity(0.3),
+                                            lineWidth: 1
                                         )
                                     )
 
@@ -71,26 +104,42 @@ struct OnboardingProfileStepView: View {
                                         .scaledToFill()
                                         .frame(width: 64, height: 64)
                                         .clipShape(Circle())
-                                } else if uploading {
+                                        .opacity(uploading ? 0.5 : 1)
+                                }
+
+                                if uploading {
                                     ProgressView()
-                                } else {
+                                } else if photoData == nil {
                                     Image(systemName: "person.circle.fill")
-                                        .font(.system(.largeTitle))
+                                        .resizable()
+                                        .scaledToFit()
+                                        .frame(width: 30, height: 30)
                                         .foregroundStyle(Color.secondary.opacity(0.5))
                                 }
                             }
                         }
                         .buttonStyle(.plain)
 
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(selectedPhotoData != nil ? "Photo selected" : "Add a photo")
-                                .fontStyle(.subheadline)
-                                .foregroundStyle(selectedPhotoData != nil ? .primary : .secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if uploading {
+                                Text("Uploading…")
+                                    .fontStyle(.subheadline)
+                                    .foregroundStyle(.secondary)
+                            } else if photoUploadFailed {
+                                Label("Upload failed — try a different photo", systemImage: "exclamationmark.triangle.fill")
+                                    .fontStyle(.footnote)
+                                    .foregroundStyle(.orange)
+                            } else {
+                                Text(hasPhoto ? "Photo selected" : "Add a photo")
+                                    .fontStyle(.subheadline)
+                                    .foregroundStyle(hasPhoto ? .primary : .secondary)
+                            }
                             if selectedPhotoData != nil {
                                 Button("Remove") {
                                     selectedPhotoData = nil
                                     selectedPhotoItem = nil
                                     avatarUrl = nil
+                                    photoUploadFailed = false
                                 }
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.secondary)
@@ -108,18 +157,18 @@ struct OnboardingProfileStepView: View {
                         )
                     }
                 } label: {
-                    if onboarding.isSubmitting {
-                        ProgressView().tint(.white)
-                    } else {
-                        Label("Continue", systemImage: "arrow.right")
-                    }
+                    LoadingButtonLabel("Continue", systemImage: "arrow.right", isLoading: onboarding.isSubmitting)
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(!canContinue)
             }
             .safeAreaPadding(.horizontal)
         }
+        .scrollDismissesKeyboard(.interactively)
+        .disabled(onboarding.isSubmitting)
+        .keyboardDoneToolbar()
         .navigationTitle("Set up your profile")
+        .navigationBarTitleDisplayMode(.large)
         .onAppear {
             if displayName.isEmpty {
                 displayName = onboarding.status?.displayName ?? ""
@@ -128,9 +177,12 @@ struct OnboardingProfileStepView: View {
                 bio = onboarding.status?.bio ?? ""
             }
             avatarUrl = onboarding.status?.avatarUrl
-            focus = .displayName
+            if displayName.isEmpty {
+                focus = .displayName
+            }
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
+            photoUploadFailed = false
             Task { await loadAndUploadPhoto(newItem) }
         }
     }
@@ -156,8 +208,10 @@ struct OnboardingProfileStepView: View {
                 .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: true))
             let publicURL = try client.storage.from("avatars").getPublicURL(path: path)
             avatarUrl = publicURL.absoluteString
+            photoUploadFailed = false
         } catch {
             avatarUrl = nil
+            photoUploadFailed = true
         }
     }
 }

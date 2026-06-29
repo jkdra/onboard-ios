@@ -82,30 +82,38 @@ extension PostDetailView {
     @ViewBuilder
     var postContent: some View {
         let livePost = livePost
-        NavigationLink(value: BoardRoute.profile(authorProfile)) {
-            HStack(spacing: 10) {
-                AvatarView(profile: authorProfile, size: .small)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(authorProfile.displayName)
-                        .fontStyle(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                    Text("@\(authorProfile.handle)")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
+        HStack(spacing: 10) {
+            NavigationLink(value: BoardRoute.profile(authorProfile)) {
+                HStack(spacing: 10) {
+                    AvatarView(profile: authorProfile, size: .small)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(authorProfile.displayName)
+                            .fontStyle(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Text("@\(authorProfile.handle)")
+                            .fontStyle(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
+                .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
             }
-            .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 8)
+
+            Text(livePost.createdAt.boardRelativeAge)
+                .fontStyle(.caption)
+                .foregroundStyle(.secondary)
         }
-        .buttonStyle(.plain)
 
         VStack(alignment: .leading, spacing: 8) {
             Text(livePost.title)
                 .fontStyle(.largeTitle)
-                .matchedGeometryEffect(id: "postTitle", in: postNamespace, anchor: .leading)
+                .matchedGeometryEffect(id: "postTitle", in: postNamespace, properties: .position, anchor: .leading)
             Text(livePost.description)
                 .fontStyle(.body)
-                .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
+                .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .overlay {
@@ -120,21 +128,23 @@ extension PostDetailView {
                 .allowsHitTesting(false)
                 .position(heartTapLocation)
         }
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                .onChanged { value in heartTapLocation = value.startLocation }
+        // A single SpatialTapGesture carries both the count and the tap location, so the
+        // separate min-distance-0 drag (which was cancelling the double-tap) is gone.
+        .gesture(
+            SpatialTapGesture(count: 2, coordinateSpace: .local)
+                .onEnded { value in
+                    guard !isReadOnly else { return }
+                    heartTapLocation = value.location
+                    guard store.userReaction(for: livePost.id) != .like else { return }
+                    store.setReaction(postId: livePost.id, reaction: .like)
+                    heartRotation = Double.random(in: -5...5)
+                    showHeartBurst = true
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(700))
+                        showHeartBurst = false
+                    }
+                }
         )
-        .onTapGesture(count: 2) {
-            guard !isReadOnly else { return }
-            guard store.userReaction(for: livePost.id) != .like else { return }
-            store.setReaction(postId: livePost.id, reaction: .like)
-            heartRotation = Double.random(in: -5...5)
-            showHeartBurst = true
-            Task {
-                try? await Task.sleep(for: .milliseconds(700))
-                showHeartBurst = false
-            }
-        }
 
         if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
             Button { showImageViewer = true } label: {
@@ -155,10 +165,20 @@ extension PostDetailView {
     var commentsSection: some View {
         let livePost = livePost
         let comments = store.comments(for: livePost.id)
-        Text("Comments")
-            .fontStyle(.title3)
-            .foregroundStyle(.primary)
-            .opacity(isCommentEditing ? 0.32 : 1)
+        let commentCount = comments.reduce(0) { $0 + $1.threadCount }
+        HStack(spacing: 6) {
+            Text("Comments")
+                .fontStyle(.title3)
+                .foregroundStyle(.primary)
+            if commentCount > 0 {
+                Text("\(commentCount)")
+                    .fontStyle(.title3)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+            }
+        }
+        .opacity(isCommentEditing ? 0.32 : 1)
 
         if !isReadOnly {
             NewCommentComposer(
@@ -170,7 +190,11 @@ extension PostDetailView {
             )
         }
 
-        if comments.isEmpty {
+        if isLoadingComments && comments.isEmpty {
+            ProgressView()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+        } else if comments.isEmpty {
             Text("no comments yet. start the thread.")
                 .fontStyle(.subheadline)
                 .foregroundStyle(.secondary)
@@ -194,7 +218,7 @@ extension PostDetailView {
                         },
                         onCancelReply: { replyingToCommentID = nil },
                         onDelete: { commentID in
-                            Task { await store.deleteComment(postID: livePost.id, commentID: commentID) }
+                            commentPendingDeletion = commentID
                         }
                     )
                 }
@@ -282,4 +306,10 @@ extension PostDetailView {
             .transition(.opacity)
         }
     }
+}
+
+// Total comments in a subtree (a top-level comment plus all nested replies), used for
+// the "Comments N" header count.
+private extension Comment {
+    var threadCount: Int { 1 + replies.reduce(0) { $0 + $1.threadCount } }
 }

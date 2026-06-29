@@ -588,7 +588,7 @@ struct MockOnboardingServiceTests {
         #expect(status.onboardingStep == .schoolVerify)
 
         _ = try await onboarding.beginSchoolEmailVerification("student@example.edu")
-        _ = try await onboarding.completeSchoolEmailVerification("student@example.edu")
+        _ = try await onboarding.completeSchoolEmailVerification("student@example.edu", token: "123456")
         status = try await onboarding.fetchStatus()
         #expect(status.onboardingStep == .waitlist)
 

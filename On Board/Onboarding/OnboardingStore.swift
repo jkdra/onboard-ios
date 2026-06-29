@@ -221,18 +221,6 @@ final class OnboardingStore {
 
         do {
             _ = try await service.beginSchoolEmailVerification(email)
-            do {
-                try await auth.sendSchoolEmailVerification(to: email)
-            } catch {
-                setLastError(
-                    message: """
-                    Your school was saved, but the verification email could not be sent. \
-                    Tap send again to retry.
-                    """,
-                    recovery: String(localized: "Tap send again to retry.")
-                )
-                return false
-            }
             await refresh(force: true)
             return true
         } catch let error as OnboardingError where error == .notAuthenticated {
@@ -258,20 +246,7 @@ final class OnboardingStore {
         defer { isSubmitting = false }
 
         do {
-            try await auth.verifySchoolEmailOTP(email: email, token: code)
-            do {
-                _ = try await service.completeSchoolEmailVerification(email)
-            } catch {
-                setLastError(
-                    message: """
-                    Your email was verified, but we couldn't finish linking your school. \
-                    Try again — your code may still work if you resend.
-                    """,
-                    recovery: String(localized: "Try again, or resend the verification code.")
-                )
-                await refresh(force: true)
-                return false
-            }
+            _ = try await service.completeSchoolEmailVerification(email, token: code)
             await refresh(force: true)
             return status?.onboardingStep == .waitlist || status?.isComplete == true
         } catch let error as OnboardingError where error == .notAuthenticated {

@@ -16,6 +16,10 @@ struct RootView: View {
 
     @State private var didBootstrap = false
 
+    #if DEBUG
+    @State private var devForceOnboarding = false
+    #endif
+
     private var requiresNetwork: Bool {
         AppConfiguration.current.isSupabaseConfigured
     }
@@ -56,11 +60,36 @@ struct RootView: View {
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshIfOnline() }
         }
+        #if DEBUG
+        .overlay(alignment: .bottomTrailing) { developerOverrideButton }
+        #endif
     }
+
+    #if DEBUG
+    private var developerOverrideButton: some View {
+        Button {
+            withAnimation(.smooth) { devForceOnboarding.toggle() }
+        } label: {
+            Label(devForceOnboarding ? "Exit Override" : "Developer Override",
+                  systemImage: devForceOnboarding ? "xmark" : "hammer.fill")
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+        .tint(.primary)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 4)
+        .opacity(0.85)
+    }
+    #endif
 
     @ViewBuilder
     private var mainContent: some View {
-        if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
+        if debugForceOnboarding {
+            // DEBUG: walk the real onboarding screens with on-screen Next/Back.
+            OnboardingCoordinator(devDriven: true)
+        } else if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
             onboardingErrorView(message)
         } else if auth.isSignedIn, onboarding.isComplete {
             BoardListView()
@@ -69,6 +98,14 @@ struct RootView: View {
             // The coordinator owns SignInView at its root and handles all transitions internally.
             OnboardingCoordinator()
         }
+    }
+
+    private var debugForceOnboarding: Bool {
+        #if DEBUG
+        devForceOnboarding
+        #else
+        false
+        #endif
     }
 
     /// One orchestration path per auth/onboarding change — avoids duplicate refresh RPCs.
@@ -94,6 +131,7 @@ struct RootView: View {
             await onboarding.refresh()
             if onboarding.isComplete {
                 await syncBoardState()
+                store.restartReactionRealtime()
             }
         }
     }

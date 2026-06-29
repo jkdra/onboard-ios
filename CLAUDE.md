@@ -19,6 +19,11 @@ xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPh
 xcodebuild test -scheme "On Board" -destination "platform=iOS Simulator,name=iPhone 16 Pro,OS=18.5" -only-testing "On BoardTests/OnboardingStoreTests/refreshMarksCompleteForSampleAppleUser"
 ```
 
+> **Destination gotcha:** if `name=iPhone 16 Pro,OS=18.5` fails with "Unable to find a
+> device matching the provided destination specifier", there are duplicate simulators
+> with that name. List them with `xcrun simctl list devices available` and pass a
+> specific `-destination "id=<UDID>"` instead.
+
 The app targets iOS 18+ as its minimum deployment target. iOS 26 APIs (e.g. `glassEffect`) are used where available via `#available(iOS 26.0, *)` guards with fallbacks for older OS versions.
 
 No secrets are required to build. The app runs fully offline with `MockAuthService` and `MockOnboardingService` when `Secrets.xcconfig` is absent. To enable live Supabase: `cp Secrets.xcconfig.example Secrets.xcconfig` and fill in `SUPABASE_URL` / `SUPABASE_ANON_KEY`.
@@ -62,6 +67,14 @@ RootView
 
 ### Database
 Supabase migrations live in `supabase/migrations/`. Board data is fetched via Supabase RPC functions (`fetch_active_board_week`, `fetch_posts_for_week`, `fetch_my_reactions_for_week`). Realtime subscriptions on the `reactions` table merge remote changes without overwriting the current user's local state.
+
+**Migration history (reconciled 2026-06-29):** the folder was collapsed to a single live-matching baseline, `20260629081312_remote_schema.sql`, after a period of ledger drift. The pre-reconciliation files are preserved under `supabase/migrations/_archive_drift_2026-06-29/` (including the old `README_DRIFT` notes) — do not resurrect them. The local folder now matches the remote ledger, so `supabase db pull` and `supabase db push` work normally again; add new changes as fresh timestamped migrations and push through a preview branch. `20260629120000_device_tokens_rls_initplan.sql` is one such pending (not-yet-pushed) migration. Avoid hand-editing the remote migration ledger.
+
+### UI Conventions
+- **In-flight buttons** use `LoadingButtonLabel(_:systemImage:isLoading:)` (a spinner to the left of the title), paired with `.disabled(isLoading)` on the page — never swap the screen for a separate loading view. Spinner tint defaults to `systemBackground` (matches `.boardPrimary`); pass `spinnerTint: .accentColor`/`.primary` for non-filled buttons.
+- **Keyboard dismissal:** attach `.keyboardDoneToolbar()` (adds a "Done" key accessory) and `.scrollDismissesKeyboard(.interactively)` to any screen hosting text input. Both route through `KeyboardDismisser.dismiss()` (see `Extensions/View+KeyboardDismiss.swift`), which resigns first responder app-wide — no per-field `@FocusState` plumbing needed.
+- **Composed tap gestures:** a double-tap that coexists with drag/magnification gestures must use `SpatialTapGesture(count: 2)` (location + count in one recognizer) or a `.simultaneousGesture(TapGesture(count: 2))` — a plain `.onTapGesture(count: 2)` loses gesture arbitration and silently never fires.
+- **Auth → onboarding transition:** a fresh interactive sign-in keeps `SignInView` in place (form disabled, tapped button spinning) until status resolves; only a silent cold-launch `restoreSession` shows the covering loader (`OnboardingCoordinator.interactiveSignIn` gates this — interactive sign-ins pass through `.signingIn`, restore does not).
 
 ### Push Notifications
 Push is delivered via APNs using a `.p8` key stored as a Supabase Edge Function secret. The `send-notifications` Edge Function handles four triggers fired by `pg_cron` jobs:

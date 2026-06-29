@@ -163,17 +163,6 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         try await restoreSession()
     }
 
-    func sendSchoolEmailVerification(to email: String) async throws {
-        _ = email
-        try await Task.sleep(for: .milliseconds(250))
-    }
-
-    func verifySchoolEmailOTP(email: String, token: String) async throws {
-        _ = email
-        _ = token
-        try await Task.sleep(for: .milliseconds(250))
-    }
-
     func signOut() async throws {
         defaults.removeObject(forKey: sessionKey)
     }

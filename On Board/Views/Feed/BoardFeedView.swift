@@ -19,7 +19,7 @@ struct BoardFeedView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("rotationEnabled") private var rotationEnabled: Bool = true
+    @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.6
 
     @State private var appeared = false
     @State private var rotations: [String: Double] = [:]
@@ -53,7 +53,7 @@ struct BoardFeedView: View {
             recomputeColumnsIfNeeded()
             appeared = true
         }
-        .onChange(of: items.count) { _, _ in
+        .onChange(of: items) { _, _ in
             seedRotationsForNewItems()
             recomputeColumns()
         }
@@ -94,7 +94,7 @@ struct BoardFeedView: View {
 
     @ViewBuilder
     private func masonryCell(item: FeedItem, animationIndex: Int, isLeadingColumn: Bool) -> some View {
-        let rot = useRotation ? rotation(for: item) : 0
+        let rot = useRotation ? rotation(for: item) * rotationIntensity : 0
         let flyX: CGFloat = isLeadingColumn ? -320 : 320
         feedItemView(for: item, cardRotation: rot, isLeadingColumn: isLeadingColumn)
             .rotationEffect(.degrees(rot))
@@ -174,7 +174,7 @@ struct BoardFeedView: View {
     // MARK: - Rotation
 
     private var useRotation: Bool {
-        rotationEnabled && !typeSize.isAccessibilitySize && !reduceMotion
+        rotationIntensity > 0 && !typeSize.isAccessibilitySize && !reduceMotion
     }
 
     private func rotation(for item: FeedItem) -> Double {

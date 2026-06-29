@@ -11,6 +11,9 @@ import UIKit
 import ImageIO
 import UniformTypeIdentifiers
 
+// Pure, stateless image utilities. Marked `nonisolated` so the CPU-heavy encode/resize can
+// run off the main actor (this project defaults to MainActor isolation, which would otherwise
+// pin these to the main thread and hitch the UI during a post).
 enum ImageEncoder {
     /// Encode a UIImage to WebP data.
     /// - Parameters:
@@ -18,7 +21,7 @@ enum ImageEncoder {
     ///   - quality: Lossy quality 0–1. 0.82 is a good default for photo content.
     ///   - maxDimension: Long edge cap in pixels. Downscales before encoding.
     /// - Returns: WebP data, or nil if encoding fails.
-    static func webpData(
+    nonisolated static func webpData(
         from image: UIImage,
         quality: CGFloat = 0.82,
         maxDimension: CGFloat = 2048
@@ -46,7 +49,7 @@ enum ImageEncoder {
 
     /// Extract the aspect ratio (width / height) from raw image data without
     /// fully decoding the image — fast enough to call before uploading.
-    static func aspectRatio(of data: Data) -> Double? {
+    nonisolated static func aspectRatio(of data: Data) -> Double? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let w = props[kCGImagePropertyPixelWidth] as? Double,
@@ -58,13 +61,13 @@ enum ImageEncoder {
 
 private extension UIImage {
     /// Re-draw into a .up orientation so CGImageDestination doesn't need EXIF.
-    func normalized() -> UIImage {
+    nonisolated func normalized() -> UIImage {
         guard imageOrientation != .up else { return self }
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
     }
 
-    func scaledDown(toMaxDimension maxDim: CGFloat) -> UIImage {
+    nonisolated func scaledDown(toMaxDimension maxDim: CGFloat) -> UIImage {
         let longest = max(size.width, size.height)
         guard longest > maxDim else { return self }
         let scale = maxDim / longest

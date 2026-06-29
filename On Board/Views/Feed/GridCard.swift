@@ -8,16 +8,17 @@ import SwiftUI
 struct GridCard: View {
     let post: Post
     var userReaction: Reaction?
+    var currentUser: Profile?
+    var authorProfile: Profile
     var cardNamespace: Namespace.ID? = nil
     var cardRotation: Double = 0
+    var rotationIntensity: Double = 0.6
     var isLeadingColumn: Bool = false
     var columnWidth: CGFloat = 0
 
-    @Environment(BoardStore.self) private var store
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage("rotationEnabled") private var rotationEnabled: Bool = true
 
     private let peekAmount: CGFloat = 16
 
@@ -28,14 +29,6 @@ struct GridCard: View {
 
     var body: some View {
         cardView
-            .overlay(alignment: stickerCorner.alignment) {
-                if let reaction = userReaction, let user = store.currentUser {
-                    ReactionStickerPill(reaction: reaction, profile: user, tone: tone)
-                        .offset(x: stickerCorner.overhangX, y: stickerCorner.overhangY)
-                        .rotationEffect(.degrees(pillRotation))
-                        .allowsHitTesting(false)
-                }
-            }
     }
 
     @ViewBuilder
@@ -43,11 +36,27 @@ struct GridCard: View {
         if post.hasImage {
             imageBundle
         } else {
-            postCardContent
-                .frame(height: cardHeight)
-                .background(cardBackground)
-                .animation(.smooth(duration: 0.35), value: post.tone)
+            textCard
                 .matchedTransitionSource(id: post.id, in: cardNamespace)
+                .overlay(alignment: stickerCorner.alignment) { stickerPill }
+        }
+    }
+
+    private var textCard: some View {
+        postCardContent
+            .frame(height: cardHeight)
+            .background(cardBackground)
+            .animation(.smooth(duration: 0.35), value: post.tone)
+    }
+
+    @ViewBuilder
+    private var stickerPill: some View {
+        if let reaction = userReaction, let user = currentUser {
+            ReactionStickerPill(reaction: reaction, profile: user, tone: tone)
+                .offset(x: stickerCorner.overhangX, y: stickerCorner.overhangY)
+                .rotationEffect(.degrees(pillRotation))
+                .transition(.identity)
+                .allowsHitTesting(false)
         }
     }
 
@@ -87,8 +96,8 @@ struct GridCard: View {
     }
 
     private var pillRotation: Double {
-        guard rotationEnabled && !typeSize.isAccessibilitySize && !reduceMotion else { return 0 }
-        return stickerCorner.pillRotationAngle
+        guard rotationIntensity > 0 && !typeSize.isAccessibilitySize && !reduceMotion else { return 0 }
+        return stickerCorner.pillRotationAngle * rotationIntensity
     }
 
     // MARK: - Stacked bundle (image on top, post card peeking below)
@@ -98,17 +107,15 @@ struct GridCard: View {
             imageCard
                 .rotationEffect(.degrees(imageCounterRotation))
 
-            postCardContent
-                .frame(height: cardHeight)
-                .background(cardBackground)
+            textCard
+                .overlay(alignment: stickerCorner.alignment) { stickerPill }
                 .zIndex(1)
-                .animation(.smooth(duration: 0.35), value: post.tone)
         }
         .matchedTransitionSource(id: post.id, in: cardNamespace)
     }
 
     private var imageCounterRotation: Double {
-        guard rotationEnabled && !reduceMotion else { return 0 }
+        guard rotationIntensity > 0 && !reduceMotion else { return 0 }
         return -cardRotation
     }
 
@@ -128,13 +135,15 @@ struct GridCard: View {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(tone.color.opacity(0.10))
                 }
+                .padding(.horizontal, 8)
                 .animation(.smooth(duration: 0.35), value: post.tone)
         }
     }
 
     private var imageCardHeight: CGFloat {
-        guard let ratio = post.imageAspectRatio, ratio > 0, columnWidth > 0 else { return 200 }
-        return min(columnWidth / CGFloat(ratio), 300)
+        let effectiveWidth = max(columnWidth - 16, 0)
+        guard let ratio = post.imageAspectRatio, ratio > 0, effectiveWidth > 0 else { return 164 }
+        return min(effectiveWidth / CGFloat(ratio), 248)
     }
 
     // MARK: - Post card content
@@ -146,7 +155,9 @@ struct GridCard: View {
                 .fontWeight(.heavy)
                 .foregroundStyle(.primary)
             Text(post.description)
-                .fontStyle(.subheadline)
+                .font(.custom("ZalandoSansSemiExpanded-Regular", size: 14, relativeTo: .callout))
+                .fontWeight(.regular)
+                .opacity(0.8)
                 .foregroundStyle(.secondary)
                 .lineLimit(4)
                 .truncationMode(.tail)
@@ -158,15 +169,16 @@ struct GridCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    // Feed cards show a timestamp instead of the author — anonymous at a glance. The
+    // opened post detail still shows the author + profile link.
     private var cardAuthorRow: some View {
-        let profile = store.profile(forAuthor: post.author)
-        return HStack(spacing: 6) {
-            AvatarView(profile: profile, size: .xsmall)
-            Text(profile.displayName)
-                .fontStyle(.caption2)
-                .foregroundStyle(.secondary)
+        HStack(spacing: 4) {
+            Image(systemName: "clock")
+            Text(post.createdAt.boardRelativeAge)
                 .lineLimit(1)
         }
+        .fontStyle(.caption2)
+        .foregroundStyle(.secondary)
     }
 
     // MARK: - Reactions row (always top 3 by count; user's reaction shown via sticker pill only)
@@ -245,8 +257,8 @@ private struct ReactionStickerPill: View {
             Text(reaction.emoji)
                 .font(.system(size: 11))
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 3)
+//        .padding(.horizontal, 6)
+        .padding(3)
         .background(Capsule(style: .continuous).fill(tone.color))
         .allowsHitTesting(false)
     }
@@ -267,42 +279,22 @@ struct FeedGridCard: View {
     var isLeadingColumn: Bool = false
     var columnWidth: CGFloat = 0
     @Environment(BoardStore.self) private var store
+    @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.6
 
     var body: some View {
         if let proxy = store.postProxies[postID] {
             GridCard(
                 post: proxy.post,
                 userReaction: proxy.reaction,
+                currentUser: store.currentUser,
+                authorProfile: store.profile(forAuthor: proxy.post.author),
                 cardNamespace: cardNamespace,
                 cardRotation: cardRotation,
+                rotationIntensity: rotationIntensity,
                 isLeadingColumn: isLeadingColumn,
                 columnWidth: columnWidth
             )
             .id("\(postID.uuidString)-\(proxy.post.tone.rawValue)")
-        }
-    }
-}
-
-extension Shape {
-    func glassFallback(tone: PostTone) -> some View {
-        self
-            .fill(.ultraThinMaterial)
-            .stroke(tone.color.opacity(0.5), lineWidth: 0.9)
-            .fill(tone.color.opacity(0.20))
-    }
-}
-
-// MARK: - Conditional matchedTransitionSource
-
-extension View {
-    /// Applies matchedTransitionSource only when a namespace is present.
-    /// Used so GridCard can own the zoom-transition source without requiring callers to always provide a namespace.
-    @ViewBuilder
-    func matchedTransitionSource(id: some Hashable, in namespace: Namespace.ID?) -> some View {
-        if let namespace {
-            matchedTransitionSource(id: id, in: namespace)
-        } else {
-            self
         }
     }
 }

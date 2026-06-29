@@ -23,21 +23,26 @@ func uploadPostImageData(
     rawData: Data,
     userID: UUID
 ) async -> UploadedImageResult? {
-    guard let uiImage = UIImage(data: rawData),
-          let webpData = ImageEncoder.webpData(from: uiImage, quality: 0.82, maxDimension: 2048)
-    else { return nil }
+    // Decode + re-orient + downscale + WebP-encode are CPU/memory heavy (a 12MP photo
+    // decodes to ~48MB). Run them OFF the main actor so the composer UI doesn't hitch;
+    // only the lightweight upload await resumes back on the caller's actor.
+    let encoded: (data: Data, ratio: Double)? = await Task.detached(priority: .userInitiated) {
+        guard let uiImage = UIImage(data: rawData),
+              let webpData = ImageEncoder.webpData(from: uiImage, quality: 0.82, maxDimension: 2048)
+        else { return nil }
+        return (webpData, ImageEncoder.aspectRatio(of: webpData) ?? 1.0)
+    }.value
 
-    let ratio = ImageEncoder.aspectRatio(of: webpData)
-
+    guard let encoded else { return nil }
     guard let client = SupabaseClientFactory.client(for: .current) else { return nil }
 
     let path = "\(userID.uuidString)/\(UUID().uuidString).webp"
     do {
         try await client.storage
             .from("post-images")
-            .upload(path, data: webpData, options: FileOptions(contentType: "image/webp", upsert: false))
+            .upload(path, data: encoded.data, options: FileOptions(contentType: "image/webp", upsert: false))
         let publicURL = try client.storage.from("post-images").getPublicURL(path: path)
-        return UploadedImageResult(url: publicURL.absoluteString, aspectRatio: ratio ?? 1.0)
+        return UploadedImageResult(url: publicURL.absoluteString, aspectRatio: encoded.ratio)
     } catch {
         return nil
     }

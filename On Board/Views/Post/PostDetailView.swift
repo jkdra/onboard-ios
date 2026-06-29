@@ -38,8 +38,9 @@ struct PostDetailView: View {
 
     // UI
     @State var showDeleteConfirmation = false
+    @State var commentPendingDeletion: UUID?
     @State var alertError: PresentableAlertError?
-    @State private var clearingBannerText: String?
+    @State var isLoadingComments = false
     @State var showImageViewer = false
     @State var showHeartBurst = false
     @State var heartTapLocation: CGPoint = CGPoint(x: 100, y: 50)
@@ -76,10 +77,6 @@ struct PostDetailView: View {
 
     var authorProfile: Profile {
         store.profile(forAuthor: livePost.author)
-    }
-
-    private func updateClearingBanner() {
-        clearingBannerText = BoardSchedule.finalHourBannerText(weekEnd: store.activeBoardWeek?.endsAt)
     }
 
     var selectedReaction: Binding<Reaction?> {
@@ -124,6 +121,7 @@ struct PostDetailView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .animation(.smooth(duration: 0.3), value: editingCommentID)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background {
             tone.color
                 .opacity(scheme == .dark ? 0.25 : 0.20)
@@ -137,7 +135,11 @@ struct PostDetailView: View {
                 }
         }
         .animation(.smooth(duration: 0.3), value: tone)
-        .task(id: livePost.id) { await store.loadComments(for: livePost.id) }
+        .task(id: livePost.id) {
+            isLoadingComments = true
+            await store.loadComments(for: livePost.id)
+            isLoadingComments = false
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !editMode {
                 PostActionBar(
@@ -150,7 +152,7 @@ struct PostDetailView: View {
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
-            if let text = clearingBannerText {
+            if let text = store.clearingBannerText {
                 HStack(spacing: 8) {
                     Image(systemName: "clock.badge.exclamationmark.fill")
                         .foregroundStyle(.red)
@@ -166,14 +168,7 @@ struct PostDetailView: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .animation(.smooth(duration: 0.3), value: clearingBannerText != nil)
-        .onAppear { updateClearingBanner() }
-        .task {
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                updateClearingBanner()
-            }
-        }
+        .animation(.smooth(duration: 0.3), value: store.clearingBannerText != nil)
         .boardErrorHandling(alertError: $alertError)
         .presentableErrorAlert(error: $alertError)
         .confirmationDialog(
@@ -188,9 +183,26 @@ struct PostDetailView: View {
         } message: {
             Text("This permanently removes the post and its comments.")
         }
+        .confirmationDialog(
+            "Delete this comment?",
+            isPresented: Binding(
+                get: { commentPendingDeletion != nil },
+                set: { if !$0 { commentPendingDeletion = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: commentPendingDeletion
+        ) { commentID in
+            Button("Delete Comment", role: .destructive) {
+                Task { await store.deleteComment(postID: livePost.id, commentID: commentID) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("This also removes any replies to it.")
+        }
         .navigationBarTitleDisplayMode(.inline)
         .navigationBackDisabled(editMode)
         .toolbar { toolbarContent }
+        .keyboardDoneToolbar()
         .fullScreenCover(isPresented: $showImageViewer) {
             if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
                 ImageViewerView(url: url)

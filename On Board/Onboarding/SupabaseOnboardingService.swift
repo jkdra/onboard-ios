@@ -104,24 +104,35 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         guard SchoolEmailRules.isValid(normalized) else {
             throw OnboardingError.invalidSchoolEmail
         }
-
         let client = try requireClient()
-        let rows: [SchoolMatch] = try await client
-            .rpc("begin_school_email_verification", params: ["p_email": normalized])
-            .execute()
-            .value
-
-        guard let match = rows.first else {
-            throw OnboardingError.schoolUnsupported
+        do {
+            let match: SchoolMatch = try await client.functions.invoke(
+                "send-school-otp",
+                options: FunctionInvokeOptions(body: ["email": normalized]),
+                decoder: BoardJSON.decoder
+            )
+            return match
+        } catch let error as FunctionsError {
+            if case .httpError(let code, _) = error {
+                switch code {
+                case 400: throw OnboardingError.invalidSchoolEmail
+                case 422: throw OnboardingError.schoolUnsupported
+                default: break
+                }
+            }
+            throw OnboardingError.unknown(error.localizedDescription)
         }
-        return match
     }
 
-    func completeSchoolEmailVerification(_ email: String) async throws -> OnboardingStep {
+    func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep {
         let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let client = try requireClient()
         let step: OnboardingStep = try await client
-            .rpc("complete_school_email_verification", params: ["p_email": normalized])
+            .rpc("complete_school_email_verification_v2", params: [
+                "p_email": normalized,
+                "p_token": trimmedToken
+            ])
             .execute()
             .value
         return step

@@ -48,6 +48,16 @@ struct Profile: Identifiable, Hashable, Codable {
         self.joinedAt = joinedAt
     }
 
+    nonisolated init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        handle = try c.decode(String.self, forKey: .handle)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        bio = try c.decodeIfPresent(String.self, forKey: .bio)
+        avatarUrl = try c.decodeIfPresent(String.self, forKey: .avatarUrl)
+        joinedAt = try c.decode(Date.self, forKey: .joinedAt)
+    }
+
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }

@@ -28,7 +28,7 @@ enum NavigationBarAppearance {
             appearance.titleTextAttributes = [.font: titleFont]
 
             let buttonAppearance = UIBarButtonItemAppearance()
-            buttonAppearance.normal.titleTextAttributes = [.font: buttonFont]
+            buttonAppearance.normal.titleTextAttributes = [.font: buttonFont, .foregroundColor: UIColor.label]
             appearance.buttonAppearance = buttonAppearance
         }
 
@@ -45,8 +45,10 @@ enum NavigationBarAppearance {
         navigationBar.compactAppearance = standard
         navigationBar.scrollEdgeAppearance = scrollEdge
 
+        UIView.appearance().tintColor = UIColor(named: "AccentColor")
+
         UIBarButtonItem.appearance().setTitleTextAttributes(
-            [.font: titleFont],
+            [.font: titleFont, .foregroundColor: UIColor.label],
             for: .normal
         )
     }

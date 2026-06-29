@@ -6,11 +6,13 @@
 import GoogleSignIn
 import SwiftUI
 
-let fontName: String = "ZalandoSansExpanded-Regular"
-
 private enum AppLaunchContext {
     static var isPreview: Bool {
-        ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+        let env = ProcessInfo.processInfo.environment
+        // XCODE_RUNNING_FOR_PREVIEWS = legacy/static previews
+        // XCODE_RUNNING_FOR_PLAYGROUNDS = JIT previews (iOS 16+, Xcode 15+)
+        return env["XCODE_RUNNING_FOR_PREVIEWS"] == "1"
+            || env["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
     }
 
     static var boardStore: BoardStore {
@@ -60,6 +62,7 @@ struct On_BoardApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                .tint(Color(UIColor(named: "AccentColor") ?? .label))
                 .environment(store)
                 .environment(auth)
                 .environment(onboarding)
