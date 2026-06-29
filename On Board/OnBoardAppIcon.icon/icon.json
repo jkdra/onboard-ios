@@ -1,20 +1,70 @@
 {
-  "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
     "linear-gradient" : [
-      "display-p3:0.98783,0.94095,0.86922,1.00000",
-      "display-p3:0.95783,0.92960,0.80889,1.00000"
+      "extended-gray:1.00000,1.00000",
+      "display-p3:0.91991,0.92685,0.96783,1.00000"
     ]
   },
   "groups" : [
     {
-      "hidden" : true,
       "layers" : [
         {
-          "image-name" : "Artboard2@3x.png",
-          "name" : "Artboard2@3x",
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:0.00000,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "extended-gray:0.00000,1.00000"
+              }
+            }
+          ],
+          "image-name" : "White Note.svg",
+          "name" : "White Note",
           "position" : {
-            "scale" : 0.5,
+            "scale" : 0.24,
+            "translation-in-points" : [
+              -25.3984375,
+              -26.5078125
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.6
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.4
+      }
+    },
+    {
+      "layers" : [
+        {
+          "fill-specializations" : [
+            {
+              "appearance" : "dark",
+              "value" : {
+                "solid" : "extended-gray:1.00000,1.00000"
+              }
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "extended-gray:1.00000,1.00000"
+              }
+            }
+          ],
+          "hidden" : false,
+          "image-name" : "Shadow.svg",
+          "name" : "Shadow",
+          "position" : {
+            "scale" : 0.24,
             "translation-in-points" : [
               0,
               0
@@ -24,120 +74,22 @@
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.6
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.5
+        "value" : 0.3
       }
     },
     {
-      "blur-material" : 0.1,
-      "hidden" : false,
-      "layers" : [
-        {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "display-p3:0.43604,0.60596,0.72461,1.00000"
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "display-p3:0.47442,0.47730,0.50062,1.00000"
-              }
-            }
-          ],
-          "hidden" : false,
-          "image-name" : "BlueRect 2.svg",
-          "name" : "BlueRect 2",
-          "position" : {
-            "scale" : 0.52,
-            "translation-in-points" : [
-              -113.99909068336365,
-              -73.710341549605
-            ]
-          }
-        }
-      ],
-      "position" : {
-        "scale" : 1,
-        "translation-in-points" : [
-          0,
-          0
-        ]
-      },
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.52
-      }
-    },
-    {
-      "blur-material" : 0,
-      "hidden" : false,
-      "layers" : [
-        {
-          "fill-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : {
-                "solid" : "display-p3:0.98926,0.93896,0.86914,1.00000"
-              }
-            },
-            {
-              "appearance" : "tinted",
-              "value" : {
-                "solid" : "display-p3:0.94178,0.96783,0.90407,1.00000"
-              }
-            }
-          ],
-          "image-name" : "BlackRect 2.svg",
-          "name" : "BlackRect 2",
-          "position" : {
-            "scale" : 0.52,
-            "translation-in-points" : [
-              98.98308431231771,
-              69.25014475173953
-            ]
-          }
-        }
-      ],
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.5
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.56
-      }
-    },
-    {
-      "blur-material" : null,
-      "hidden" : false,
       "layers" : [
         {
           "glass" : false,
           "hidden" : false,
-          "image-name" : "notepad lines.svg",
-          "name" : "notepad lines",
-          "opacity-specializations" : [
-            {
-              "appearance" : "dark",
-              "value" : 0.15
-            },
-            {
-              "appearance" : "tinted",
-              "value" : 0.1
-            }
-          ],
+          "image-name" : "3 – Layer.svg",
+          "name" : "3 – Layer",
           "position" : {
-            "scale" : 0.51,
+            "scale" : 0.255,
             "translation-in-points" : [
               0,
               0
@@ -147,11 +99,11 @@
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.5
+        "opacity" : 0.6
       },
       "translucency" : {
-        "enabled" : false,
-        "value" : 0.5
+        "enabled" : true,
+        "value" : 0.2
       }
     }
   ],
