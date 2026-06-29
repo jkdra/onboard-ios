@@ -18,12 +18,10 @@ xcuserdata/
 # Local API keys — copy Secrets.xcconfig.example → Secrets.xcconfig
 Secrets.xcconfig
 
-# Supabase CLI (machine-local link state; never commit)
-supabase/.temp/
-supabase/.branches/
-
-# Local backup of pre-reconciliation migrations (kept on disk, not in the repo)
-supabase/migrations/_archive_drift_2026-06-29/
+# Backend is intentionally NOT version-controlled in this repo.
+# The Supabase schema, RLS policies, migrations, and edge functions are kept
+# local-only so the backend can't be reconstructed from the public app code.
+supabase/
 
 # Environment overrides
 .env
