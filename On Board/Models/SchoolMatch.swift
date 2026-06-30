@@ -5,7 +5,10 @@
 
 import Foundation
 
-struct SchoolMatch: Equatable, Codable, Sendable {
+// nonisolated so its synthesized Codable conformance isn't main-actor-isolated
+// (the project defaults to MainActor isolation, but this is a pure data model that
+// the Supabase SDK decodes off the main actor). See project concurrency notes.
+nonisolated struct SchoolMatch: Equatable, Codable, Sendable {
     let domain: String
     let schoolName: String
     let boardId: UUID
