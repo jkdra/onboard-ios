@@ -139,10 +139,12 @@ struct SignInView: View {
                         color: .black.opacity(scheme == .dark ? 0.45 : 0.14),
                         radius: 14, x: 0, y: 7
                     )
-                Image(systemName: "pin.fill")
-                    .font(.title.weight(.bold))
-                    .foregroundStyle(.tint)
-                    .rotationEffect(.degrees(-30))
+                Image("OBLogo")
+                    .renderingMode(.template)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 42, height: 42)
+                    .foregroundStyle(.primary)
             }
             .scaleEffect(appeared ? 1 : 0.55)
             .opacity(appeared ? 1 : 0)

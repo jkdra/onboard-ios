@@ -60,11 +60,21 @@ struct OnboardingWaitlistStepView: View {
                     color: .black.opacity(scheme == .dark ? 0.45 : 0.12),
                     radius: 14, x: 0, y: 7
                 )
-            Image(systemName: hasJoined ? "checkmark.circle.fill" : "pin.fill")
-                .font(.title.weight(.bold))
-                .foregroundStyle(hasJoined ? Color.green : Color.accentColor)
-                .rotationEffect(.degrees(hasJoined ? 0 : -30))
-                .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
+            Group {
+                if hasJoined {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.title.weight(.bold))
+                        .foregroundStyle(.green)
+                } else {
+                    Image("OBLogo")
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 42, height: 42)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
         }
     }
 
