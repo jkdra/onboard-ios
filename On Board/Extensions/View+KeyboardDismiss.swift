@@ -40,6 +40,7 @@ extension View {
                     KeyboardDismisser.dismiss()
                 } label: {
                     Text("Done").fontWeight(.semibold)
+                        .fontStyle(.body)
                 }
                 .accessibilityLabel("Dismiss keyboard")
             }

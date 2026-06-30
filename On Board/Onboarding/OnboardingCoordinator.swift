@@ -76,7 +76,7 @@ struct OnboardingCoordinator: View {
                                 .frame(width: 72, height: 72)
                                 .shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 7)
                             Image("OBLogo")
-                                .renderingMode(.template)
+                                .renderingMode(.original)
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 40, height: 40)
