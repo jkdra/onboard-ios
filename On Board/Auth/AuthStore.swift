@@ -27,6 +27,8 @@ final class AuthStore {
             } else {
                 state = .signedOut
             }
+        } catch let error as AuthError where error == .networkUnavailable {
+            state = .restoreFailedOffline
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -161,7 +163,7 @@ final class AuthStore {
 
     func cancelSignIn() {
         switch state {
-        case .signingIn, .failed:
+        case .signingIn, .failed, .restoreFailedOffline:
             state = .signedOut
         default:
             break
@@ -171,10 +173,11 @@ final class AuthStore {
     func signOut() async {
         do {
             try await service.signOut()
-            state = .signedOut
         } catch {
-            state = .failed(error.localizedDescription)
+            // Local session is cleared best-effort by the service; never strand
+            // the user in a failed state over a network blip during sign-out.
         }
+        state = .signedOut
     }
 
     func deleteAccount() async {

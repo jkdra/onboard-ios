@@ -762,3 +762,52 @@ struct AppleNameAdoptionTests {
         #expect(!AppleNameAdoption.shouldAdopt(currentDisplayName: "Jawad Khadra"))
     }
 }
+
+/// AuthService stub whose restore/sign-out behavior is scripted per test.
+/// Every other requirement is unreachable in these tests.
+private final class ScriptedAuthService: AuthService, @unchecked Sendable {
+    var restoreResult: Result<AuthSession?, Error> = .success(nil)
+    var signOutError: Error?
+
+    func restoreSession() async throws -> AuthSession? { try restoreResult.get() }
+    func signOut() async throws { if let signOutError { throw signOutError } }
+
+    func signIn(with provider: AuthProvider) async throws -> AuthSession { fatalError("unused") }
+    func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession { fatalError("unused") }
+    func signInWithGoogle() async throws -> AuthSession { fatalError("unused") }
+    func sendPhoneOTP(phone: String) async throws { fatalError("unused") }
+    func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession { fatalError("unused") }
+    func sendEmailOTP(email: String) async throws { fatalError("unused") }
+    func verifyEmailOTP(email: String, token: String) async throws -> AuthSession { fatalError("unused") }
+    func linkApple(idToken: String, nonce: String?) async throws -> AuthSession { fatalError("unused") }
+    func linkGoogle() async throws -> AuthSession { fatalError("unused") }
+    func sendLinkPhoneOTP(phone: String) async throws { fatalError("unused") }
+    func verifyLinkPhoneOTP(phone: String, token: String) async throws -> AuthSession { fatalError("unused") }
+    func sendLinkEmailOTP(email: String) async throws { fatalError("unused") }
+    func verifyLinkEmailOTP(email: String, token: String) async throws -> AuthSession { fatalError("unused") }
+    func unlinkIdentity(id: String) async throws -> AuthSession { fatalError("unused") }
+    func refreshAuthSession() async throws -> AuthSession? { nil }
+    func deleteAccount() async throws { fatalError("unused") }
+}
+// NOTE: mirror the real `AuthService` protocol exactly — check
+// `On Board/Auth/AuthService.swift` and adjust signatures if they differ.
+
+@MainActor
+struct AuthRestoreOfflineTests {
+    @Test func connectivityFailureDuringRestoreBecomesRestoreFailedOffline() async {
+        let service = ScriptedAuthService()
+        service.restoreResult = .failure(AuthError.networkUnavailable)
+        let store = AuthStore(service: service)
+        await store.restoreSession()
+        #expect(store.state == .restoreFailedOffline)
+        #expect(!store.isSignedIn)
+    }
+
+    @Test func signOutErrorStillSignsOutLocally() async {
+        let service = ScriptedAuthService()
+        service.signOutError = AuthError.networkUnavailable
+        let store = AuthStore(service: service)
+        await store.signOut()
+        #expect(store.state == .signedOut)
+    }
+}

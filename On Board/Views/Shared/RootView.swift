@@ -25,7 +25,9 @@ struct RootView: View {
     }
 
     private var shouldShowOfflineGate: Bool {
-        requiresNetwork && network.hasReceivedUpdate && !network.isConnected
+        guard requiresNetwork else { return false }
+        if auth.state == .restoreFailedOffline { return true }
+        return network.hasReceivedUpdate && !network.isConnected
     }
 
     var body: some View {
@@ -127,6 +129,11 @@ struct RootView: View {
 
     private func retryAfterConnectivityRestored() async {
         guard network.isConnected else { return }
+        if auth.state == .restoreFailedOffline {
+            await auth.restoreSession()
+            await syncSessionState()
+            return
+        }
         if auth.isSignedIn {
             await onboarding.refresh()
             if onboarding.isComplete {

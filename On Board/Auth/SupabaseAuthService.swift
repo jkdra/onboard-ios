@@ -259,7 +259,13 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         // device_tokens automatically), signing out keeps the account intact — so this
         // device must be explicitly unregistered or it keeps getting that account's pushes.
         await unregisterCurrentDeviceToken(client: client)
-        try await client.auth.signOut()
+        do {
+            try await client.auth.signOut()
+        } catch where NetworkErrorClassifier.isConnectivityFailure(error) {
+            // Revoking the refresh token needs the network; clearing the local
+            // session must not. The token dies server-side when it expires.
+            try? await client.auth.signOut(scope: .local)
+        }
     }
 
     func deleteAccount() async throws {
@@ -278,13 +284,19 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         let client = try requireClient()
 
         if let stored = client.auth.currentSession, !stored.isExpired {
-            return try await mapSession(using: client, session: stored)
+            do {
+                return try await mapSession(using: client, session: stored)
+            } catch where NetworkErrorClassifier.isConnectivityFailure(error) {
+                throw AuthError.networkUnavailable
+            }
         }
 
         do {
             let session = try await client.auth.session
             guard !session.isExpired else { return nil }
             return try await mapSession(using: client, session: session)
+        } catch where NetworkErrorClassifier.isConnectivityFailure(error) {
+            throw AuthError.networkUnavailable
         } catch {
             return nil
         }
