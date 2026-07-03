@@ -750,3 +750,15 @@ struct SignInMethodCountingTests {
         #expect(!decoded.hasPhoneIdentity)
     }
 }
+
+struct AppleNameAdoptionTests {
+    @Test func adoptsWhenCurrentNameEmpty() {
+        #expect(AppleNameAdoption.shouldAdopt(currentDisplayName: ""))
+        #expect(AppleNameAdoption.shouldAdopt(currentDisplayName: "   "))
+        #expect(AppleNameAdoption.shouldAdopt(currentDisplayName: nil))
+    }
+
+    @Test func neverOverwritesAChosenName() {
+        #expect(!AppleNameAdoption.shouldAdopt(currentDisplayName: "Jawad Khadra"))
+    }
+}

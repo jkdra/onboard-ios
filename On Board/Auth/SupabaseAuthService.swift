@@ -8,6 +8,14 @@ import Foundation
 import Supabase
 import UIKit
 
+// Apple re-sends the full name when a user revokes and re-authorizes the app.
+// Only adopt it while the profile has no chosen display name — never overwrite.
+enum AppleNameAdoption {
+    nonisolated static func shouldAdopt(currentDisplayName: String?) -> Bool {
+        (currentDisplayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
 // Provides a real foreground window as the ASWebAuthenticationSession anchor.
 // The SDK's default creates UIWindow() with no scene, which silently fails on iOS 16+.
 private final class ForegroundWindowProvider: NSObject, ASWebAuthenticationPresentationContextProviding, @unchecked Sendable {
@@ -97,11 +105,24 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
                 user: UserAttributes(data: ["full_name": .string(fullName)])
             )
             if let userID = client.auth.currentSession?.user.id {
-                _ = try? await client
+                struct NameRow: Decodable {
+                    let displayName: String?
+                    enum CodingKeys: String, CodingKey { case displayName = "display_name" }
+                }
+                let row: NameRow? = try? await client
                     .from("profiles")
-                    .update(["display_name": fullName])
+                    .select("display_name")
                     .eq("id", value: userID.uuidString)
+                    .single()
                     .execute()
+                    .value
+                if AppleNameAdoption.shouldAdopt(currentDisplayName: row?.displayName) {
+                    _ = try? await client
+                        .from("profiles")
+                        .update(["display_name": fullName])
+                        .eq("id", value: userID.uuidString)
+                        .execute()
+                }
             }
         }
 
