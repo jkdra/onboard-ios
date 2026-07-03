@@ -15,12 +15,8 @@ enum SignInMethodKind: Equatable, Sendable {
 extension AuthSession {
     var signInMethodKinds: [SignInMethodKind] {
         var methods: [SignInMethodKind] = []
-        if let phone, !phone.isEmpty {
-            methods.append(.phone)
-        }
-        if let email, !email.isEmpty {
-            methods.append(.email)
-        }
+        if hasPhoneIdentity { methods.append(.phone) }
+        if hasEmailIdentity { methods.append(.email) }
         for identity in linkedIdentities {
             switch identity.provider {
             case .apple where !methods.contains(.apple):
@@ -36,8 +32,8 @@ extension AuthSession {
 
     func remainingSignInMethodCount(excludingIdentityId: String? = nil) -> Int {
         var count = 0
-        if let phone, !phone.isEmpty { count += 1 }
-        if let email, !email.isEmpty { count += 1 }
+        if hasPhoneIdentity { count += 1 }
+        if hasEmailIdentity { count += 1 }
         for identity in linkedIdentities where identity.id != excludingIdentityId {
             count += 1
         }
@@ -51,9 +47,9 @@ extension AuthSession {
     func hasLinked(_ provider: AuthProvider) -> Bool {
         switch provider {
         case .phone:
-            phone?.isEmpty == false
+            hasPhoneIdentity
         case .email:
-            email?.isEmpty == false
+            hasEmailIdentity
         case .apple, .google:
             linkedIdentities.contains { $0.provider == provider }
         }

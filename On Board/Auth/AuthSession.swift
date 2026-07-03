@@ -10,6 +10,11 @@ struct AuthSession: Equatable, Codable, Sendable {
     let primaryProvider: AuthProvider
     let email: String?
     let phone: String?
+    /// True only when a real `email` / `phone` provider identity exists in
+    /// `auth.identities` — `email`/`phone` above may be copied from an OAuth
+    /// provider and are display-only.
+    let hasEmailIdentity: Bool
+    let hasPhoneIdentity: Bool
     let linkedIdentities: [LinkedIdentity]
 
     /// Backward-compatible alias for the primary sign-in provider.
@@ -20,12 +25,16 @@ struct AuthSession: Equatable, Codable, Sendable {
         primaryProvider: AuthProvider,
         email: String? = nil,
         phone: String? = nil,
+        hasEmailIdentity: Bool = false,
+        hasPhoneIdentity: Bool = false,
         linkedIdentities: [LinkedIdentity] = []
     ) {
         self.userId = userId
         self.primaryProvider = primaryProvider
         self.email = email
         self.phone = phone
+        self.hasEmailIdentity = hasEmailIdentity
+        self.hasPhoneIdentity = hasPhoneIdentity
         self.linkedIdentities = linkedIdentities
     }
 
@@ -34,6 +43,8 @@ struct AuthSession: Equatable, Codable, Sendable {
         provider: AuthProvider,
         email: String? = nil,
         phone: String? = nil,
+        hasEmailIdentity: Bool = false,
+        hasPhoneIdentity: Bool = false,
         linkedIdentities: [LinkedIdentity] = []
     ) {
         self.init(
@@ -41,6 +52,8 @@ struct AuthSession: Equatable, Codable, Sendable {
             primaryProvider: provider,
             email: email,
             phone: phone,
+            hasEmailIdentity: hasEmailIdentity,
+            hasPhoneIdentity: hasPhoneIdentity,
             linkedIdentities: linkedIdentities
         )
     }
@@ -51,6 +64,8 @@ struct AuthSession: Equatable, Codable, Sendable {
         case provider
         case email
         case phone
+        case hasEmailIdentity
+        case hasPhoneIdentity
         case linkedIdentities
     }
 
@@ -61,6 +76,8 @@ struct AuthSession: Equatable, Codable, Sendable {
             ?? container.decode(AuthProvider.self, forKey: .provider)
         email = try container.decodeIfPresent(String.self, forKey: .email)
         phone = try container.decodeIfPresent(String.self, forKey: .phone)
+        hasEmailIdentity = try container.decodeIfPresent(Bool.self, forKey: .hasEmailIdentity) ?? false
+        hasPhoneIdentity = try container.decodeIfPresent(Bool.self, forKey: .hasPhoneIdentity) ?? false
         linkedIdentities = try container.decodeIfPresent([LinkedIdentity].self, forKey: .linkedIdentities) ?? []
     }
 
@@ -70,6 +87,8 @@ struct AuthSession: Equatable, Codable, Sendable {
         try container.encode(primaryProvider, forKey: .primaryProvider)
         try container.encodeIfPresent(email, forKey: .email)
         try container.encodeIfPresent(phone, forKey: .phone)
+        try container.encode(hasEmailIdentity, forKey: .hasEmailIdentity)
+        try container.encode(hasPhoneIdentity, forKey: .hasPhoneIdentity)
         try container.encode(linkedIdentities, forKey: .linkedIdentities)
     }
 }

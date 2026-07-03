@@ -296,12 +296,15 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             let email = identity.identityData?["email"]?.stringValue
             return LinkedIdentity.fromSupabaseProvider(identity.provider, id: identity.id, email: email)
         }
+        let identityProviders = Set(identities.map(\.provider))
 
         return AuthSession(
             userId: user.id,
             primaryProvider: primaryProvider(from: user, identities: identities),
             email: user.email,
             phone: user.phone,
+            hasEmailIdentity: identityProviders.contains("email"),
+            hasPhoneIdentity: identityProviders.contains("phone"),
             linkedIdentities: linkedIdentities
         )
     }

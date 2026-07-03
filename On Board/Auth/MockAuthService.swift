@@ -221,6 +221,8 @@ final class MockAuthService: AuthService, @unchecked Sendable {
             primaryProvider: primaryProvider,
             email: email,
             phone: phone,
+            hasEmailIdentity: email?.isEmpty == false,
+            hasPhoneIdentity: phone?.isEmpty == false,
             linkedIdentities: linkedIdentities
         )
     }
