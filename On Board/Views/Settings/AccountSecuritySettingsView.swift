@@ -14,14 +14,13 @@ struct AccountSecuritySettingsView: View {
     @State private var isLinkingApple = false
     @State private var isLinkingGoogle = false
     @State private var identityPendingUnlink: LinkedIdentity?
-    @State private var showUnlinkBlockedAlert = false
     @State private var showAddMethodBeforeUnlink = false
     @State private var linkSheet: LinkSheet?
     @State private var alertError: PresentableAlertError?
 
     private enum LinkSheet: Identifiable {
-        case phone
-        case email
+        case phone(LinkSignInMethodView.Intent)
+        case email(LinkSignInMethodView.Intent)
 
         var id: String {
             switch self {
@@ -33,7 +32,8 @@ struct AccountSecuritySettingsView: View {
 
     var body: some View {
         Form {
-            signInMethodsSection
+            traditionalMethodsSection
+            thirdPartySection
 
             Section {
                 securityPlaceholder(
@@ -63,25 +63,29 @@ struct AccountSecuritySettingsView: View {
             await refreshMethods()
         }
         .sheet(item: $linkSheet) { sheet in
-            LinkSignInMethodView(mode: sheet == .phone ? .phone : .email) {
-                Task { await refreshMethods() }
+            switch sheet {
+            case .phone(let intent):
+                LinkSignInMethodView(mode: .phone, intent: intent) {
+                    Task { await refreshMethods() }
+                }
+            case .email(let intent):
+                LinkSignInMethodView(mode: .email, intent: intent) {
+                    Task { await refreshMethods() }
+                }
             }
         }
-        .confirmationDialog(
+        .alert(
             "Unlink \(identityPendingUnlink?.provider.label ?? "account")?",
             isPresented: Binding(
                 get: { identityPendingUnlink != nil },
                 set: { if !$0 { identityPendingUnlink = nil } }
-            ),
-            titleVisibility: .visible
+            )
         ) {
             Button("Unlink", role: .destructive) {
                 guard let identity = identityPendingUnlink else { return }
                 Task { await unlink(identity) }
             }
-            Button("Cancel", role: .cancel) {
-                identityPendingUnlink = nil
-            }
+            Button("Cancel", role: .cancel) { identityPendingUnlink = nil }
         } message: {
             Text("You won't be able to sign in with this method unless you link it again.")
         }
@@ -89,8 +93,8 @@ struct AccountSecuritySettingsView: View {
             "Add another sign-in method first",
             isPresented: $showAddMethodBeforeUnlink
         ) {
-            Button("Add phone") { linkSheet = .phone }
-            Button("Add email") { linkSheet = .email }
+            Button("Add phone") { linkSheet = .phone(.link) }
+            Button("Add email") { linkSheet = .email(.link) }
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Before removing your last sign-in method, add a phone number, email, or link another account. You can also delete your account from Account Management.")
@@ -99,21 +103,35 @@ struct AccountSecuritySettingsView: View {
     }
 
     @ViewBuilder
-    private var signInMethodsSection: some View {
+    private var traditionalMethodsSection: some View {
         Section {
             if let session = auth.session {
                 phoneMethodRow(session: session)
                 emailMethodRow(session: session)
-                appleMethodRow(session: session)
-                googleMethodRow(session: session)
             } else if isRefreshing {
                 ProgressView("Loading sign-in methods…")
             }
         } header: {
-            Text("Sign-in methods")
+            Text("Sign-In Methods")
                 .fontStyle(.subheadline)
         } footer: {
-            Text("Keep at least one way to sign in. To remove Apple or Google, add a phone number, email, or another linked account first—or delete your account from Account Management.")
+            Text("Keep at least one way to sign in.")
+                .fontStyle(.footnote)
+        }
+    }
+
+    @ViewBuilder
+    private var thirdPartySection: some View {
+        Section {
+            if let session = auth.session {
+                appleMethodRow(session: session)
+                googleMethodRow(session: session)
+            }
+        } header: {
+            Text("Third-Party")
+                .fontStyle(.subheadline)
+        } footer: {
+            Text("To remove Apple or Google, add a phone number, email, or another linked account first.")
                 .fontStyle(.footnote)
         }
     }
@@ -123,7 +141,8 @@ struct AccountSecuritySettingsView: View {
             provider: .phone,
             detail: session.phone,
             isLinked: session.hasLinked(.phone),
-            linkAction: { linkSheet = .phone }
+            linkAction: { linkSheet = .phone(.link) },
+            changeAction: { linkSheet = .phone(.change) }
         )
     }
 
@@ -132,7 +151,8 @@ struct AccountSecuritySettingsView: View {
             provider: .email,
             detail: session.email,
             isLinked: session.hasLinked(.email),
-            linkAction: { linkSheet = .email }
+            linkAction: { linkSheet = .email(.link) },
+            changeAction: { linkSheet = .email(.change) }
         )
     }
 
@@ -166,7 +186,8 @@ struct AccountSecuritySettingsView: View {
         provider: AuthProvider,
         detail: String?,
         isLinked: Bool,
-        linkAction: @escaping () -> Void
+        linkAction: @escaping () -> Void,
+        changeAction: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
             Image(systemName: provider.systemImage)
@@ -194,9 +215,8 @@ struct AccountSecuritySettingsView: View {
                 Button("Link", action: linkAction)
                     .fontStyle(.subheadline)
             } else {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                    .accessibilityLabel("\(provider.label) linked")
+                Button("Change", action: changeAction)
+                    .fontStyle(.subheadline)
             }
         }
     }
@@ -210,7 +230,11 @@ struct AccountSecuritySettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(identity.provider.securityLabel)
                     .fontStyle(.body)
-                if let email = identity.email ?? session.email, !email.isEmpty {
+                if !session.canUnlinkIdentity(identity) {
+                    Text("Connect another method to unlink")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.secondary)
+                } else if let email = identity.email ?? session.email, !email.isEmpty {
                     Text(email)
                         .fontStyle(.caption)
                         .foregroundStyle(.secondary)
@@ -220,10 +244,25 @@ struct AccountSecuritySettingsView: View {
 
             Spacer(minLength: 8)
 
-            Button("Unlink", role: .destructive) {
-                prepareUnlink(identity, session: session)
+            if session.canUnlinkIdentity(identity) {
+                Menu {
+                    Button("Unlink \(identity.provider.label)", role: .destructive) {
+                        identityPendingUnlink = identity
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text("Linked")
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2)
+                    }
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
+                }
+            } else {
+                Text("Linked")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.tertiary)
             }
-            .fontStyle(.subheadline)
         }
     }
 
@@ -319,14 +358,6 @@ struct AccountSecuritySettingsView: View {
         isRefreshing = true
         defer { isRefreshing = false }
         await auth.refreshLinkedMethods()
-    }
-
-    private func prepareUnlink(_ identity: LinkedIdentity, session: AuthSession) {
-        if session.canUnlinkIdentity(identity) {
-            identityPendingUnlink = identity
-        } else {
-            showAddMethodBeforeUnlink = true
-        }
     }
 
     private func unlink(_ identity: LinkedIdentity) async {

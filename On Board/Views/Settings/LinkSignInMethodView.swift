@@ -11,7 +11,13 @@ struct LinkSignInMethodView: View {
         case email
     }
 
+    enum Intent {
+        case link
+        case change
+    }
+
     let mode: Mode
+    var intent: Intent = .link
     let onLinked: () -> Void
 
     @Environment(AuthStore.self) private var auth
@@ -58,9 +64,7 @@ struct LinkSignInMethodView: View {
                             .foregroundStyle(.secondary)
                     }
                 } footer: {
-                    Text(mode == .phone
-                         ? "We'll text you a code to link this number to your account."
-                         : "We'll email you a code to link this address to your account.")
+                    Text(footerText)
                         .fontStyle(.footnote)
                 }
 
@@ -69,7 +73,7 @@ struct LinkSignInMethodView: View {
                         Button {
                             Task { await verify() }
                         } label: {
-                            LoadingButtonLabel("Verify and link", isLoading: isVerifying, spinnerTint: .accentColor)
+                            LoadingButtonLabel(intent == .change ? "Verify and update" : "Verify and link", isLoading: isVerifying, spinnerTint: .accentColor)
                         }
                         .disabled(isVerifying || !OTPCodeInput.isComplete(otpCode))
 
@@ -95,7 +99,7 @@ struct LinkSignInMethodView: View {
                 }
             }
             .scrollDismissesKeyboard(.interactively)
-            .navigationTitle(mode == .phone ? "Link Phone" : "Link Email")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -104,6 +108,28 @@ struct LinkSignInMethodView: View {
             }
             .keyboardDoneToolbar()
             .presentableErrorAlert(error: $alertError)
+        }
+    }
+
+    private var navigationTitle: String {
+        switch (mode, intent) {
+        case (.phone, .link): "Link Phone"
+        case (.email, .link): "Link Email"
+        case (.phone, .change): "Change Phone"
+        case (.email, .change): "Change Email"
+        }
+    }
+
+    private var footerText: String {
+        switch (mode, intent) {
+        case (.phone, .link):
+            "We'll text you a code to link this number to your account."
+        case (.email, .link):
+            "We'll email you a code to link this address to your account."
+        case (.phone, .change):
+            "We'll text you a code to update the number on your account."
+        case (.email, .change):
+            "We'll email you a code to update the address on your account."
         }
     }
 
