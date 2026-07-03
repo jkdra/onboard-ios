@@ -105,23 +105,28 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
                 user: UserAttributes(data: ["full_name": .string(fullName)])
             )
             if let userID = client.auth.currentSession?.user.id {
-                struct NameRow: Decodable {
+                nonisolated struct NameRow: Decodable {
                     let displayName: String?
                     enum CodingKeys: String, CodingKey { case displayName = "display_name" }
                 }
-                let row: NameRow? = try? await client
-                    .from("profiles")
-                    .select("display_name")
-                    .eq("id", value: userID.uuidString)
-                    .single()
-                    .execute()
-                    .value
-                if AppleNameAdoption.shouldAdopt(currentDisplayName: row?.displayName) {
-                    _ = try? await client
+                do {
+                    let row: NameRow = try await client
                         .from("profiles")
-                        .update(["display_name": fullName])
+                        .select("display_name")
                         .eq("id", value: userID.uuidString)
+                        .single()
                         .execute()
+                        .value
+                    if AppleNameAdoption.shouldAdopt(currentDisplayName: row.displayName) {
+                        _ = try? await client
+                            .from("profiles")
+                            .update(["display_name": fullName])
+                            .eq("id", value: userID.uuidString)
+                            .execute()
+                    }
+                } catch {
+                    // Unknown current name (fetch failed) — never risk overwriting a
+                    // chosen display name. The user can set it from their profile.
                 }
             }
         }
