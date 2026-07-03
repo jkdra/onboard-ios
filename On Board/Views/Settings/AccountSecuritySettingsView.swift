@@ -258,10 +258,13 @@ struct AccountSecuritySettingsView: View {
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
                 }
+                .accessibilityLabel("\(identity.provider.label) linked")
+                .accessibilityHint("Opens the option to unlink this sign-in method")
             } else {
                 Text("Linked")
                     .fontStyle(.subheadline)
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel("\(identity.provider.label) linked. Connect another sign-in method to unlink.")
             }
         }
     }
