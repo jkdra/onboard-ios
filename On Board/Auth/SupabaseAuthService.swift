@@ -261,9 +261,10 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         await unregisterCurrentDeviceToken(client: client)
         do {
             try await client.auth.signOut()
-        } catch where NetworkErrorClassifier.isConnectivityFailure(error) {
-            // Revoking the refresh token needs the network; clearing the local
-            // session must not. The token dies server-side when it expires.
+        } catch {
+            // Whatever the failure (offline, server error), the UI treats sign-out
+            // as done — so the local session must actually be cleared or the next
+            // launch silently restores it. The refresh token dies at expiry.
             try? await client.auth.signOut(scope: .local)
         }
     }
