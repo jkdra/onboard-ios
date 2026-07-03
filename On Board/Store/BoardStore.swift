@@ -200,7 +200,9 @@ final class BoardStore {
             await inFlight.value
         }
 
-        let hasCachedFeed = activeBoardWeek != nil && !posts.isEmpty
+        // Only treat the cache as warm when it belongs to the board being fetched —
+        // on a board switch the old board's feed must not suppress the loading state.
+        let hasCachedFeed = activeBoardWeek?.boardId == boardID && !posts.isEmpty
 
         let task = Task { @MainActor in
             if !hasCachedFeed {

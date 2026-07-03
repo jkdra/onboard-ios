@@ -873,8 +873,6 @@ private final class ScriptedAuthService: AuthService, @unchecked Sendable {
     func refreshAuthSession() async throws -> AuthSession? { nil }
     func deleteAccount() async throws { fatalError("unused") }
 }
-// NOTE: mirror the real `AuthService` protocol exactly — check
-// `On Board/Auth/AuthService.swift` and adjust signatures if they differ.
 
 @MainActor
 struct AuthRestoreOfflineTests {
