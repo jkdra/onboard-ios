@@ -24,15 +24,17 @@ struct BoardListView: View {
     var body: some View {
         NavigationSplitView {
             List(selection: $selectedBoardID) {
-                if let board = store.currentBoard {
+                if !listedBoards.isEmpty {
                     Section {
-                        boardRow(
-                            id: board.id.uuidString,
-                            name: board.name,
-                            members: nil,
-                            isJoined: true
-                        )
-                        .tag(board.id.uuidString)
+                        ForEach(listedBoards) { board in
+                            boardRow(
+                                id: board.id.uuidString,
+                                name: board.name,
+                                members: nil,
+                                isJoined: true
+                            )
+                            .tag(board.id.uuidString)
+                        }
                     }
                 }
             }
@@ -58,6 +60,24 @@ struct BoardListView: View {
                 selectedBoardID = board.id.uuidString
             }
         }
+        .onChange(of: selectedBoardID) { _, newValue in
+            guard let newValue,
+                  let boardID = UUID(uuidString: newValue),
+                  boardID != store.currentBoardId,
+                  let board = listedBoards.first(where: { $0.id == boardID }) else { return }
+            store.setBoard(id: board.id, name: board.name)
+            Task { await store.refresh(for: store.currentUserID) }
+        }
+    }
+
+    // MARK: - Board list
+
+    private var listedBoards: [Board] {
+        var boards = store.accessibleBoards
+        if let current = store.currentBoard, !boards.contains(where: { $0.id == current.id }) {
+            boards.insert(current, at: 0)
+        }
+        return boards
     }
 
     // MARK: - Profile avatar
