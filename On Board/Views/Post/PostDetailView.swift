@@ -42,9 +42,6 @@ struct PostDetailView: View {
     @State var alertError: PresentableAlertError?
     @State var isLoadingComments = false
     @State var showImageViewer = false
-    @State var showHeartBurst = false
-    @State var heartTapLocation: CGPoint = CGPoint(x: 100, y: 50)
-    @State var heartRotation: Double = 0
 
     init(post: Post) {
         self.post = post

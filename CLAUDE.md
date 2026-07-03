@@ -68,7 +68,7 @@ RootView
 ### Database
 Supabase migrations live in `supabase/migrations/`. Board data is fetched via Supabase RPC functions (`fetch_active_board_week`, `fetch_posts_for_week`, `fetch_my_reactions_for_week`). Realtime subscriptions on the `reactions` table merge remote changes without overwriting the current user's local state.
 
-**Migration history (reconciled 2026-06-29):** the folder was collapsed to a single live-matching baseline, `20260629081312_remote_schema.sql`, after a period of ledger drift. The pre-reconciliation files are preserved under `supabase/migrations/_archive_drift_2026-06-29/` (including the old `README_DRIFT` notes) — do not resurrect them. The local folder now matches the remote ledger, so `supabase db pull` and `supabase db push` work normally again; add new changes as fresh timestamped migrations and push through a preview branch. `20260629120000_device_tokens_rls_initplan.sql` is one such pending (not-yet-pushed) migration. Avoid hand-editing the remote migration ledger.
+**Migration history (reconciled 2026-06-29):** the folder was collapsed to a single live-matching baseline, `20260629081312_remote_schema.sql`, after a period of ledger drift. The pre-reconciliation files are preserved under `supabase/migrations/_archive_drift_2026-06-29/` (including the old `README_DRIFT` notes) — do not resurrect them. The local folder now matches the remote ledger, so `supabase db pull` and `supabase db push` work normally again; add new changes as fresh timestamped migrations and push through a preview branch. Both baseline migrations (`20260629081312_remote_schema` and `20260629120000_device_tokens_rls_initplan`) are applied remotely. Avoid hand-editing the remote migration ledger.
 
 ### UI Conventions
 - **In-flight buttons** use `LoadingButtonLabel(_:systemImage:isLoading:)` (a spinner to the left of the title), paired with `.disabled(isLoading)` on the page — never swap the screen for a separate loading view. Spinner tint defaults to `systemBackground` (matches `.boardPrimary`); pass `spinnerTint: .accentColor`/`.primary` for non-filled buttons.
@@ -97,3 +97,13 @@ The Edge Function uses `api.sandbox.push.apple.com` — change to `api.push.appl
 - **Tests use Swift Testing** (`@Test`, `#expect`), not XCTest. All test fixtures go through mock services, not live Supabase.
 - `Secrets.xcconfig` is gitignored. Never commit real keys.
 - `.agents/`, `.mcp.json`, and `skills-lock.json` are Claude Code internals and are gitignored.
+
+## TestFlight / App Store Release Checklist
+
+Before distributing a build outside development:
+
+1. **APNs host** — redeploy `send-notifications` edge function with `APNS_HOST` changed from `https://api.sandbox.push.apple.com` to `https://api.push.apple.com`. Sandbox tokens are rejected by production APNs; push notifications will silently fail without this change.
+2. **Entitlements** — `aps-environment: development` in `On Board.entitlements` is automatically overridden to `production` by Xcode's distribution provisioning profile. No manual change needed.
+3. **Secrets** — confirm `Secrets.xcconfig` has production `SUPABASE_URL` and `SUPABASE_ANON_KEY` (already the case; the URL is also hardcoded in `Info.plist` as a fallback).
+4. **Build clean** — run `xcodebuild -scheme "On Board" -destination "generic/platform=iOS Simulator" build` and confirm `** BUILD SUCCEEDED **` with no errors.
+5. **Schema** — run `supabase db pull` and confirm no unexpected drift before the release window.

@@ -10,6 +10,10 @@ private struct BoardErrorHandlingModifier: ViewModifier {
     @Environment(BoardStore.self) private var store
 
     @Binding var alertError: PresentableAlertError?
+    /// When true, suppresses the alert while `store.activeBoardWeek` is nil — used by
+    /// screens that already show a dedicated inline "Couldn't load board" retry state,
+    /// so the failure isn't surfaced twice.
+    var suppressWhenBoardMissing = false
 
     func body(content: Content) -> some View {
         content
@@ -28,12 +32,17 @@ private struct BoardErrorHandlingModifier: ViewModifier {
             return
         }
 
+        if suppressWhenBoardMissing && store.activeBoardWeek == nil { return }
+
         alertError = PresentableAlertError(message: message)
     }
 }
 
 extension View {
-    func boardErrorHandling(alertError: Binding<PresentableAlertError?>) -> some View {
-        modifier(BoardErrorHandlingModifier(alertError: alertError))
+    func boardErrorHandling(
+        alertError: Binding<PresentableAlertError?>,
+        suppressWhenBoardMissing: Bool = false
+    ) -> some View {
+        modifier(BoardErrorHandlingModifier(alertError: alertError, suppressWhenBoardMissing: suppressWhenBoardMissing))
     }
 }

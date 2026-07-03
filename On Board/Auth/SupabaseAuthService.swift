@@ -168,11 +168,12 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             guard configuration.isGoogleOAuthAvailable else {
                 throw AuthError.providerUnavailable(.google)
             }
-            let provider = ForegroundWindowProvider.shared
-            _ = try await client.auth.signInWithOAuth(provider: .google) { webSession in
-                webSession.presentationContextProvider = provider
-                webSession.prefersEphemeralWebBrowserSession = false
-            }
+            // `signInWithOAuth` (used by signInWithGoogle's fallback below) starts a
+            // fresh sign-in — using it here would swap the session to a different/new
+            // account instead of linking. `linkIdentity` is the correct call for
+            // attaching an OAuth identity to the currently signed-in user; it opens the
+            // browser and completes via the onOpenURL → auth.handle(_:) deep-link path.
+            try await client.auth.linkIdentity(provider: .google)
         }
 
         return try await requireRefreshedSession()
@@ -228,6 +229,10 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
 
     func signOut() async throws {
         let client = try requireClient()
+        // Unlike account deletion (whose `ON DELETE CASCADE` from auth.users removes
+        // device_tokens automatically), signing out keeps the account intact — so this
+        // device must be explicitly unregistered or it keeps getting that account's pushes.
+        await unregisterCurrentDeviceToken(client: client)
         try await client.auth.signOut()
     }
 
@@ -262,6 +267,15 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
     private func requireClient() throws -> SupabaseClient {
         guard let client else { throw AuthError.notConfigured }
         return client
+    }
+
+    private func unregisterCurrentDeviceToken(client: SupabaseClient) async {
+        guard let tokenHex = await NotificationService.shared.currentTokenHex else { return }
+        _ = try? await client
+            .from("device_tokens")
+            .delete()
+            .eq("token", value: tokenHex)
+            .execute()
     }
 
     private func requireRefreshedSession() async throws -> AuthSession {

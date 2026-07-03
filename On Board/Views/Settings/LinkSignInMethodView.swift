@@ -101,14 +101,8 @@ struct LinkSignInMethodView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button { KeyboardDismisser.dismiss() } label: {
-                        Text("Done").fontWeight(.semibold)
-                    }
-                    .accessibilityLabel("Dismiss keyboard")
-                }
             }
+            .keyboardDoneToolbar()
             .presentableErrorAlert(error: $alertError)
         }
     }

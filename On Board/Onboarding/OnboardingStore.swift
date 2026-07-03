@@ -155,39 +155,16 @@ final class OnboardingStore {
 
     @discardableResult
     func submitUsername(_ handle: String) async -> Bool {
-        guard ensureOnlineForSubmit() else { return false }
-
-        isSubmitting = true
-        clearLastError()
-        defer { isSubmitting = false }
-
-        do {
+        await performSubmit {
             _ = try await service.completeUsername(handle)
             await refresh(force: true)
             return status?.onboardingStep != .username
-        } catch let error as OnboardingError where error == .notAuthenticated {
-            await auth.reportSessionExpired()
-            reset()
-            return false
-        } catch let error as OnboardingError {
-            setLastError(error)
-            return false
-        } catch {
-            let failure = friendlySubmitFailure(error)
-            setLastError(message: failure.message, recovery: failure.recovery)
-            return false
         }
     }
 
     @discardableResult
     func submitProfile(displayName: String, bio: String?, avatarUrl: String? = nil) async -> Bool {
-        guard ensureOnlineForSubmit() else { return false }
-
-        isSubmitting = true
-        clearLastError()
-        defer { isSubmitting = false }
-
-        do {
+        await performSubmit {
             _ = try await service.completeProfile(
                 displayName: displayName,
                 bio: bio,
@@ -197,74 +174,41 @@ final class OnboardingStore {
             return status?.onboardingStep == .schoolVerify
                 || status?.onboardingStep == .waitlist
                 || status?.isComplete == true
-        } catch let error as OnboardingError where error == .notAuthenticated {
-            await auth.reportSessionExpired()
-            reset()
-            return false
-        } catch let error as OnboardingError {
-            setLastError(error)
-            return false
-        } catch {
-            let failure = friendlySubmitFailure(error)
-            setLastError(message: failure.message, recovery: failure.recovery)
-            return false
         }
     }
 
     @discardableResult
     func sendSchoolVerificationCode(to email: String) async -> Bool {
-        guard ensureOnlineForSubmit() else { return false }
-
-        isSubmitting = true
-        clearLastError()
-        defer { isSubmitting = false }
-
-        do {
+        await performSubmit {
             _ = try await service.beginSchoolEmailVerification(email)
             await refresh(force: true)
             return true
-        } catch let error as OnboardingError where error == .notAuthenticated {
-            await auth.reportSessionExpired()
-            reset()
-            return false
-        } catch let error as OnboardingError {
-            setLastError(error)
-            return false
-        } catch {
-            let failure = friendlySubmitFailure(error)
-            setLastError(message: failure.message, recovery: failure.recovery)
-            return false
         }
     }
 
     @discardableResult
     func verifySchoolEmail(_ email: String, code: String) async -> Bool {
-        guard ensureOnlineForSubmit() else { return false }
-
-        isSubmitting = true
-        clearLastError()
-        defer { isSubmitting = false }
-
-        do {
+        await performSubmit {
             _ = try await service.completeSchoolEmailVerification(email, token: code)
             await refresh(force: true)
             return status?.onboardingStep == .waitlist || status?.isComplete == true
-        } catch let error as OnboardingError where error == .notAuthenticated {
-            await auth.reportSessionExpired()
-            reset()
-            return false
-        } catch let error as OnboardingError {
-            setLastError(error)
-            return false
-        } catch {
-            let failure = friendlySubmitFailure(error)
-            setLastError(message: failure.message, recovery: failure.recovery)
-            return false
         }
     }
 
     @discardableResult
     func joinWaitlist() async -> Bool {
+        await performSubmit {
+            _ = try await service.joinWaitlist()
+            await refresh(force: true)
+            return status?.isComplete == true
+        }
+    }
+
+    /// Shared wrapper for the onboarding submit RPCs: the online guard, the in-flight
+    /// flag, and error mapping (session-expired → reset, OnboardingError → its message,
+    /// anything else → a friendly message). `operation` runs the RPC (+ refresh) and
+    /// returns whether it advanced the user.
+    private func performSubmit(_ operation: () async throws -> Bool) async -> Bool {
         guard ensureOnlineForSubmit() else { return false }
 
         isSubmitting = true
@@ -272,9 +216,7 @@ final class OnboardingStore {
         defer { isSubmitting = false }
 
         do {
-            _ = try await service.joinWaitlist()
-            await refresh(force: true)
-            return status?.isComplete == true
+            return try await operation()
         } catch let error as OnboardingError where error == .notAuthenticated {
             await auth.reportSessionExpired()
             reset()

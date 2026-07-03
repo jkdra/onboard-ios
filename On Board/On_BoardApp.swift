@@ -4,6 +4,7 @@
 //
 
 import GoogleSignIn
+import Supabase
 import SwiftUI
 
 private enum AppLaunchContext {
@@ -70,7 +71,12 @@ struct On_BoardApp: App {
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }
-                    // Supabase OAuth deep-link callback — SDK handles it internally.
+                    // Deep-link OAuth callbacks (linkIdentity's default URL opener, web
+                    // OAuth fallback) resolve via UIApplication.open, not an in-app
+                    // ASWebAuthenticationSession — per the SDK's own docs, the app must
+                    // forward the callback URL to `auth.handle(_:)` or the flow never
+                    // completes (was previously a silent no-op here).
+                    SupabaseClientFactory.client(for: .current)?.auth.handle(url)
                 }
                 .onChange(of: auth.session) { _, session in
                     if let userID = session?.userId {

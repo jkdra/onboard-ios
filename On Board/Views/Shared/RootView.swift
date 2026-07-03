@@ -146,10 +146,11 @@ struct RootView: View {
                 store.setBoard(id: boardId, name: onboarding.status?.boardName)
             }
 
-            if configuration.isSupabaseConfigured {
-                if network.isConnected {
-                    await store.refresh(for: session.userId)
-                }
+            // Only refresh when the user has been assigned a board. Without this guard,
+            // waitlisted users (boardId == nil) would trigger a refresh that falls back
+            // to SampleBoardID.main and loads demo data into the holding screen.
+            if configuration.isSupabaseConfigured, network.isConnected, store.currentBoardId != nil {
+                await store.refresh(for: session.userId)
             }
         } else {
             store.clearCurrentUser()

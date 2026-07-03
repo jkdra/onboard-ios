@@ -42,6 +42,14 @@ final class ReactionRealtimeListener {
         // Reconnect loop: the postgresChange stream ends when the socket drops (network
         // blip, app backgrounded). Without this the listener died permanently after the
         // first disconnect and reaction counts silently stopped updating.
+        //
+        // Exponential backoff (2s → 4s → … capped at 30s) so a prolonged outage doesn't
+        // hammer the network/battery every 2s. Reset to the base delay once we successfully
+        // (re)subscribe, so transient blips still recover quickly.
+        let baseBackoff: Duration = .seconds(2)
+        let maxBackoff: Duration = .seconds(30)
+        var backoff = baseBackoff
+
         while !Task.isCancelled {
             await client.realtimeV2.connect()
 
@@ -60,9 +68,13 @@ final class ReactionRealtimeListener {
                 await client.removeChannel(channel)
                 if self.channel === channel { self.channel = nil }
                 if Task.isCancelled { break }
-                try? await Task.sleep(for: .seconds(2))
+                try? await Task.sleep(for: backoff)
+                backoff = min(backoff * 2, maxBackoff)
                 continue
             }
+
+            // Subscribed successfully — a healthy connection resets the backoff.
+            backoff = baseBackoff
 
             for await change in changes {
                 if Task.isCancelled { break }
@@ -76,7 +88,8 @@ final class ReactionRealtimeListener {
             if self.channel === channel { self.channel = nil }
 
             if Task.isCancelled { break }
-            try? await Task.sleep(for: .seconds(2)) // backoff, then reconnect
+            try? await Task.sleep(for: backoff) // backoff, then reconnect
+            backoff = min(backoff * 2, maxBackoff)
         }
     }
 }

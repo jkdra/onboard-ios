@@ -398,6 +398,29 @@ struct BoardStoreTests {
         let profile = store.profile(forAuthor: "unknown.user")
         #expect(profile.handle == "unknown.user")
     }
+
+    // A weak/dropped connection can make PostgREST's response arrive as zero bytes,
+    // which URLSession surfaces as .zeroByteResource rather than a decoding error.
+    // This should read as a connectivity failure, not leak a raw system error string.
+    @Test @MainActor func mapLoadErrorTreatsZeroByteResourceAsNetworkUnavailable() {
+        let error = URLError(.zeroByteResource)
+        #expect(BoardStore.mapLoadError(error) == AuthError.networkUnavailable.localizedDescription)
+    }
+}
+
+@MainActor
+struct NetworkErrorClassifierTests {
+    @Test func zeroByteResourceIsConnectivityFailure() {
+        #expect(NetworkErrorClassifier.isConnectivityFailure(URLError(.zeroByteResource)))
+    }
+
+    @Test func notConnectedToInternetIsConnectivityFailure() {
+        #expect(NetworkErrorClassifier.isConnectivityFailure(URLError(.notConnectedToInternet)))
+    }
+
+    @Test func badServerResponseIsNotConnectivityFailure() {
+        #expect(!NetworkErrorClassifier.isConnectivityFailure(URLError(.badServerResponse)))
+    }
 }
 
 @MainActor
@@ -646,5 +669,29 @@ struct OnboardingStoreTests {
         #expect(status.isComplete)
         #expect(status.needsOnboarding)
         #expect(status.effectiveOnboardingStep == .username)
+    }
+}
+
+@MainActor
+struct OnboardingCoordinatorTargetPathTests {
+    // A returning, already-onboarded user must not be routed into any onboarding
+    // step screen — the coordinator gets swapped out for BoardListView instead.
+    @Test func completeStepProducesEmptyPath() {
+        #expect(OnboardingCoordinator.targetPath(for: .complete, isSignedIn: true) == [])
+    }
+
+    @Test func usernameStepProducesUsernamePath() {
+        #expect(OnboardingCoordinator.targetPath(for: .username, isSignedIn: true) == [.username])
+    }
+
+    @Test func waitlistStepProducesFullPath() {
+        #expect(
+            OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
+                == [.username, .profile, .schoolVerify, .waitlist]
+        )
+    }
+
+    @Test func signedOutProducesEmptyPathRegardlessOfStep() {
+        #expect(OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: false) == [])
     }
 }

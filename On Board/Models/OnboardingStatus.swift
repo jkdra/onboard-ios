@@ -37,8 +37,18 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
             return .profile
         }
 
-        if verifiedSchoolEmail == nil, waitlistJoinedAt == nil, boardId == nil {
+        // boardId is set only after admin approval. verifiedSchoolEmail alone is not
+        // enough to bypass school verify — waitlistJoinedAt must not short-circuit
+        // this gate (web pre-registrants have it stamped before verifying school).
+        if verifiedSchoolEmail == nil, boardId == nil {
             return .schoolVerify
+        }
+
+        // Verified school and joined the waitlist, but admin hasn't admitted yet.
+        // Return .waitlist so the coordinator keeps showing the confirmed button state
+        // instead of routing to BoardListView with no board.
+        if waitlistJoinedAt != nil, boardId == nil {
+            return .waitlist
         }
 
         return .complete

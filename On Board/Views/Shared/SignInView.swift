@@ -36,7 +36,7 @@ struct SignInView: View {
     @State private var submittedDestination = ""
     @State private var resendCooldown = OTPCooldown()
     @State private var isVerifyingOTP = false
-    @State private var appleRawNonce: String?
+    @State private var appleFlowInFlight = false
     @State private var appeared = false
     /// The provider whose sign-in succeeded and is now waiting on onboarding status
     /// to resolve. Keeps that button's spinner running through the post-sign-in
@@ -131,23 +131,9 @@ struct SignInView: View {
 
     private var headerSection: some View {
         VStack(spacing: 14) {
-            ZStack {
-                Circle()
-                    .fill(.thinMaterial)
-                    .frame(width: 76, height: 76)
-                    .shadow(
-                        color: .black.opacity(scheme == .dark ? 0.45 : 0.14),
-                        radius: 14, x: 0, y: 7
-                    )
-                Image("OBLogo")
-                    .renderingMode(.template)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 42, height: 42)
-                    .foregroundStyle(.primary)
-            }
-            .scaleEffect(appeared ? 1 : 0.55)
-            .opacity(appeared ? 1 : 0)
+            BrandLogo(size: 76)
+                .scaleEffect(appeared ? 1 : 0.55)
+                .opacity(appeared ? 1 : 0)
 
             VStack(spacing: 5) {
                 Text("On Board")
@@ -284,7 +270,7 @@ struct SignInView: View {
                         .fontStyle(.headline)
                     Spacer()
                     if isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) {
-                        ProgressView().tint(.white)
+                        ProgressView().tint(Color(.systemBackground))
                     }
                 }
             }
@@ -317,83 +303,80 @@ struct SignInView: View {
     // MARK: - Social sign-in
 
     private var socialSection: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
+            Text("Or continue with")
+                .fontStyle(.footnote)
+                .foregroundStyle(.secondary)
+
             HStack(spacing: 12) {
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.22))
-                    .frame(height: 0.5)
-                Text("or")
-                    .fontStyle(.footnote)
-                    .foregroundStyle(.secondary)
-                Rectangle()
-                    .fill(Color.secondary.opacity(0.22))
-                    .frame(height: 0.5)
+                appleSignInButton
+                googleSignInButton
             }
-            .padding(.horizontal, 4)
-
-            appleSignInButton
-
-            googleSignInButton
         }
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 18)
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
+    /// Shared label so the Apple and Google buttons stay visually identical:
+    /// the provider logo (or an inline spinner while busy) next to the one-word name.
+    private func socialButtonLabel(systemImage: String, title: String, isLoading: Bool) -> some View {
+        HStack(spacing: 8) {
+            if isLoading {
+                ProgressView()
+                    .controlSize(.small)
+                    .tint(.primary)
+            } else {
+                Image(systemName: systemImage)
+            }
+            Text(title)
+        }
+    }
+
     // MARK: - Apple sign-in
+    //
+    // Custom button (not SignInWithAppleButton) so it matches the Google button exactly.
+    // The one-word "Apple" label is an intentional product choice; the Apple logo and a
+    // neutral (non-brand-colored) treatment are kept. Auth runs through the same
+    // programmatic ASAuthorizationController path via AppleSignInCoordinator.
 
     private var appleSignInButton: some View {
         let isSigningIn = if case .signingIn(.apple) = auth.state { true } else { false }
+        let busy = appleFlowInFlight || isSigningIn || isResolving(.apple)
 
-        return SignInWithAppleButton(.continue) { request in
-            let rawNonce = AppleNonce.randomNonce()
-            appleRawNonce = rawNonce
-            request.requestedScopes = [.email, .fullName]
-            request.nonce = AppleNonce.sha256Hex(rawNonce)
-        } onCompletion: { result in
-            switch result {
-            case .failure(let error):
-                Task { @MainActor in
-                    if let alert = PresentableAlertError.from(error) {
-                        presentAlert(alert)
-                    }
-                    appleRawNonce = nil
-                    auth.cancelSignIn()
-                }
-            case .success(let authorization):
-                guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                      let tokenData = credential.identityToken,
-                      let idToken = String(data: tokenData, encoding: .utf8) else {
-                    Task { @MainActor in
-                        presentAlert(PresentableAlertError(
-                            message: String(localized: "Could not read your Apple ID token.")
-                        ))
-                        appleRawNonce = nil
-                        auth.cancelSignIn()
-                    }
-                    return
-                }
-                let fullName = credential.fullName?.formatted()
-                let nonce = appleRawNonce
-                Task {
-                    await MainActor.run { resolvingProvider = .apple }
-                    await auth.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
-                    await MainActor.run { appleRawNonce = nil }
-                }
-            }
+        return Button {
+            Task { await runAppleSignIn() }
+        } label: {
+            socialButtonLabel(systemImage: "applelogo", title: "Apple", isLoading: busy)
         }
-        .signInWithAppleButtonStyle(scheme == .dark ? .white : .black)
-        .frame(height: 50)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay {
-            if isSigningIn || isResolving(.apple) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.black.opacity(0.15))
-                ProgressView()
-            }
+        .buttonStyle(.boardSecondary)
+        .disabled(busy)
+        .accessibilityLabel("Continue with Apple")
+    }
+
+    private func runAppleSignIn() async {
+        if usesLiveBackend, !network.isConnected {
+            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
+            return
         }
-        .disabled(isSigningIn || isResolving(.apple))
-        .accessibilityLabel("Sign in with Apple")
+
+        appleFlowInFlight = true
+        resolvingProvider = .apple
+        defer { appleFlowInFlight = false }
+
+        do {
+            let authorization = try await AppleSignInCoordinator.requestAuthorization()
+            let idToken = try AppleSignInCoordinator.idToken(from: authorization.credential)
+            let fullName = AppleSignInCoordinator.fullName(from: authorization.credential)
+            await auth.signInWithApple(idToken: idToken, nonce: authorization.rawNonce, fullName: fullName)
+        } catch {
+            // Cancellation maps to a nil alert (silent); real failures surface.
+            if let alert = PresentableAlertError.from(error) {
+                presentAlert(alert)
+            }
+            resolvingProvider = nil
+            auth.cancelSignIn()
+        }
     }
 
     // MARK: - Google sign-in
@@ -402,48 +385,30 @@ struct SignInView: View {
     private var googleSignInButton: some View {
         if googleSignInAvailable {
             let isSigningIn = if case .signingIn(.google) = auth.state { true } else { false }
+            let busy = isSigningIn || isResolving(.google)
 
             Button {
                 resolvingProvider = .google
                 Task { await auth.signInWithGoogle() }
             } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: AuthProvider.google.systemImage)
-                    Text("Continue with Google")
-                        .fontStyle(.headline)
-                    Spacer()
-                    if isSigningIn || isResolving(.google) { ProgressView() }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                socialButtonLabel(systemImage: AuthProvider.google.systemImage, title: "Google", isLoading: busy)
             }
             .buttonStyle(.boardSecondary)
-            .disabled(isSigningIn || isResolving(.google))
+            .disabled(busy)
             .accessibilityLabel("Continue with Google")
         } else {
-            HStack(spacing: 10) {
-                Image(systemName: AuthProvider.google.systemImage)
-                Text("Continue with Google")
-                    .fontStyle(.headline)
-                Spacer()
-                Text("Soon")
-                    .fontStyle(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .frame(maxWidth: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.thinMaterial)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.secondary.opacity(0.20), lineWidth: 1)
-            )
-            .opacity(0.50)
-            .accessibilityLabel("Continue with Google, coming soon")
-            .accessibilityAddTraits(.isStaticText)
+            // Same shape as `.boardSecondary`, dimmed, for the not-yet-available state.
+            socialButtonLabel(systemImage: AuthProvider.google.systemImage, title: "Google", isLoading: false)
+                .fontStyle(.headline)
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity)
+                .background(Capsule(style: .continuous).fill(.thinMaterial))
+                .overlay(Capsule(style: .continuous).stroke(Color.secondary.opacity(0.20), lineWidth: 1))
+                .opacity(0.50)
+                .accessibilityLabel("Google, coming soon")
+                .accessibilityAddTraits(.isStaticText)
         }
     }
 

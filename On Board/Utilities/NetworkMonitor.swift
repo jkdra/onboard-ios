@@ -58,7 +58,8 @@ enum NetworkErrorClassifier {
                  .cannotFindHost,
                  .timedOut,
                  .dnsLookupFailed,
-                 .dataNotAllowed:
+                 .dataNotAllowed,
+                 .zeroByteResource:
                 return true
             default:
                 return false

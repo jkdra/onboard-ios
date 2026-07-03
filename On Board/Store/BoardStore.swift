@@ -63,6 +63,7 @@ final class BoardStore {
     // MARK: - Archive LRU
 
     private static let maxCachedArchiveWeeks = 3
+    private static let maxConnectivityRetries = 2
     private var cachedArchiveWeekIDs: [UUID] = []
 
     private struct FeedItemsCacheKey: Equatable {
@@ -198,17 +199,30 @@ final class BoardStore {
             loadError = nil
             defer { isLoading = false }
 
-            do {
-                async let snapshot = boardService.loadActiveBoard(boardID: boardID, for: userID)
-                async let archivedWeeks = boardService.listArchivedWeeks(
-                    boardID: boardID,
-                    limit: 52,
-                    offset: 0
-                )
-                apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
-                await refreshAccessibleBoards(for: userID)
-            } catch {
-                loadError = Self.mapLoadError(error)
+            // A weak connection can drop a single request (e.g. a zero-byte response),
+            // so retry transient connectivity failures a couple of times before
+            // surfacing the "Couldn't load board" state.
+            var attempt = 0
+            while true {
+                do {
+                    async let snapshot = boardService.loadActiveBoard(boardID: boardID, for: userID)
+                    async let archivedWeeks = boardService.listArchivedWeeks(
+                        boardID: boardID,
+                        limit: 52,
+                        offset: 0
+                    )
+                    apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
+                    await refreshAccessibleBoards(for: userID)
+                    break
+                } catch {
+                    attempt += 1
+                    guard NetworkErrorClassifier.isConnectivityFailure(error),
+                          attempt <= Self.maxConnectivityRetries else {
+                        loadError = Self.mapLoadError(error)
+                        break
+                    }
+                    try? await Task.sleep(for: .milliseconds(400 * attempt))
+                }
             }
         }
 
@@ -556,6 +570,9 @@ final class BoardStore {
         }
         if SessionErrorClassifier.isSessionExpired(error) {
             return AuthError.sessionExpired.localizedDescription
+        }
+        if NetworkErrorClassifier.isConnectivityFailure(error) {
+            return AuthError.networkUnavailable.localizedDescription
         }
         return error.localizedDescription
     }

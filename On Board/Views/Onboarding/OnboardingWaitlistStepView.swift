@@ -7,7 +7,6 @@ import SwiftUI
 
 struct OnboardingWaitlistStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
-    @Environment(\.colorScheme) private var scheme
 
     @State private var appeared = false
 
@@ -52,30 +51,16 @@ struct OnboardingWaitlistStepView: View {
     // MARK: - Header icon
 
     private var iconHeader: some View {
-        ZStack {
-            Circle()
-                .fill(.thinMaterial)
-                .frame(width: 76, height: 76)
-                .shadow(
-                    color: .black.opacity(scheme == .dark ? 0.45 : 0.12),
-                    radius: 14, x: 0, y: 7
-                )
-            Group {
-                if hasJoined {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title.weight(.bold))
-                        .foregroundStyle(.green)
-                } else {
-                    Image("OBLogo")
-                        .renderingMode(.template)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 42, height: 42)
-                        .foregroundStyle(.primary)
-                }
+        Group {
+            if hasJoined {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 60, weight: .bold))
+                    .foregroundStyle(.green)
+            } else {
+                BrandLogo(size: 72)
             }
-            .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
         }
+        .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
     }
 
     // MARK: - Text

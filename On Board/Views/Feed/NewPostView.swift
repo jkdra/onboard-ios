@@ -78,16 +78,6 @@ struct NewPostView: View {
 
                     // Image attachment row
                     imageAttachmentRow
-
-                    Button {
-                        submit()
-                    } label: {
-                        LoadingButtonLabel("Post", systemImage: "tray.and.arrow.up.fill", isLoading: isSubmitting)
-                    }
-                    .buttonStyle(.boardPrimary)
-                    .disabled(!canSubmit)
-                    .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
-                    .padding(.top, 4)
                 }
                 .padding(20)
             }
@@ -124,21 +114,28 @@ struct NewPostView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
+                    Button { dismiss() } label: {
+                        Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                    }
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { submit() } label: {
+                        if isSubmitting {
+                            ProgressView()
+                        } else {
+                            Label("Post", systemImage: "tray.and.arrow.up.fill").toolbarActionLabel()
+                        }
+                    }
+                    .disabled(!canSubmit)
+                    .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }
                 ToolbarItem(placement: .bottomBar) { Spacer() }
                 ToolbarItem(placement: .bottomBar) {
                     TonePicker(selection: $selectedTone, showBackground: false)
                 }
                 ToolbarItem(placement: .bottomBar) { Spacer() }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button { KeyboardDismisser.dismiss() } label: {
-                        Text("Done").fontWeight(.semibold)
-                    }
-                    .accessibilityLabel("Dismiss keyboard")
-                }
             }
+            .keyboardDoneToolbar()
             .onAppear {
                 focus = .title
                 updateClearingState()

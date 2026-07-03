@@ -177,9 +177,11 @@ struct OnboardingProfileStepView: View {
                 bio = onboarding.status?.bio ?? ""
             }
             avatarUrl = onboarding.status?.avatarUrl
-            if displayName.isEmpty {
-                focus = .displayName
-            }
+            // TEMP: auto-focus on appear disabled — suspected cause of a main-thread
+            // stall (UITextInteractionNameTapAndAHalf gesture recognizer stuck for 25s+,
+            // confirmed via Instruments Hangs + on-device Fence Hang HUD) from racing
+            // SwiftUI's programmatic focus assignment against a UITextView-backed
+            // (axis: .vertical) field during the navigation push transition.
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             photoUploadFailed = false
@@ -201,7 +203,10 @@ struct OnboardingProfileStepView: View {
         guard let client = SupabaseClientFactory.client(for: .current),
               let userID = onboarding.status?.id else { return }
 
-        let path = "\(userID.uuidString)/\(UUID().uuidString).jpg"
+        // Storage RLS checks the path's folder segment against `auth.uid()::text`, which
+        // Postgres always renders lowercase — `UUID.uuidString` is uppercase, so an
+        // un-lowercased path silently fails the policy check on every upload.
+        let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).jpg"
         do {
             try await client.storage
                 .from("avatars")

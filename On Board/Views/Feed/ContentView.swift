@@ -49,7 +49,7 @@ struct ContentView: View {
                     }
                 }
                 .sheet(isPresented: $showNewPost) { NewPostView() }
-                .boardErrorHandling(alertError: $alertError)
+                .boardErrorHandling(alertError: $alertError, suppressWhenBoardMissing: true)
                 .presentableErrorAlert(error: $alertError)
         }
     }

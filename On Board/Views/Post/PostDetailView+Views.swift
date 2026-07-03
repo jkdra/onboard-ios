@@ -17,7 +17,9 @@ extension PostDetailView {
         let livePost = livePost
         if editMode {
             ToolbarItem(placement: .topBarLeading) {
-                Button { cancelEditing() } label: { Label("Cancel", systemImage: "xmark") }
+                Button { cancelEditing() } label: {
+                    Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                }
             }
             ToolbarItem(placement: .principal) {
                 EditingIndicator()
@@ -25,7 +27,9 @@ extension PostDetailView {
                     .fixedSize()
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button { saveEdits() } label: { Label("Save", systemImage: "checkmark") }
+                Button { saveEdits() } label: {
+                    Label("Save", systemImage: "checkmark").toolbarActionLabel()
+                }
             }
             ToolbarItem(placement: .bottomBar) { Spacer() }
             ToolbarItem(placement: .bottomBar) {
@@ -116,34 +120,11 @@ extension PostDetailView {
                 .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .overlay {
-            Image(systemName: "heart.fill")
-                .font(.system(size: 80))
-                .foregroundStyle(.red.opacity(0.9))
-                .shadow(color: .red.opacity(0.3), radius: 12)
-                .opacity(showHeartBurst ? 1 : 0)
-                .scaleEffect(showHeartBurst ? 1 : 0.3)
-                .rotationEffect(.degrees(heartRotation))
-                .animation(.spring(response: 0.3, dampingFraction: 0.55), value: showHeartBurst)
-                .allowsHitTesting(false)
-                .position(heartTapLocation)
-        }
-        // A single SpatialTapGesture carries both the count and the tap location, so the
-        // separate min-distance-0 drag (which was cancelling the double-tap) is gone.
-        .gesture(
-            SpatialTapGesture(count: 2, coordinateSpace: .local)
-                .onEnded { value in
-                    guard !isReadOnly else { return }
-                    heartTapLocation = value.location
-                    guard store.userReaction(for: livePost.id) != .like else { return }
-                    store.setReaction(postId: livePost.id, reaction: .like)
-                    heartRotation = Double.random(in: -5...5)
-                    showHeartBurst = true
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(700))
-                        showHeartBurst = false
-                    }
-                }
+        .doubleTapHeart(
+            size: 80,
+            isEnabled: !isReadOnly,
+            isLiked: { store.userReaction(for: livePost.id) == .like },
+            onLike: { store.setReaction(postId: livePost.id, reaction: .like) }
         )
 
         if let urlString = livePost.imageUrl, let url = URL(string: urlString) {

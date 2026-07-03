@@ -58,8 +58,17 @@ struct OnboardingCoordinator: View {
         // forward as each screen is pushed. It's an overlay, not a background, because
         // NavigationStack paints an opaque background that would occlude anything behind
         // it — and the glow is a transparent band, so overlaying doesn't obscure content.
+        //
+        // On sign-in (step 0) the fill is 0, so the glow renders empty and draws on from
+        // the leading edge as each step is pushed — a continuous sweep, no abrupt appear.
         .overlay {
-            OnboardingProgressBackground(step: path.count, edge: .bottom)
+            OnboardingProgressBackground(
+                step: path.count,
+                edge: .bottom,
+                tintColor: .primary,
+                useDotMask: true,
+                dotFieldFraction: 0.36
+            )
         }
         .overlay {
             // Cover SignInView only on a cold-launch session restore, where showing the
@@ -70,18 +79,7 @@ struct OnboardingCoordinator: View {
                 ZStack {
                     Color(.systemBackground).ignoresSafeArea()
                     VStack(spacing: 24) {
-                        ZStack {
-                            Circle()
-                                .fill(.thinMaterial)
-                                .frame(width: 72, height: 72)
-                                .shadow(color: .black.opacity(0.12), radius: 14, x: 0, y: 7)
-                            Image("OBLogo")
-                                .renderingMode(.original)
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 40, height: 40)
-                                .foregroundStyle(.primary)
-                        }
+                        BrandLogo(size: 72, renderingMode: .original)
                         ProgressView()
                             .scaleEffect(1.1)
                         Text("Setting up your account…")
@@ -162,12 +160,19 @@ struct OnboardingCoordinator: View {
     }
 
     private func targetPath(for step: OnboardingStep) -> [OnboardingStep] {
-        guard auth.isSignedIn else { return [] }
+        Self.targetPath(for: step, isSignedIn: auth.isSignedIn)
+    }
+
+    static func targetPath(for step: OnboardingStep, isSignedIn: Bool) -> [OnboardingStep] {
+        guard isSignedIn else { return [] }
         switch step {
-        case .username, .complete: return [.username]
-        case .profile:             return [.username, .profile]
-        case .schoolVerify:        return [.username, .profile, .schoolVerify]
-        case .waitlist:            return [.username, .profile, .schoolVerify, .waitlist]
+        // .complete means onboarding is already done — RootView swaps this whole
+        // coordinator out for BoardListView, so there's no step to push to.
+        case .complete:      return []
+        case .username:      return [.username]
+        case .profile:       return [.username, .profile]
+        case .schoolVerify:  return [.username, .profile, .schoolVerify]
+        case .waitlist:      return [.username, .profile, .schoolVerify, .waitlist]
         }
     }
 

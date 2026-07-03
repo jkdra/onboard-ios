@@ -14,6 +14,10 @@ final class NotificationService {
 
     private var pendingToken: Data?
     private(set) var currentUserID: UUID?
+    /// The hex APNs token last registered for the signed-in user, so a sign-out (which
+    /// doesn't delete the account, unlike account deletion's `ON DELETE CASCADE`) can
+    /// unregister this device from that account's push notifications.
+    private(set) var currentTokenHex: String?
 
     private init() {}
 
@@ -29,6 +33,7 @@ final class NotificationService {
 
     func onSignedOut() {
         currentUserID = nil
+        currentTokenHex = nil
     }
 
     // Called by AppDelegate when APNs returns a device token.
@@ -64,6 +69,7 @@ final class NotificationService {
 
     private func upload(tokenData: Data, userID: UUID) async {
         let hex = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
+        currentTokenHex = hex
         guard let client = SupabaseClientFactory.client(for: .current) else { return }
         _ = try? await client
             .rpc("register_device_token", params: ["p_token": hex])

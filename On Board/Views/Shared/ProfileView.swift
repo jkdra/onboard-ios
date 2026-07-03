@@ -128,7 +128,9 @@ struct ProfileView: View {
             .toolbar {
                 if editMode {
                     ToolbarItem(placement: .topBarLeading) {
-                        Button { cancelEditing() } label: { Label("Cancel", systemImage: "xmark") }
+                        Button { cancelEditing() } label: {
+                            Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                        }
                     }
                     ToolbarItem(placement: .principal) {
                         EditingIndicator()
@@ -136,8 +138,10 @@ struct ProfileView: View {
                             .fixedSize()
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button { saveProfile() } label: { Label("Save", systemImage: "checkmark") }
-                            .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
+                        Button { saveProfile() } label: {
+                            Label("Save", systemImage: "checkmark").toolbarActionLabel()
+                        }
+                        .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
                     }
                 } else {
                     if presentation == .sheet {

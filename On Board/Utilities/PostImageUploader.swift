@@ -36,7 +36,10 @@ func uploadPostImageData(
     guard let encoded else { return nil }
     guard let client = SupabaseClientFactory.client(for: .current) else { return nil }
 
-    let path = "\(userID.uuidString)/\(UUID().uuidString).webp"
+    // Storage RLS checks the path's folder segment against `auth.uid()::text`, which
+    // Postgres always renders lowercase — `UUID.uuidString` is uppercase, so an
+    // un-lowercased path silently fails the policy check on every upload.
+    let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).webp"
     do {
         try await client.storage
             .from("post-images")

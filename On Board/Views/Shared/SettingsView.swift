@@ -80,7 +80,7 @@ struct SettingsView: View {
                                 .monospacedDigit()
                         }
                         Slider(value: $rotationIntensity, in: 0...1, step: 0.05)
-                            .tint(.black)
+                            .tint(.primary)
                             .disabled(typeSize.isAccessibilitySize)
                         if typeSize.isAccessibilitySize {
                             Text("Card rotation is not available at accessibility text sizes.")
@@ -101,12 +101,25 @@ struct SettingsView: View {
                     Toggle(isOn: $hapticsEnabled) {
                         Text("Haptics").fontStyle(.body)
                     }
-                    .tint(.black)
+                    .tint(.primary)
                 } header: {
                     Text("Feedback")
                         .fontStyle(.caption)
                 } footer: {
                     Text("Light taps when you react to a post.")
+                        .fontStyle(.footnote)
+                }
+
+                Section {
+                    Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
+                        Label("Notification Settings", systemImage: "bell.badge")
+                            .fontStyle(.body)
+                    }
+                } header: {
+                    Text("Notifications")
+                        .fontStyle(.caption)
+                } footer: {
+                    Text("Manage alerts for new boards and clearing reminders in iOS Settings.")
                         .fontStyle(.footnote)
                 }
 
@@ -117,8 +130,26 @@ struct SettingsView: View {
                         Label("Contact Support", systemImage: "envelope")
                             .fontStyle(.body)
                     }
+                    Link(destination: AppLinks.reportMailURL) {
+                        Label("Report a Problem", systemImage: "exclamationmark.bubble")
+                            .fontStyle(.body)
+                    }
                 } header: {
                     Text("Support")
+                        .fontStyle(.caption)
+                }
+
+                Section {
+                    Link(destination: AppLinks.privacyPolicyURL) {
+                        Label("Privacy Policy", systemImage: "hand.raised")
+                            .fontStyle(.body)
+                    }
+                    Link(destination: AppLinks.termsOfServiceURL) {
+                        Label("Terms of Service", systemImage: "doc.text")
+                            .fontStyle(.body)
+                    }
+                } header: {
+                    Text("Legal")
                         .fontStyle(.caption)
                 }
 
@@ -140,7 +171,7 @@ struct SettingsView: View {
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
                 }
             }
