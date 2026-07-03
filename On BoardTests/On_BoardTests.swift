@@ -674,6 +674,76 @@ struct OnboardingStoreTests {
 }
 
 @MainActor
+struct OnboardingStalenessTests {
+    /// Wraps `MockOnboardingService` to count `fetchStatus()` calls, so the test
+    /// can assert `refreshIfOnline()` only refetches once the cached status is stale.
+    private final class CountingOnboardingService: OnboardingService, @unchecked Sendable {
+        let inner: MockOnboardingService
+        nonisolated(unsafe) var fetchCount = 0
+
+        init(defaults: UserDefaults) {
+            inner = MockOnboardingService(defaults: defaults)
+        }
+
+        func fetchStatus() async throws -> OnboardingStatus {
+            fetchCount += 1
+            return try await inner.fetchStatus()
+        }
+
+        func checkHandleAvailable(_ handle: String) async throws -> Bool {
+            try await inner.checkHandleAvailable(handle)
+        }
+
+        func completeUsername(_ handle: String) async throws -> OnboardingStep {
+            try await inner.completeUsername(handle)
+        }
+
+        func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep {
+            try await inner.completeProfile(displayName: displayName, bio: bio, avatarUrl: avatarUrl)
+        }
+
+        func lookupSchool(for email: String) async throws -> SchoolMatch? {
+            try await inner.lookupSchool(for: email)
+        }
+
+        func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
+            try await inner.beginSchoolEmailVerification(email)
+        }
+
+        func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep {
+            try await inner.completeSchoolEmailVerification(email, token: token)
+        }
+
+        func joinWaitlist() async throws -> OnboardingStep {
+            try await inner.joinWaitlist()
+        }
+    }
+
+    @Test func refreshIfOnlineRefetchesOnceStatusIsStale() async throws {
+        let authDefaults = UserDefaults(suiteName: "OnboardingStalenessAuth")!
+        authDefaults.removePersistentDomain(forName: "OnboardingStalenessAuth")
+
+        let auth = AuthStore(service: MockAuthService(defaults: authDefaults))
+        await auth.signIn(with: .apple)
+
+        let service = CountingOnboardingService(defaults: authDefaults)
+        let store = OnboardingStore(service: service, auth: auth, network: NetworkMonitor())
+
+        await store.refreshIfOnline()
+        #expect(service.fetchCount == 1)
+
+        // Fresh: no refetch.
+        await store.refreshIfOnline()
+        #expect(service.fetchCount == 1)
+
+        // Stale: refetch.
+        store.statusStaleInterval = 0
+        await store.refreshIfOnline()
+        #expect(service.fetchCount == 2)
+    }
+}
+
+@MainActor
 struct OnboardingCoordinatorTargetPathTests {
     // A returning, already-onboarded user must not be routed into any onboarding
     // step screen — the coordinator gets swapped out for BoardListView instead.

@@ -29,6 +29,12 @@ final class OnboardingStore {
     private let network: NetworkMonitor
     private var lastSyncedUserID: UUID?
 
+    /// How long a fetched status stays "fresh". `refreshIfOnline()` refetches
+    /// past this age so foregrounding the app picks up server-side changes
+    /// (e.g. waitlist approval). Settable for tests.
+    var statusStaleInterval: TimeInterval = 60
+    private var lastFetchedAt: Date?
+
     var isLoading: Bool { loadState == .loading }
     var hasResolvedStatus: Bool { status != nil }
     var isComplete: Bool { status?.needsOnboarding == false }
@@ -54,6 +60,7 @@ final class OnboardingStore {
         lastError = nil
         lastErrorRecovery = nil
         syncFailure = nil
+        lastFetchedAt = nil
     }
 
     func clearLastError() {
@@ -95,7 +102,8 @@ final class OnboardingStore {
             loadState = .idle
         }
 
-        if !force, !userChanged, loadState == .loaded, status != nil {
+        let isFresh = lastFetchedAt.map { Date.now.timeIntervalSince($0) < statusStaleInterval } ?? false
+        if !force, !userChanged, loadState == .loaded, status != nil, isFresh {
             return
         }
 
@@ -109,6 +117,7 @@ final class OnboardingStore {
             status = fetched
             OnboardingStatusCache.save(fetched, for: userID)
             loadState = .loaded
+            lastFetchedAt = .now
         } catch let error as OnboardingError where error == .notAuthenticated {
             await auth.reportSessionExpired()
             reset()

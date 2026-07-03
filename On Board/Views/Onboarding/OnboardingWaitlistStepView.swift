@@ -46,6 +46,17 @@ struct OnboardingWaitlistStepView: View {
                 appeared = true
             }
         }
+        .task(id: hasJoined) {
+            // Poll while parked on the waitlist so admin approval flips the app
+            // to the board without requiring a relaunch. RootView swaps this
+            // view out when status turns complete, cancelling the task.
+            guard hasJoined else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(45))
+                guard !Task.isCancelled else { break }
+                await onboarding.refresh()
+            }
+        }
     }
 
     // MARK: - Header icon
