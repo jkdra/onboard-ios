@@ -189,7 +189,9 @@ final class BoardStore {
             return
         }
 
-        let boardID = currentBoardId ?? SampleBoardID.main
+        // Never fall back to the sample/dev board on live paths: no assigned
+        // board means there is nothing to fetch yet (waitlisted user).
+        guard let boardID = currentBoardId else { return }
         let hasCachedFeed = activeBoardWeek != nil && !posts.isEmpty
 
         let task = Task { @MainActor in

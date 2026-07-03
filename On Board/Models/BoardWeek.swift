@@ -51,7 +51,7 @@ struct BoardWeek: Identifiable, Hashable, Codable {
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        boardId = try container.decodeIfPresent(UUID.self, forKey: .boardId) ?? SampleBoardID.main
+        boardId = try container.decode(UUID.self, forKey: .boardId)
         startsAt = try container.decode(Date.self, forKey: .startsAt)
         endsAt = try container.decode(Date.self, forKey: .endsAt)
         status = try container.decode(Status.self, forKey: .status)
