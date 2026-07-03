@@ -203,14 +203,14 @@ struct OnboardingProfileStepView: View {
         guard let client = SupabaseClientFactory.client(for: .current),
               let userID = onboarding.status?.id else { return }
 
-        // Storage RLS checks the path's folder segment against `auth.uid()::text`, which
-        // Postgres always renders lowercase — `UUID.uuidString` is uppercase, so an
-        // un-lowercased path silently fails the policy check on every upload.
+        // Storage RLS checks the path's folder segment against `auth.uid()::text`
+        // (lowercase), and Supabase requires an UPDATE policy for upsert uploads —
+        // the filename is a fresh UUID every time, so plain insert is correct.
         let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).jpg"
         do {
             try await client.storage
                 .from("avatars")
-                .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: true))
+                .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: false))
             let publicURL = try client.storage.from("avatars").getPublicURL(path: path)
             avatarUrl = publicURL.absoluteString
             photoUploadFailed = false
