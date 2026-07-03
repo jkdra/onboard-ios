@@ -895,3 +895,68 @@ struct AuthRestoreOfflineTests {
         #expect(store.state == .signedOut)
     }
 }
+
+@MainActor
+struct BoardSwitchRaceTests {
+    /// BoardService stub whose loadActiveBoard for a chosen board suspends until released.
+    final class SlowBoardService: BoardService, @unchecked Sendable {
+        var slowBoardID: UUID?
+        private var continuation: CheckedContinuation<Void, Never>?
+
+        func releaseSlowLoad() {
+            continuation?.resume()
+            continuation = nil
+        }
+
+        func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot {
+            if boardID == slowBoardID {
+                await withTaskCancellationHandler {
+                    await withCheckedContinuation { self.continuation = $0 }
+                } onCancel: {
+                    Task { @MainActor in self.releaseSlowLoad() }
+                }
+            }
+            let week = BoardWeek(
+                boardId: boardID,
+                startsAt: .now,
+                endsAt: .now.addingTimeInterval(604_800),
+                status: .active
+            )
+            return BoardSnapshot(week: week, posts: [], profiles: [], userReactions: [:])
+        }
+
+        func listArchivedWeeks(boardID: UUID, limit: Int, offset: Int) async throws -> [BoardWeek] { [] }
+        func listAccessibleBoards(for userID: UUID) async throws -> [Board] { [] }
+        func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { fatalError("unused") }
+        func fetchComments(for postID: UUID) async throws -> CommentThread { fatalError("unused") }
+        func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws { fatalError("unused") }
+        func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { fatalError("unused") }
+        func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { fatalError("unused") }
+        func deletePost(id: UUID) async throws { fatalError("unused") }
+        func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws { fatalError("unused") }
+        func updateComment(id: UUID, body: String) async throws { fatalError("unused") }
+        func deleteComment(id: UUID) async throws { fatalError("unused") }
+        func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws { fatalError("unused") }
+        func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { fatalError("unused") }
+    }
+
+    @Test func switchingBoardsMidLoadLoadsTheNewBoard() async {
+        let boardA = UUID(), boardB = UUID(), user = UUID()
+        let service = SlowBoardService()
+        service.slowBoardID = boardA
+        let store = BoardStore(boardService: service)
+        store.setBoard(id: boardA, name: "A")
+
+        let firstLoad = Task { await store.refresh(for: user) }
+        await Task.yield()  // let the slow load start and suspend
+
+        store.setBoard(id: boardB, name: "B")
+        await store.refresh(for: user)
+
+        service.releaseSlowLoad()
+        await firstLoad.value
+
+        #expect(store.currentBoardId == boardB)
+        #expect(store.activeBoardWeek?.boardId == boardB)
+    }
+}

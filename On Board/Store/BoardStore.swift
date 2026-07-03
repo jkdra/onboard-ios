@@ -56,6 +56,8 @@ final class BoardStore {
     private var cachedFeedItemsByWeek: [UUID: [FeedItem]] = [:]
     private var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
     private var refreshTask: Task<Void, Never>?
+    private var refreshTaskID: UUID?
+    private var refreshTaskBoardID: UUID?
     var reactionRealtimeListener: ReactionRealtimeListener?
     // Keyed per-post so only the reacted card re-renders, not the whole feed.
     private(set) var postProxies: [UUID: PostStateProxy] = [:]
@@ -183,15 +185,21 @@ final class BoardStore {
 
     func refresh(for userID: UUID?) async {
         guard let boardService, let userID else { return }
-
-        if let refreshTask {
-            await refreshTask.value
-            return
-        }
-
         // Never fall back to the sample/dev board on live paths: no assigned
         // board means there is nothing to fetch yet (waitlisted user).
         guard let boardID = currentBoardId else { return }
+
+        if let inFlight = refreshTask {
+            if refreshTaskBoardID == boardID {
+                await inFlight.value
+                return
+            }
+            // The in-flight load is for a different board (user switched mid-load).
+            // Supersede it: cancel, wait it out, then load the selected board.
+            inFlight.cancel()
+            await inFlight.value
+        }
+
         let hasCachedFeed = activeBoardWeek != nil && !posts.isEmpty
 
         let task = Task { @MainActor in
@@ -217,6 +225,7 @@ final class BoardStore {
                     await refreshAccessibleBoards(for: userID)
                     break
                 } catch {
+                    if Task.isCancelled { break }
                     attempt += 1
                     guard NetworkErrorClassifier.isConnectivityFailure(error),
                           attempt <= Self.maxConnectivityRetries else {
@@ -228,9 +237,16 @@ final class BoardStore {
             }
         }
 
+        let taskID = UUID()
         refreshTask = task
+        refreshTaskID = taskID
+        refreshTaskBoardID = boardID
         await task.value
-        refreshTask = nil
+        if refreshTaskID == taskID {
+            refreshTask = nil
+            refreshTaskID = nil
+            refreshTaskBoardID = nil
+        }
     }
 
     func loadArchivedWeek(_ week: BoardWeek, for userID: UUID?) async {
@@ -433,6 +449,9 @@ final class BoardStore {
     // MARK: - Internal cache updates
 
     func apply(_ snapshot: BoardSnapshot, incomingArchivedWeeks: [BoardWeek] = []) {
+        // A load that finished after the user switched boards must not clobber
+        // the switch — drop the stale snapshot.
+        if let currentBoardId, snapshot.week.boardId != currentBoardId { return }
         let priorPosts = posts
         let priorByID = Dictionary(uniqueKeysWithValues: priorPosts.map { ($0.id, $0) })
         let activeWeekID = snapshot.week.id
