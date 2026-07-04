@@ -33,6 +33,7 @@ struct ProfileView: View {
     @State private var selectedPhotoData: Data?
     @State private var isUploadingPhoto = false
     @State private var uncroppedImage: UIImage?
+    @State private var alertError: PresentableAlertError?
 
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
@@ -177,6 +178,7 @@ struct ProfileView: View {
                         .navigationTransition(.zoom(sourceID: "avatarImage", in: profileNamespace))
                 }
             }
+            .presentableErrorAlert(error: $alertError)
     }
 
     private var avatar: some View {
@@ -293,7 +295,14 @@ struct ProfileView: View {
         if let result = await ImageUploader.upload(input: .uiImage(image), type: .profilePicture, userID: userID) {
             draftAvatarUrl = result.url
         } else {
-            print("Failed to upload photo")
+            // Revert the optimistic preview so the avatar shown matches what Save
+            // would actually keep, and tell the user instead of failing silently.
+            selectedPhotoData = nil
+            selectedPhotoItem = nil
+            alertError = PresentableAlertError(
+                message: "Your photo couldn't be uploaded.",
+                recoverySuggestion: "Check your connection and try again."
+            )
         }
     }
 }

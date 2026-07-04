@@ -35,6 +35,7 @@ struct PostDetailView: View {
     @State var isUploadingEditImage = false
     @State var uploadedEditImageUrl: String?
     @State var uploadedEditAspectRatio: Double?
+    @State var editImageUploadFailed = false
 
     // UI
     @State var showDeleteConfirmation = false

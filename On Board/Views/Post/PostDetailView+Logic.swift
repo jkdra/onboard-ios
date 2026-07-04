@@ -41,6 +41,7 @@ extension PostDetailView {
         selectedEditPhotoItem = nil
         uploadedEditImageUrl = nil
         uploadedEditAspectRatio = nil
+        editImageUploadFailed = false
         withAnimation(.smooth(duration: 0.4)) { editMode = true }
     }
 
@@ -71,6 +72,7 @@ extension PostDetailView {
         selectedEditPhotoItem = nil
         uploadedEditImageUrl = nil
         uploadedEditAspectRatio = nil
+        editImageUploadFailed = false
         withAnimation(.smooth(duration: 0.4)) { editMode = false }
     }
 
@@ -121,6 +123,7 @@ extension PostDetailView {
         uploadedEditAspectRatio = nil
         draftImageUrl = nil
         draftImageAspectRatio = nil
+        editImageUploadFailed = false
     }
 
     func loadAndUploadEditImage(_ item: PhotosPickerItem?) async {
@@ -128,6 +131,7 @@ extension PostDetailView {
         guard let rawData = try? await item.loadTransferable(type: Data.self),
               UIImage(data: rawData) != nil else { return }
         selectedEditPhotoData = rawData
+        editImageUploadFailed = false
         guard let userID = store.currentUserID else { return }
         isUploadingEditImage = true
         defer { isUploadingEditImage = false }
@@ -135,6 +139,12 @@ extension PostDetailView {
             uploadedEditImageUrl = result.url
             uploadedEditAspectRatio = result.aspectRatio
             draftImageUrl = nil
+        } else {
+            // Drop the failed preview so what's on screen matches what Save keeps
+            // (the post's previous image, if any).
+            selectedEditPhotoData = nil
+            selectedEditPhotoItem = nil
+            editImageUploadFailed = true
         }
     }
 }

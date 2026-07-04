@@ -211,6 +211,12 @@ extension PostDetailView {
     var editImageSection: some View {
         let hasImage = selectedEditPhotoData != nil || draftImageUrl != nil
 
+        if editImageUploadFailed {
+            Label("Image couldn't be uploaded — the previous one is kept.", systemImage: "exclamationmark.triangle")
+                .fontStyle(.caption)
+                .foregroundStyle(.secondary)
+        }
+
         if hasImage {
             // ── Image preview with overlaid controls ───────────────────────
             Group {
