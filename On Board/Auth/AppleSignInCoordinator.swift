@@ -43,7 +43,8 @@ enum AppleSignInCoordinator {
     }
 
     static func fullName(from credential: ASAuthorizationAppleIDCredential) -> String? {
-        credential.fullName?.formatted()
+        let name = credential.fullName?.formatted().trimmingCharacters(in: .whitespacesAndNewlines)
+        return name?.isEmpty == false ? name : nil
     }
 }
 

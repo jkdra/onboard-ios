@@ -20,7 +20,15 @@ struct GridCard: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let peekAmount: CGFloat = 16
+    private var imageHorizontalPadding: CGFloat {
+        guard let ratio = post.imageAspectRatio, ratio > 0 else { return 8 }
+        return ratio < 1.0 ? 32 : 8
+    }
+
+    private var peekAmount: CGFloat {
+        guard let ratio = post.imageAspectRatio, ratio > 0 else { return 20 }
+        return ratio < 1.0 ? 64 : 20
+    }
 
     private var tone: PostTone { post.tone }
     private var cardHeight: CGFloat { typeSize.isAccessibilitySize ? 300 : 200 }
@@ -29,6 +37,7 @@ struct GridCard: View {
 
     var body: some View {
         cardView
+            .contentShape(.rect)
     }
 
     @ViewBuilder
@@ -129,21 +138,22 @@ struct GridCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(tone.color.opacity(0.4), lineWidth: 0.9)
+                        .stroke(tone.color.opacity(0.4), lineWidth: 1.2)
                 }
                 .background {
                     RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(tone.color.opacity(0.10))
                 }
-                .padding(.horizontal, 8)
+                .padding(.horizontal, imageHorizontalPadding)
                 .animation(.smooth(duration: 0.35), value: post.tone)
         }
     }
 
     private var imageCardHeight: CGFloat {
-        let effectiveWidth = max(columnWidth - 16, 0)
+        let effectiveWidth = max(columnWidth - (imageHorizontalPadding * 2), 0)
         guard let ratio = post.imageAspectRatio, ratio > 0, effectiveWidth > 0 else { return 164 }
-        return min(effectiveWidth / CGFloat(ratio), 248)
+        let maxHeight: CGFloat = ratio < 1.0 ? 180 : 248
+        return min(effectiveWidth / CGFloat(ratio), maxHeight)
     }
 
     // MARK: - Post card content
@@ -187,9 +197,11 @@ struct GridCard: View {
         HStack(spacing: 0) {
             ForEach(Array(displayedReactions.enumerated()), id: \.element.reaction) { idx, entry in
                 if idx > 0 {
+                    Spacer(minLength: 0)
                     Circle()
                         .fill(.secondary.opacity(0.35))
                         .frame(width: 4, height: 4)
+                    Spacer(minLength: 0)
                 }
                 reactionChip(entry)
             }
@@ -210,7 +222,6 @@ struct GridCard: View {
                 .animation(.snappy(duration: 0.35), value: entry.count)
         }
         .foregroundStyle(.secondary)
-        .frame(maxWidth: .infinity)
     }
 
     private var displayedReactions: [ReactionDisplayEntry] {
@@ -235,7 +246,7 @@ struct GridCard: View {
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))
                 .overlay {
                     RoundedRectangle(cornerRadius: 18)
-                        .stroke(tone.color.opacity(0.5), lineWidth: 0.9)
+                        .stroke(tone.color.opacity(0.5), lineWidth: 1.2)
                 }
         } else {
             RoundedRectangle(cornerRadius: 18, style: .continuous)

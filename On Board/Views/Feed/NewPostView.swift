@@ -123,9 +123,11 @@ struct NewPostView: View {
                         if isSubmitting {
                             ProgressView()
                         } else {
-                            Label("Post", systemImage: "tray.and.arrow.up.fill").toolbarActionLabel()
+                            Label("Post", systemImage: "paperplane.fill").toolbarActionLabel()
                         }
                     }
+                    .tint(previewTone?.color ?? .gray)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }
@@ -222,9 +224,9 @@ struct NewPostView: View {
         isUploadingImage = true
         defer { isUploadingImage = false }
 
-        // Encode (WebP, downscaled) + upload via the shared helper, which now runs the
+        // Encode (JPEG, downscaled) + upload via the shared helper, which now runs the
         // CPU-heavy encode OFF the main actor so the composer doesn't hitch.
-        if let result = await uploadPostImageData(rawData: rawData, userID: userID) {
+        if let result = await ImageUploader.upload(input: .rawData(rawData), type: .postPhoto, userID: userID) {
             uploadedImageUrl = result.url
             uploadedAspectRatio = result.aspectRatio
         } else {

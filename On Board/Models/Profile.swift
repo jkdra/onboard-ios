@@ -23,13 +23,8 @@ struct Profile: Identifiable, Hashable, Codable {
     let avatarUrl: String?
     let joinedAt: Date
 
-    enum CodingKeys: String, CodingKey {
-        case id
-        case handle
-        case displayName = "display_name"
-        case bio
-        case avatarUrl = "avatar_url"
-        case joinedAt = "created_at"
+    enum CodingKeys: CodingKey {
+        case id, handle, displayName, bio, avatarUrl, joinedAt
     }
 
     init(
@@ -49,13 +44,24 @@ struct Profile: Identifiable, Hashable, Codable {
     }
 
     nonisolated init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        id = try c.decode(UUID.self, forKey: .id)
-        handle = try c.decode(String.self, forKey: .handle)
-        displayName = try c.decode(String.self, forKey: .displayName)
-        bio = try c.decodeIfPresent(String.self, forKey: .bio)
-        avatarUrl = try c.decodeIfPresent(String.self, forKey: .avatarUrl)
-        joinedAt = try c.decode(Date.self, forKey: .joinedAt)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        handle = try container.decode(String.self, forKey: .handle)
+        
+        // Default to handle if display_name is null in the database
+        if let decodedName = try container.decodeIfPresent(String.self, forKey: .displayName) {
+            displayName = decodedName
+        } else {
+            displayName = handle
+        }
+        
+        bio = try container.decodeIfPresent(String.self, forKey: .bio)
+        
+        // Map avatar_emoji to avatarUrl
+        avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        
+        // Handle gracefully if created_at is missing or renamed in the database
+        joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt) ?? .now
     }
 
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }

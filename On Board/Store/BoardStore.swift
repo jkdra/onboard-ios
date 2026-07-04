@@ -231,7 +231,8 @@ final class BoardStore {
                     attempt += 1
                     guard NetworkErrorClassifier.isConnectivityFailure(error),
                           attempt <= Self.maxConnectivityRetries else {
-                        loadError = Self.mapLoadError(error)
+                        print("[DEBUG] Board load failed with error: \(error)")
+                        loadError = Self.mapLoadError(error) + "\nDEBUG: \(error)"
                         break
                     }
                     try? await Task.sleep(for: .milliseconds(400 * attempt))
@@ -433,6 +434,15 @@ final class BoardStore {
 
     func profile(forAuthor handle: String) -> Profile {
         profile(handle: handle) ?? Profile(handle: handle, displayName: handle)
+    }
+
+    func upsertProfile(_ profile: Profile) {
+        if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+            profiles[index] = profile
+        } else {
+            profiles.append(profile)
+        }
+        rebuildCaches()
     }
 
     func canEdit(post: Post) -> Bool {

@@ -23,6 +23,7 @@ private struct DoubleTapHeart: ViewModifier {
 
     func body(content: Content) -> some View {
         content
+            .contentShape(.rect)
             .overlay {
                 Image(systemName: "heart.fill")
                     .font(.system(size: size))

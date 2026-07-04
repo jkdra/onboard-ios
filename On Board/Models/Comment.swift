@@ -46,6 +46,17 @@ struct Comment: Identifiable, Hashable, Codable {
         self.replies = replies
         self.createdAt = createdAt
     }
+    
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case authorId
+        case author = "authorHandle" // "author_handle" in DB, converted to "authorHandle" by JSONDecoder
+        case body
+        case likeCount
+        case dislikeCount
+        case replies
+        case createdAt
+    }
 
     static func == (lhs: Comment, rhs: Comment) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }

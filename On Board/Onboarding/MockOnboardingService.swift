@@ -211,7 +211,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return OnboardingStatus(
             id: userID,
             handle: "u_\(userID.uuidString.prefix(12).replacingOccurrences(of: "-", with: "").lowercased())",
-            displayName: "New member",
+            displayName: "",
             bio: nil,
             avatarUrl: nil,
             onboardingStep: .username,

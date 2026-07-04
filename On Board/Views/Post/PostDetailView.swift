@@ -86,7 +86,6 @@ struct PostDetailView: View {
     // MARK: - Body
 
     var body: some View {
-        let livePost = livePost
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if !editMode {

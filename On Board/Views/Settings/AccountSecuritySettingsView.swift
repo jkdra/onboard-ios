@@ -223,10 +223,19 @@ struct AccountSecuritySettingsView: View {
 
     private func linkedOAuthRow(identity: LinkedIdentity, session: AuthSession) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: identity.provider.systemImage)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
-
+            Group {
+                if identity.provider == .google {
+                    Image("Google_Favicon_2025").renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                        .grayscale(1.0)
+                } else {
+                    Image(systemName: identity.provider.systemImage)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .foregroundStyle(.secondary)
+            
             VStack(alignment: .leading, spacing: 2) {
                 Text(identity.provider.securityLabel)
                     .fontStyle(.body)
@@ -296,8 +305,10 @@ struct AccountSecuritySettingsView: View {
             Task { await linkGoogle() }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: AuthProvider.google.systemImage)
-                    .frame(width: 22)
+                Image("Google_Favicon_2025").renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 22, height: 22)
                 Text("Link Google")
                     .fontStyle(.body)
                 Spacer()
@@ -315,9 +326,17 @@ struct AccountSecuritySettingsView: View {
 
     private func unavailableOAuthRow(provider: AuthProvider) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: provider.systemImage)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
+            Group {
+                if provider == .google {
+                    Image("Google_Favicon_2025").renderingMode(.original)
+                        .resizable()
+                        .scaledToFit()
+                } else {
+                    Image(systemName: provider.systemImage)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.securityLabel)

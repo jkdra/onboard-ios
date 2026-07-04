@@ -8,6 +8,7 @@
 //
 
 import UIKit
+import SwiftUI
 
 enum NavigationBarAppearance {
     private static var didConfigure = false
@@ -28,7 +29,7 @@ enum NavigationBarAppearance {
             appearance.titleTextAttributes = [.font: titleFont]
 
             let buttonAppearance = UIBarButtonItemAppearance()
-            buttonAppearance.normal.titleTextAttributes = [.font: buttonFont, .foregroundColor: UIColor.label]
+            buttonAppearance.normal.titleTextAttributes = [.font: buttonFont]
             appearance.buttonAppearance = buttonAppearance
         }
 
@@ -45,11 +46,15 @@ enum NavigationBarAppearance {
         navigationBar.compactAppearance = standard
         navigationBar.scrollEdgeAppearance = scrollEdge
 
-        UIView.appearance().tintColor = UIColor(named: "AccentColor")
-
         UIBarButtonItem.appearance().setTitleTextAttributes(
             [.font: titleFont, .foregroundColor: UIColor.label],
             for: .normal
         )
+        
+        // Changes the background color when the toggle is ON
+        UISwitch.appearance().onTintColor = UIColor(named: "AccentColor")
+        
+        // Changes the color of the circular knob (the "thumb") itself to match the system background!
+        UISwitch.appearance().thumbTintColor = .systemBackground
     }
 }

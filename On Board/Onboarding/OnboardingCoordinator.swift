@@ -90,11 +90,6 @@ struct OnboardingCoordinator: View {
                 .transition(.opacity)
             }
         }
-        #if DEBUG
-        .overlay(alignment: .bottom) {
-            if devDriven { devControls }
-        }
-        #endif
         .onAppear {
             guard !devDriven else { return }
             guard auth.isSignedIn, onboarding.hasResolvedStatus else { return }
@@ -175,40 +170,6 @@ struct OnboardingCoordinator: View {
         case .waitlist:      return [.username, .profile, .schoolVerify, .waitlist]
         }
     }
-
-    #if DEBUG
-    /// Ordered destinations the dev Next button walks through (sign-in is the root).
-    private static let devSteps: [OnboardingStep] = [.username, .profile, .schoolVerify, .waitlist]
-
-    private var devControls: some View {
-        HStack(spacing: 14) {
-            Button {
-                if !path.isEmpty { path.removeLast() }
-            } label: {
-                Image(systemName: "chevron.left")
-            }
-            .disabled(path.isEmpty)
-
-            Text("Step \(path.count) / \(Self.devSteps.count)")
-                .font(.caption.monospacedDigit().weight(.semibold))
-                .frame(minWidth: 64)
-
-            Button {
-                if path.count < Self.devSteps.count { path.append(Self.devSteps[path.count]) }
-            } label: {
-                Image(systemName: "chevron.right")
-            }
-            .disabled(path.count >= Self.devSteps.count)
-        }
-        .font(.title3)
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().stroke(.secondary.opacity(0.25), lineWidth: 1))
-        .padding(.bottom, 8)
-        .tint(.primary)
-    }
-    #endif
 }
 
 #Preview {

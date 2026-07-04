@@ -19,6 +19,7 @@ struct ProfileView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @Namespace private var profileNamespace
+    @State private var showAvatarViewer = false
 
     private let displayNameLimit = 50
     private let bioLimit = 300
@@ -31,6 +32,7 @@ struct ProfileView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
     @State private var isUploadingPhoto = false
+    @State private var uncroppedImage: UIImage?
 
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
@@ -141,6 +143,7 @@ struct ProfileView: View {
                         Button { saveProfile() } label: {
                             Label("Save", systemImage: "checkmark").toolbarActionLabel()
                         }
+                        .buttonStyle(.borderedProminent)
                         .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
                     }
                 } else {
@@ -156,36 +159,81 @@ struct ProfileView: View {
                     }
                 }
             }
+            .fullScreenCover(item: Binding<UIImage?>(
+                get: { uncroppedImage },
+                set: { uncroppedImage = $0 }
+            )) { image in
+                ImageCropView(image: image) { cropped in
+                    uncroppedImage = nil
+                    Task { await uploadCroppedPhoto(cropped) }
+                } onCancel: {
+                    uncroppedImage = nil
+                    selectedPhotoItem = nil
+                }
+            }
+            .fullScreenCover(isPresented: $showAvatarViewer) {
+                if let urlString = displayedProfile.avatarUrl, let url = URL(string: urlString) {
+                    ImageViewerView(url: url)
+                        .navigationTransition(.zoom(sourceID: "avatarImage", in: profileNamespace))
+                }
+            }
     }
 
     private var avatar: some View {
         ZStack(alignment: .bottomTrailing) {
             if editMode {
-                if let data = selectedPhotoData, let uiImage = UIImage(data: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 92, height: 92)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
-                } else {
-                    AvatarView(profile: draftAvatarUrl.map { url in
-                        Profile(id: displayedProfile.id, handle: displayedProfile.handle, displayName: displayedProfile.displayName, bio: displayedProfile.bio, avatarUrl: url)
-                    } ?? displayedProfile, size: .large)
-                }
-
+                let photoData = selectedPhotoData
+                let uploading = isUploadingPhoto
+                let draftUrl = draftAvatarUrl
+                let currentProfile = displayedProfile
+                
                 PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                    Image(systemName: "camera.fill")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(Color.primary)
-                        .clipShape(Circle())
-                        .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
+                    ZStack(alignment: .bottomTrailing) {
+                        ZStack {
+                            if let data = photoData, let uiImage = UIImage(data: data) {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 92, height: 92)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                                    .opacity(uploading ? 0.5 : 1.0)
+                            } else {
+                                AvatarView(profile: draftUrl.map { url in
+                                    Profile(id: currentProfile.id, handle: currentProfile.handle, displayName: currentProfile.displayName, bio: currentProfile.bio, avatarUrl: url)
+                                } ?? currentProfile, size: .large)
+                                .opacity(uploading ? 0.5 : 1.0)
+                            }
+                            
+                            if uploading {
+                                ProgressView()
+                                    .controlSize(.regular)
+                                    .tint(.primary)
+                            }
+                        }
+                        
+                        Image(systemName: "camera.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color(uiColor: .systemBackground))
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary)
+                            .clipShape(Circle())
+                            .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
+                            .offset(x: 4, y: 4)
+                    }
                 }
-                .offset(x: 4, y: 4)
+                .buttonStyle(.plain)
+                .disabled(isUploadingPhoto)
             } else {
-                AvatarView(profile: displayedProfile, size: .large)
+                Button {
+                    if displayedProfile.avatarUrl != nil {
+                        showAvatarViewer = true
+                    }
+                } label: {
+                    AvatarView(profile: displayedProfile, size: .large)
+                }
+                .buttonStyle(.plain)
+                .matchedTransitionSource(id: "avatarImage", in: profileNamespace)
             }
         }
         .accessibilityLabel("\(displayedProfile.displayName) avatar")
@@ -226,31 +274,32 @@ struct ProfileView: View {
     private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        // Decode + JPEG-encode off the main actor so picking an avatar doesn't hitch the UI.
-        let jpeg: Data? = await Task.detached(priority: .userInitiated) {
-            UIImage(data: data)?.jpegData(compressionQuality: 0.8)
-        }.value
-        guard let jpeg else { return }
+        guard let uiImage = UIImage(data: data) else { return }
+        
+        await MainActor.run {
+            uncroppedImage = uiImage
+        }
+    }
 
-        selectedPhotoData = jpeg
+    private func uploadCroppedPhoto(_ image: UIImage) async {
+        // Optimistically set the selected data to preview
+        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
+        
         isUploadingPhoto = true
         defer { isUploadingPhoto = false }
 
-        guard let client = SupabaseClientFactory.client(for: .current),
-              let userID = store.currentUserID else { return }
+        guard let userID = store.currentUserID else { return }
 
-        let path = "\(userID.uuidString)/\(UUID().uuidString).jpg"
-        do {
-            try await client.storage
-                .from("avatars")
-                .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: true))
-            let publicURL = try client.storage.from("avatars").getPublicURL(path: path)
-            draftAvatarUrl = publicURL.absoluteString
-        } catch {
-            // Upload failed — the photo preview stays but won't persist; saveProfile will use nil URL
-            draftAvatarUrl = nil
+        if let result = await ImageUploader.upload(input: .uiImage(image), type: .profilePicture, userID: userID) {
+            draftAvatarUrl = result.url
+        } else {
+            print("Failed to upload photo")
         }
     }
+}
+
+extension UIImage: @retroactive Identifiable {
+    public var id: Int { hash }
 }
 
 

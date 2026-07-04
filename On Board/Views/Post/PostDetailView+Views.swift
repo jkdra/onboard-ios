@@ -14,7 +14,6 @@ extension PostDetailView {
 
     @ToolbarContentBuilder
     var toolbarContent: some ToolbarContent {
-        let livePost = livePost
         if editMode {
             ToolbarItem(placement: .topBarLeading) {
                 Button { cancelEditing() } label: {
@@ -30,6 +29,8 @@ extension PostDetailView {
                 Button { saveEdits() } label: {
                     Label("Save", systemImage: "checkmark").toolbarActionLabel()
                 }
+                .buttonStyle(.borderedProminent)
+                .tint(draftTone.color)
             }
             ToolbarItem(placement: .bottomBar) { Spacer() }
             ToolbarItem(placement: .bottomBar) {
@@ -85,7 +86,6 @@ extension PostDetailView {
 
     @ViewBuilder
     var postContent: some View {
-        let livePost = livePost
         HStack(spacing: 10) {
             NavigationLink(value: BoardRoute.profile(authorProfile)) {
                 HStack(spacing: 10) {

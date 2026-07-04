@@ -1,130 +1,13 @@
 //
-//  BoardStore+Interactions.swift
+//  BoardStore+Comments.swift
 //  On Board
-//
-//  Optimistic mutations for posts, reactions, comments, and profiles.
-//  When live, changes apply locally first then sync to Supabase.
 //
 
 import Foundation
 
 extension BoardStore {
-    func userReaction(for postId: UUID) -> Reaction? {
-        userReactions[postId]
-    }
-
     func userCommentVote(for commentID: UUID) -> CommentVote? {
         userCommentVotes[commentID]
-    }
-
-    func addPost(
-        title: String,
-        description: String,
-        tone: PostTone,
-        imageUrl: String? = nil,
-        imageAspectRatio: Double? = nil
-    ) async -> Bool {
-        guard canInteractWithBoard, let user = currentUser else { return false }
-        // Backstop for the final-hour posting freeze (the UI hides the entry, this blocks any
-        // composer left open from before the cutoff).
-        guard !BoardSchedule.isWithinFinalHour(weekEnd: activeBoardWeek?.endsAt) else {
-            loadError = "Posting is closed for the final hour before the board clears."
-            return false
-        }
-        guard let boardService, let weekID = activeBoardWeek?.id else {
-            loadError = isLive
-                ? "No active board week is available."
-                : "Connect to the On Board backend to post."
-            return false
-        }
-
-        do {
-            let post = try await boardService.createPost(
-                weekID: weekID,
-                authorID: user.id,
-                title: title,
-                description: description,
-                tone: tone,
-                imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
-            )
-            insertPost(post)
-            return true
-        } catch {
-            loadError = Self.mapLoadError(error)
-            return false
-        }
-    }
-
-    func updatePost(
-        id: UUID,
-        title: String,
-        description: String,
-        tone: PostTone,
-        imageUrl: String?,
-        imageAspectRatio: Double?
-    ) async -> Bool {
-        guard let index = posts.firstIndex(where: { $0.id == id }),
-              canInteract(with: posts[index]),
-              canEdit(post: posts[index]) else { return false }
-
-        let existing = posts[index]
-
-        guard let boardService else {
-            let updated = Post(
-                id: existing.id,
-                authorId: existing.authorId,
-                boardWeekId: existing.boardWeekId,
-                isReadOnly: existing.isReadOnly,
-                title: title,
-                description: description,
-                author: existing.author,
-                tone: tone,
-                reactionCounts: existing.reactionCounts,
-                comments: comments(for: id),
-                createdAt: existing.createdAt,
-                imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
-            )
-            replacePost(at: index, with: updated)
-            return true
-        }
-
-        do {
-            let updated = try await boardService.updatePost(
-                id: id,
-                title: title,
-                description: description,
-                tone: tone,
-                imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
-            )
-            replacePost(at: index, with: updated)
-            return true
-        } catch {
-            loadError = Self.mapLoadError(error)
-            return false
-        }
-    }
-
-    func deletePost(id: UUID) async -> Bool {
-        guard let index = posts.firstIndex(where: { $0.id == id }),
-              canInteract(with: posts[index]),
-              canEdit(post: posts[index]) else { return false }
-
-        guard let boardService else {
-            loadError = "Connect to the On Board backend to delete posts."
-            return false
-        }
-
-        do {
-            try await boardService.deletePost(id: id)
-            removePost(id: id)
-            return true
-        } catch {
-            loadError = Self.mapLoadError(error)
-            return false
-        }
     }
 
     func addComment(
@@ -246,67 +129,6 @@ extension BoardStore {
         }
     }
 
-    func updateProfile(
-        displayName: String,
-        handle: String,
-        bio: String?,
-        avatarUrl: String? = nil
-    ) async {
-        guard let currentUserID,
-              let index = profiles.firstIndex(where: { $0.id == currentUserID }) else { return }
-
-        guard let boardService else {
-            loadError = "Connect to the On Board backend to update your profile."
-            return
-        }
-
-        do {
-            let updated = try await boardService.updateProfile(
-                id: currentUserID,
-                displayName: displayName,
-                handle: handle,
-                bio: bio,
-                avatarUrl: avatarUrl
-            )
-            profiles[index] = updated
-            rebuildCaches()
-        } catch {
-            loadError = Self.mapLoadError(error)
-        }
-    }
-
-    func setReaction(postId: UUID, reaction: Reaction?) {
-        guard let index = posts.firstIndex(where: { $0.id == postId }),
-              canInteract(with: posts[index]) else { return }
-
-        let previous = userReactions[postId]
-        if previous == reaction { return }
-
-        applyReactionChange(
-            postId: postId,
-            previous: previous,
-            reaction: reaction
-        )
-
-        guard let boardService, let currentUserID else { return }
-        Task {
-            do {
-                try await boardService.setReaction(
-                    postID: postId,
-                    userID: currentUserID,
-                    reaction: reaction
-                )
-            } catch {
-                applyReactionChange(
-                    postId: postId,
-                    previous: reaction,
-                    reaction: previous
-                )
-                loadError = Self.mapLoadError(error)
-            }
-        }
-    }
-
     func setCommentVote(commentID: UUID, postID: UUID, vote: CommentVote?) {
         guard let postIndex = posts.firstIndex(where: { $0.id == postID }),
               canInteract(with: posts[postIndex]) else { return }
@@ -342,8 +164,6 @@ extension BoardStore {
         }
     }
 
-    // MARK: - Private helpers
-
     @discardableResult
     private func removeComment(commentID: UUID, from comments: inout [Comment]) -> Bool {
         if let index = comments.firstIndex(where: { $0.id == commentID }) {
@@ -357,35 +177,6 @@ extension BoardStore {
             }
         }
         return false
-    }
-
-    private func applyReactionChange(
-        postId: UUID,
-        previous: Reaction?,
-        reaction: Reaction?
-    ) {
-        // Re-resolve the index by id on every apply: between the optimistic update and an
-        // async rollback the posts array can be rewritten (refresh, realtime delete, archive
-        // eviction), so a captured Int index could be out of bounds (crash) or point at a
-        // different post (silent count corruption).
-        guard let postIndex = posts.firstIndex(where: { $0.id == postId }) else { return }
-        var counts = posts[postIndex].reactionCounts
-
-        if let previous {
-            counts[previous] = max(0, (counts[previous] ?? 0) - 1)
-        }
-        if let reaction {
-            userReactions[postId] = reaction
-            counts[reaction, default: 0] += 1
-        } else {
-            userReactions.removeValue(forKey: postId)
-        }
-
-        posts[postIndex].reactionCounts = counts
-        patchPostInWeekCache(posts[postIndex])
-        // Mirror to proxy — mutates proxy.reaction only, not the proxies dict,
-        // so only the affected FeedGridCard re-renders.
-        postProxies[postId]?.reaction = reaction
     }
 
     private func applyCommentVoteChange(

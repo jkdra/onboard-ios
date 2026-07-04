@@ -145,6 +145,7 @@ struct ContentView: View {
         case .post(let postID):
             if let post = store.post(with: postID) {
                 PostDetailView(post: post)
+                    .environment(store)
                     .navigationTransition(.zoom(sourceID: postID, in: cardNamespace))
             }
         case .profile(let profile):
@@ -181,10 +182,18 @@ struct ContentView: View {
                 VStack(spacing: 16) {
                     Text("Couldn't load board")
                         .fontStyle(.headline)
-                    Text("Pull down to try again.")
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    
+                    if let errorMsg = store.loadError {
+                        Text(errorMsg)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    } else {
+                        Text("Pull down to try again.")
+                            .fontStyle(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                     Button("Retry") {
                         Task { await store.refresh(for: store.currentUserID) }
                     }

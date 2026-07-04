@@ -17,7 +17,7 @@ struct RootView: View {
     @State private var didBootstrap = false
 
     #if DEBUG
-    @State private var devForceOnboarding = false
+
     #endif
 
     private var requiresNetwork: Bool {
@@ -29,6 +29,7 @@ struct RootView: View {
         if auth.state == .restoreFailedOffline { return true }
         return network.hasReceivedUpdate && !network.isConnected
     }
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         Group {
@@ -37,16 +38,25 @@ struct RootView: View {
                     network.recheck()
                     Task { await retryAfterConnectivityRestored() }
                 }
+            } else if !didBootstrap {
+                ZStack {
+                    Color(.systemBackground).ignoresSafeArea()
+                    BrandLogo(size: 72, renderingMode: scheme == .dark ? .template : .original)
+                }
             } else {
                 mainContent
             }
         }
+        .animation(.smooth, value: auth.isSignedIn)
+        .animation(.smooth, value: onboarding.isComplete)
         .task {
             network.start()
             store.configure(configuration: AppConfiguration.current)
             await auth.restoreSession()
             await syncSessionState()
-            didBootstrap = true
+            withAnimation(.easeInOut(duration: 0.35)) {
+                didBootstrap = true
+            }
         }
         .onChange(of: sessionSyncToken) { _, _ in
             guard didBootstrap else { return }
@@ -62,36 +72,13 @@ struct RootView: View {
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshIfOnline() }
         }
-        #if DEBUG
-        .overlay(alignment: .bottomTrailing) { developerOverrideButton }
-        #endif
     }
 
-    #if DEBUG
-    private var developerOverrideButton: some View {
-        Button {
-            withAnimation(.smooth) { devForceOnboarding.toggle() }
-        } label: {
-            Label(devForceOnboarding ? "Exit Override" : "Developer Override",
-                  systemImage: devForceOnboarding ? "xmark" : "hammer.fill")
-                .font(.caption2.weight(.semibold))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-        }
-        .tint(.primary)
-        .padding(.horizontal, 14)
-        .padding(.bottom, 4)
-        .opacity(0.85)
-    }
-    #endif
+
 
     @ViewBuilder
     private var mainContent: some View {
-        if debugForceOnboarding {
-            // DEBUG: walk the real onboarding screens with on-screen Next/Back.
-            OnboardingCoordinator(devDriven: true)
-        } else if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
+        if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
             onboardingErrorView(message)
         } else if auth.isSignedIn, onboarding.isComplete {
             BoardListView()
@@ -102,13 +89,7 @@ struct RootView: View {
         }
     }
 
-    private var debugForceOnboarding: Bool {
-        #if DEBUG
-        devForceOnboarding
-        #else
-        false
-        #endif
-    }
+
 
     /// One orchestration path per auth/onboarding change — avoids duplicate refresh RPCs.
     private var sessionSyncToken: SessionSyncToken {
@@ -148,6 +129,17 @@ struct RootView: View {
 
         if let session = auth.session, onboarding.isComplete {
             store.setCurrentUser(id: session.userId)
+
+            if let status = onboarding.status {
+                let profile = Profile(
+                    id: status.id,
+                    handle: status.handle,
+                    displayName: status.displayName,
+                    bio: status.bio,
+                    avatarUrl: status.avatarUrl
+                )
+                store.upsertProfile(profile)
+            }
 
             if let boardId = onboarding.status?.boardId {
                 store.setBoard(id: boardId, name: onboarding.status?.boardName)

@@ -68,7 +68,7 @@ struct SignInView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                headerSection
+                SignInHeaderView(appeared: appeared)
                     .padding(.top, 80)
                     .padding(.bottom, 36)
                     .padding(.horizontal, 24)
@@ -83,7 +83,7 @@ struct SignInView: View {
                 }
 
                 if !usesLiveBackend {
-                    devModeFooter
+                    SignInFooterView(appeared: appeared)
                         .padding(.horizontal, 32)
                         .padding(.top, 20)
                 }
@@ -127,28 +127,7 @@ struct SignInView: View {
         }
     }
 
-    // MARK: - Header
 
-    private var headerSection: some View {
-        VStack(spacing: 14) {
-            BrandLogo(size: 76)
-                .scaleEffect(appeared ? 1 : 0.55)
-                .opacity(appeared ? 1 : 0)
-
-            VStack(spacing: 5) {
-                Text("On Board")
-                    .fontStyle(.largeTitle)
-                    .fontWeight(.heavy)
-                    .accessibilityAddTraits(.isHeader)
-
-                Text("your weekly bulletin board")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .opacity(appeared ? 1 : 0)
-            .offset(y: appeared ? 0 : 10)
-        }
-    }
 
     // MARK: - Form card
 
@@ -320,13 +299,18 @@ struct SignInView: View {
 
     /// Shared label so the Apple and Google buttons stay visually identical:
     /// the provider logo (or an inline spinner while busy) next to the one-word name.
-    private func socialButtonLabel(systemImage: String, title: String, isLoading: Bool) -> some View {
+    private func socialButtonLabel(systemImage: String? = nil, assetImage: String? = nil, title: String, isLoading: Bool) -> some View {
         HStack(spacing: 8) {
             if isLoading {
                 ProgressView()
                     .controlSize(.small)
                     .tint(.primary)
-            } else {
+            } else if let assetImage {
+                Image(assetImage).renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 16, height: 16)
+            } else if let systemImage {
                 Image(systemName: systemImage)
             }
             Text(title)
@@ -391,14 +375,14 @@ struct SignInView: View {
                 resolvingProvider = .google
                 Task { await auth.signInWithGoogle() }
             } label: {
-                socialButtonLabel(systemImage: AuthProvider.google.systemImage, title: "Google", isLoading: busy)
+                socialButtonLabel(assetImage: "Google_Favicon_2025", title: "Google", isLoading: busy)
             }
             .buttonStyle(.boardSecondary)
             .disabled(busy)
             .accessibilityLabel("Continue with Google")
         } else {
             // Same shape as `.boardSecondary`, dimmed, for the not-yet-available state.
-            socialButtonLabel(systemImage: AuthProvider.google.systemImage, title: "Google", isLoading: false)
+            socialButtonLabel(assetImage: "Google_Favicon_2025", title: "Google", isLoading: false)
                 .fontStyle(.headline)
                 .foregroundStyle(.primary)
                 .padding(.horizontal, 24)
@@ -412,14 +396,7 @@ struct SignInView: View {
         }
     }
 
-    // MARK: - Dev footer
 
-    private var devModeFooter: some View {
-        Label("Development mode — mock sign-in", systemImage: "hammer.fill")
-            .fontStyle(.caption)
-            .foregroundStyle(.secondary)
-            .opacity(appeared ? 1 : 0)
-    }
 
     // MARK: - Helpers (logic unchanged)
 

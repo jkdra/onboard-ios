@@ -16,6 +16,7 @@ struct OnboardingProfileStepView: View {
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
     @State private var isUploadingPhoto = false
+    @State private var uncroppedImage: UIImage?
     @State private var photoUploadFailed = false
     @FocusState private var focus: Field?
 
@@ -87,35 +88,46 @@ struct OnboardingProfileStepView: View {
                         let uploading = isUploadingPhoto
                         let hasPhoto = photoData != nil && avatarUrl != nil
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color(.secondarySystemFill))
-                                    .frame(width: 64, height: 64)
-                                    .overlay(
-                                        Circle().stroke(
-                                            hasPhoto ? Color.primary.opacity(0.5) : Color.secondary.opacity(0.3),
-                                            lineWidth: 1
-                                        )
-                                    )
-
-                                if let data = photoData, let uiImage = UIImage(data: data) {
-                                    Image(uiImage: uiImage)
-                                        .resizable()
-                                        .scaledToFill()
+                            ZStack(alignment: .bottomTrailing) {
+                                ZStack {
+                                    Circle()
+                                        .fill(Color(.secondarySystemFill))
                                         .frame(width: 64, height: 64)
-                                        .clipShape(Circle())
-                                        .opacity(uploading ? 0.5 : 1)
-                                }
+                                        .overlay(
+                                            Circle().stroke(
+                                                hasPhoto ? Color.primary.opacity(0.5) : Color.secondary.opacity(0.3),
+                                                lineWidth: 1
+                                            )
+                                        )
 
-                                if uploading {
-                                    ProgressView()
-                                } else if photoData == nil {
-                                    Image(systemName: "person.circle.fill")
-                                        .resizable()
-                                        .scaledToFit()
-                                        .frame(width: 30, height: 30)
-                                        .foregroundStyle(Color.secondary.opacity(0.5))
+                                    if let data = photoData, let uiImage = UIImage(data: data) {
+                                        Image(uiImage: uiImage)
+                                            .resizable()
+                                            .scaledToFill()
+                                            .frame(width: 64, height: 64)
+                                            .clipShape(Circle())
+                                            .opacity(uploading ? 0.5 : 1)
+                                    }
+
+                                    if uploading {
+                                        ProgressView()
+                                    } else if photoData == nil {
+                                        Image(systemName: "person.circle.fill")
+                                            .resizable()
+                                            .scaledToFit()
+                                            .frame(width: 30, height: 30)
+                                            .foregroundStyle(Color.secondary.opacity(0.5))
+                                    }
                                 }
+                                
+                                Image(systemName: "camera.fill")
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color(uiColor: .systemBackground))
+                                    .frame(width: 22, height: 22)
+                                    .background(Color.primary)
+                                    .clipShape(Circle())
+                                    .overlay(Circle().stroke(Color(uiColor: .systemBackground), lineWidth: 2))
+                                    .offset(x: 4, y: 4)
                             }
                         }
                         .buttonStyle(.plain)
@@ -177,11 +189,18 @@ struct OnboardingProfileStepView: View {
                 bio = onboarding.status?.bio ?? ""
             }
             avatarUrl = onboarding.status?.avatarUrl
-            // TEMP: auto-focus on appear disabled — suspected cause of a main-thread
-            // stall (UITextInteractionNameTapAndAHalf gesture recognizer stuck for 25s+,
-            // confirmed via Instruments Hangs + on-device Fence Hang HUD) from racing
-            // SwiftUI's programmatic focus assignment against a UITextView-backed
-            // (axis: .vertical) field during the navigation push transition.
+        }
+        .fullScreenCover(item: Binding<UIImage?>(
+            get: { uncroppedImage },
+            set: { uncroppedImage = $0 }
+        )) { image in
+            ImageCropView(image: image) { cropped in
+                uncroppedImage = nil
+                Task { await uploadCroppedPhoto(cropped) }
+            } onCancel: {
+                uncroppedImage = nil
+                selectedPhotoItem = nil
+            }
         }
         .onChange(of: selectedPhotoItem) { _, newItem in
             photoUploadFailed = false
@@ -193,28 +212,26 @@ struct OnboardingProfileStepView: View {
     private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        guard let uiImage = UIImage(data: data),
-              let jpeg = uiImage.jpegData(compressionQuality: 0.8) else { return }
+        guard let uiImage = UIImage(data: data) else { return }
+        
+        await MainActor.run {
+            uncroppedImage = uiImage
+        }
+    }
 
-        selectedPhotoData = jpeg
+    private func uploadCroppedPhoto(_ image: UIImage) async {
+        // Optimistically set the selected data to preview
+        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
+        
         isUploadingPhoto = true
         defer { isUploadingPhoto = false }
 
-        guard let client = SupabaseClientFactory.client(for: .current),
-              let userID = onboarding.status?.id else { return }
+        guard let userID = onboarding.status?.id else { return }
 
-        // Storage RLS checks the path's folder segment against `auth.uid()::text`
-        // (lowercase), and Supabase requires an UPDATE policy for upsert uploads —
-        // the filename is a fresh UUID every time, so plain insert is correct.
-        let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).jpg"
-        do {
-            try await client.storage
-                .from("avatars")
-                .upload(path, data: jpeg, options: FileOptions(contentType: "image/jpeg", upsert: false))
-            let publicURL = try client.storage.from("avatars").getPublicURL(path: path)
-            avatarUrl = publicURL.absoluteString
+        if let result = await ImageUploader.upload(input: .uiImage(image), type: .profilePicture, userID: userID) {
+            avatarUrl = result.url
             photoUploadFailed = false
-        } catch {
+        } else {
             avatarUrl = nil
             photoUploadFailed = true
         }

@@ -309,7 +309,7 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
     }
 
     private func unregisterCurrentDeviceToken(client: SupabaseClient) async {
-        guard let tokenHex = await NotificationService.shared.currentTokenHex else { return }
+        guard let tokenHex = NotificationService.shared.currentTokenHex else { return }
         _ = try? await client
             .from("device_tokens")
             .delete()

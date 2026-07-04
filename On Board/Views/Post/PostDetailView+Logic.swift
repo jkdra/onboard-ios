@@ -131,7 +131,7 @@ extension PostDetailView {
         guard let userID = store.currentUserID else { return }
         isUploadingEditImage = true
         defer { isUploadingEditImage = false }
-        if let result = await uploadPostImageData(rawData: rawData, userID: userID) {
+        if let result = await ImageUploader.upload(input: .rawData(rawData), type: .postPhoto, userID: userID) {
             uploadedEditImageUrl = result.url
             uploadedEditAspectRatio = result.aspectRatio
             draftImageUrl = nil

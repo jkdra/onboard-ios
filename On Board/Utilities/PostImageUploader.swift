@@ -1,52 +1,67 @@
-//
-//  PostImageUploader.swift
-//  On Board
-//
-//  Supabase Storage upload helper for post images. Isolated here so that
-//  Views with #Preview blocks don't need to import Supabase (which bloats
-//  JIT thunk compilation past the 30-second preview timeout).
-//
-
 import Foundation
-import PhotosUI
+import UIKit
 import Supabase
+import Nuke
 
 struct UploadedImageResult {
     let url: String
     let aspectRatio: Double
 }
 
-/// Encodes `rawData` as WebP and uploads it to the `post-images` bucket.
-/// Returns the public URL + aspect ratio, or nil on failure.
-@MainActor
-func uploadPostImageData(
-    rawData: Data,
-    userID: UUID
-) async -> UploadedImageResult? {
-    // Decode + re-orient + downscale + WebP-encode are CPU/memory heavy (a 12MP photo
-    // decodes to ~48MB). Run them OFF the main actor so the composer UI doesn't hitch;
-    // only the lightweight upload await resumes back on the caller's actor.
-    let encoded: (data: Data, ratio: Double)? = await Task.detached(priority: .userInitiated) {
-        guard let uiImage = UIImage(data: rawData),
-              let webpData = ImageEncoder.webpData(from: uiImage, quality: 0.82, maxDimension: 2048)
-        else { return nil }
-        return (webpData, ImageEncoder.aspectRatio(of: webpData) ?? 1.0)
-    }.value
+enum ImageUploader {
+    /// Encodes and uploads an image to the appropriate Supabase bucket based on PhotoType.
+    /// Returns the public URL + aspect ratio, or nil on failure.
+    @MainActor
+    static func upload(
+        input: ImageUploadInput,
+        type: PhotoType,
+        userID: UUID
+    ) async -> UploadedImageResult? {
+        let encoded: (data: Data, ratio: Double)? = await Task.detached(priority: .userInitiated) {
+            let data: Data?
+            
+            switch input {
+            case .uiImage(let image):
+                if case .profilePicture = type {
+                    data = ImageProcessor.processProfilePicture(image)
+                } else {
+                    // Fallback if somehow post uses UIImage
+                    data = image.jpegData(compressionQuality: type.compressionQuality)
+                }
+            case .rawData(let raw):
+                data = ImageProcessor.processPostPhoto(from: raw)
+            }
+            
+            guard let data = data else { return nil }
+            return (data, ImageProcessor.aspectRatio(of: data) ?? 1.0)
+        }.value
 
-    guard let encoded else { return nil }
-    guard let client = SupabaseClientFactory.client(for: .current) else { return nil }
+        guard let encoded else { return nil }
+        guard let client = SupabaseClientFactory.client(for: .current) else { return nil }
 
-    // Storage RLS checks the path's folder segment against `auth.uid()::text`, which
-    // Postgres always renders lowercase — `UUID.uuidString` is uppercase, so an
-    // un-lowercased path silently fails the policy check on every upload.
-    let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).webp"
-    do {
-        try await client.storage
-            .from("post-images")
-            .upload(path, data: encoded.data, options: FileOptions(contentType: "image/webp", upsert: false))
-        let publicURL = try client.storage.from("post-images").getPublicURL(path: path)
-        return UploadedImageResult(url: publicURL.absoluteString, aspectRatio: encoded.ratio)
-    } catch {
-        return nil
+        let path = "\(userID.uuidString.lowercased())/\(UUID().uuidString).jpg"
+        do {
+            try await client.storage
+                .from(type.bucket)
+                .upload(path, data: encoded.data, options: FileOptions(contentType: "image/jpeg", upsert: false))
+            
+            let publicURL = try client.storage.from(type.bucket).getPublicURL(path: path)
+            let urlString = publicURL.absoluteString
+            
+            // Cache the processed data into Nuke to skip downloading our own upload
+            if let url = URL(string: urlString) {
+                let request = ImageRequest(url: url)
+                ImagePipeline.shared.cache.storeCachedData(encoded.data, for: request)
+            }
+            
+            return UploadedImageResult(url: urlString, aspectRatio: encoded.ratio)
+        } catch {
+            return nil
+        }
     }
+}
+
+enum ImageUploadInput: @unchecked Sendable {
+    case uiImage(UIImage)
+    case rawData(Data)
 }

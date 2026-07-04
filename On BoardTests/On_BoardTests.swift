@@ -668,7 +668,7 @@ struct OnboardingStoreTests {
         let status = OnboardingStatus(
             id: UUID(),
             handle: "u_abc123def456",
-            displayName: "New member",
+            displayName: "",
             bio: nil,
             avatarUrl: nil,
             onboardingStep: .complete,

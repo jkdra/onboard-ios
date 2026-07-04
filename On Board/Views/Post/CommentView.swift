@@ -210,12 +210,6 @@ struct CommentView: View {
                     Text(comment.body)
                         .fontStyle(.callout)
                         .foregroundStyle(.primary)
-                        .doubleTapHeart(
-                            size: 36,
-                            isEnabled: isInteractive && editingCommentID == nil,
-                            isLiked: { store.userCommentVote(for: comment.id) == .like },
-                            onLike: { store.setCommentVote(commentID: comment.id, postID: postID, vote: .like) }
-                        )
                 }
 
                 if !isBeingEdited {
@@ -244,6 +238,12 @@ struct CommentView: View {
                     }
                 }
             }
+            .doubleTapHeart(
+                size: 36,
+                isEnabled: isInteractive && editingCommentID == nil && !isBeingEdited,
+                isLiked: { store.userCommentVote(for: comment.id) == .like },
+                onLike: { store.setCommentVote(commentID: comment.id, postID: postID, vote: .like) }
+            )
         }
         .padding(.vertical, isBeingEdited ? 10 : 0)
         .opacity(isDimmed ? 0.32 : 1)
