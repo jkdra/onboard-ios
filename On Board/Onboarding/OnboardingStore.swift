@@ -114,12 +114,6 @@ final class OnboardingStore {
 
         do {
             let fetched = try await service.fetchStatus()
-            print("[DEBUG] Fetched OnboardingStatus:")
-            print("[DEBUG] User ID: \(userID)")
-            print("[DEBUG] Handle: \(fetched.handle)")
-            print("[DEBUG] Display Name: \(fetched.displayName)")
-            print("[DEBUG] DB Onboarding Step: \(fetched.onboardingStep)")
-            print("[DEBUG] Effective Step: \(fetched.effectiveOnboardingStep)")
             status = fetched
             OnboardingStatusCache.save(fetched, for: userID)
             loadState = .loaded

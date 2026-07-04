@@ -456,7 +456,7 @@ struct CommentTreeBuilderTests {
             .init(
                 id: rootID,
                 authorId: SampleProfileID.maya,
-                author: "maya.c",
+                authorHandle: "maya.c",
                 body: "root",
                 parentCommentId: nil,
                 likeCount: 2,
@@ -466,7 +466,7 @@ struct CommentTreeBuilderTests {
             .init(
                 id: replyID,
                 authorId: SampleProfileID.leo,
-                author: "leokp",
+                authorHandle: "leokp",
                 body: "reply",
                 parentCommentId: rootID,
                 likeCount: 0,

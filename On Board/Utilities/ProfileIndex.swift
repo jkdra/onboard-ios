@@ -13,7 +13,9 @@ struct ProfileIndex: Sendable {
     private let byHandle: [String: Profile]
 
     init(profiles: [Profile]) {
-        byID = Dictionary(uniqueKeysWithValues: profiles.map { ($0.id, $0) })
+        // Tolerate duplicate IDs instead of trapping — the list is assembled from
+        // several sources (snapshot merge, upserts) and must never crash the app.
+        byID = Dictionary(profiles.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         byHandle = Dictionary(
             profiles.map { ($0.handle.lowercased(), $0) },
             uniquingKeysWith: { first, _ in first }

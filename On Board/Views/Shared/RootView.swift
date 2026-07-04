@@ -16,10 +16,6 @@ struct RootView: View {
 
     @State private var didBootstrap = false
 
-    #if DEBUG
-
-    #endif
-
     private var requiresNetwork: Bool {
         AppConfiguration.current.isSupabaseConfigured
     }

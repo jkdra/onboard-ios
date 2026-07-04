@@ -231,8 +231,7 @@ final class BoardStore {
                     attempt += 1
                     guard NetworkErrorClassifier.isConnectivityFailure(error),
                           attempt <= Self.maxConnectivityRetries else {
-                        print("[DEBUG] Board load failed with error: \(error)")
-                        loadError = Self.mapLoadError(error) + "\nDEBUG: \(error)"
+                        loadError = Self.mapLoadError(error)
                         break
                     }
                     try? await Task.sleep(for: .milliseconds(400 * attempt))
@@ -465,7 +464,7 @@ final class BoardStore {
         // the switch — drop the stale snapshot.
         if let currentBoardId, snapshot.week.boardId != currentBoardId { return }
         let priorPosts = posts
-        let priorByID = Dictionary(uniqueKeysWithValues: priorPosts.map { ($0.id, $0) })
+        let priorByID = Dictionary(priorPosts.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let activeWeekID = snapshot.week.id
         let incomingIDs = Set(snapshot.posts.map(\.id))
 
@@ -539,7 +538,9 @@ final class BoardStore {
     }
 
     private func rebuildBoardWeeksIndex() {
-        boardWeeksByID = Dictionary(uniqueKeysWithValues: boardWeeks.map { ($0.id, $0) })
+        // A week can transiently appear twice (e.g. it flips active→archived between
+        // the two concurrent fetches in refresh) — never trap on the duplicate.
+        boardWeeksByID = Dictionary(boardWeeks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         guard let currentBoardId else { archivedWeeks = []; return }
         archivedWeeks = boardWeeks
             .filter { $0.boardId == currentBoardId && $0.status == .archived }
