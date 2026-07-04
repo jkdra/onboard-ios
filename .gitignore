@@ -21,7 +21,11 @@ Secrets.xcconfig
 # Backend is intentionally NOT version-controlled in this repo.
 # The Supabase schema, RLS policies, migrations, and edge functions are kept
 # local-only so the backend can't be reconstructed from the public app code.
-supabase/
+# Anchored to repo root (leading slash) — an unanchored "supabase/" also matched
+# "On Board/Supabase/" (the client Swift code) because macOS git defaults to
+# case-insensitive matching, silently dropping new files added there from git
+# with no warning (they don't even show as untracked in `git status`).
+/supabase/
 
 # Environment overrides
 .env
