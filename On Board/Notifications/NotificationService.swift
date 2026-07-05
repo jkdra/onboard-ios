@@ -4,22 +4,43 @@
 //
 
 import Foundation
+import Observation
 import Supabase
 import UIKit
 import UserNotifications
 
+@Observable
 @MainActor
 final class NotificationService {
     static let shared = NotificationService()
 
-    private var pendingToken: Data?
+    @ObservationIgnored private var pendingToken: Data?
     private(set) var currentUserID: UUID?
     /// The hex APNs token last registered for the signed-in user, so a sign-out (which
     /// doesn't delete the account, unlike account deletion's `ON DELETE CASCADE`) can
     /// unregister this device from that account's push notifications.
     private(set) var currentTokenHex: String?
 
+    /// Post to open when the user tapped a notification. Stashed here (same
+    /// idiom as `pendingToken`) because the tap can arrive on a cold launch,
+    /// long before the feed exists or posts are fetched — ContentView consumes
+    /// it once the post is available.
+    private(set) var pendingPostID: UUID?
+
     private init() {}
+
+    // Called by AppDelegate when the user taps a notification. Payloads for
+    // reaction/comment/digest pushes carry a `post_id`; board-wide pushes
+    // (monday-reset, re-engagement) don't — those just open the app.
+    func handleNotificationTap(userInfo: [AnyHashable: Any]) {
+        guard let idString = userInfo["post_id"] as? String,
+              let postID = UUID(uuidString: idString) else { return }
+        pendingPostID = postID
+    }
+
+    func clearPendingPostID() {
+        pendingPostID = nil
+    }
 
     // Called by On_BoardApp when auth session changes to signed-in.
     func onSignedIn(userID: UUID) async {

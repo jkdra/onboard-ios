@@ -25,14 +25,19 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         completionHandler([.banner, .sound])
     }
 
-    // User tapped a notification — clear the badge. Navigation is handled automatically:
-    // the app opens to whichever board was last viewed (BoardListView.onAppear restores it).
+    // User tapped a notification — clear the badge and, when the payload
+    // carries a post_id (reactions, comments, new-post digests), stash it so
+    // ContentView can open that post once the feed is ready.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        Task { @MainActor in NotificationService.shared.clearBadge() }
+        let userInfo = response.notification.request.content.userInfo
+        Task { @MainActor in
+            NotificationService.shared.clearBadge()
+            NotificationService.shared.handleNotificationTap(userInfo: userInfo)
+        }
         completionHandler()
     }
 

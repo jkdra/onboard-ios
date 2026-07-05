@@ -52,6 +52,34 @@ struct ContentView: View {
                 .boardErrorHandling(alertError: $alertError, suppressWhenBoardMissing: true)
                 .presentableErrorAlert(error: $alertError)
         }
+        // Notification deep-link: fires on warm relaunch (post already cached),
+        // on a tap while the app is alive, and after the cold-launch fetch
+        // settles (isLoading flips false) — whichever happens first.
+        .onAppear { openPendingPostIfReady() }
+        .onChange(of: NotificationService.shared.pendingPostID) { _, _ in
+            openPendingPostIfReady()
+        }
+        .onChange(of: store.isLoading) { _, loading in
+            if !loading { openPendingPostIfReady() }
+        }
+    }
+
+    /// Navigates to the post a tapped notification pointed at, once it's
+    /// actually in the store — pushing the route earlier would render an
+    /// empty destination.
+    private func openPendingPostIfReady() {
+        guard let postID = NotificationService.shared.pendingPostID else { return }
+        if store.post(with: postID) != nil {
+            NotificationService.shared.clearPendingPostID()
+            showNewPost = false
+            // Replace the path so the post opens even if the user was deep
+            // in the Archive stack.
+            navigationPath = NavigationPath([BoardRoute.post(postID)])
+        } else if !store.isLoading, store.loadError == nil, store.activeBoardWeek != nil {
+            // Feed is loaded but the post is gone (weekly reset or deleted) —
+            // drop the stale route instead of retrying forever.
+            NotificationService.shared.clearPendingPostID()
+        }
     }
 
     private var thisWeekFeed: some View {

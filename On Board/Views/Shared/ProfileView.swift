@@ -35,6 +35,11 @@ struct ProfileView: View {
     @State private var uncroppedImage: UIImage?
     @State private var alertError: PresentableAlertError?
 
+    // Moderation (other users' profiles only)
+    @State private var reportTarget: ReportTarget?
+    @State private var blockCandidate: BlockCandidate?
+    @State private var isUpdatingBlock = false
+
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
     }
@@ -157,8 +162,56 @@ struct ProfileView: View {
                         ToolbarItem(placement: .topBarTrailing) {
                             Button { beginEditing() } label: { Label("Edit", systemImage: "pencil") }
                         }
+                    } else {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Menu {
+                                Button {
+                                    reportTarget = .profile(displayedProfile)
+                                } label: {
+                                    Label("Report Profile", systemImage: "flag")
+                                }
+                                if store.isBlocked(userID: displayedProfile.id) {
+                                    Button {
+                                        Task { await unblockUser() }
+                                    } label: {
+                                        Label("Unblock @\(displayedProfile.handle)", systemImage: "hand.raised.slash")
+                                    }
+                                } else {
+                                    Button(role: .destructive) {
+                                        blockCandidate = BlockCandidate(
+                                            userID: displayedProfile.id,
+                                            handle: displayedProfile.handle
+                                        )
+                                    } label: {
+                                        Label("Block @\(displayedProfile.handle)", systemImage: "hand.raised")
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "ellipsis")
+                            }
+                            .disabled(isUpdatingBlock)
+                        }
                     }
                 }
+            }
+            .sheet(item: $reportTarget) { target in
+                ReportContentSheet(target: target)
+            }
+            .confirmationDialog(
+                "Block @\(blockCandidate?.handle ?? "")?",
+                isPresented: Binding(
+                    get: { blockCandidate != nil },
+                    set: { if !$0 { blockCandidate = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: blockCandidate
+            ) { candidate in
+                Button("Block @\(candidate.handle)", role: .destructive) {
+                    Task { await blockUser(candidate) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
             }
             .fullScreenCover(item: Binding<UIImage?>(
                 get: { uncroppedImage },
@@ -271,6 +324,29 @@ struct ProfileView: View {
         selectedPhotoItem = nil
         draftAvatarUrl = nil
         withAnimation(.smooth(duration: 0.3)) { editMode = false }
+    }
+
+    // MARK: - Moderation
+
+    private func blockUser(_ candidate: BlockCandidate) async {
+        isUpdatingBlock = true
+        defer { isUpdatingBlock = false }
+        do {
+            try await store.block(userID: candidate.userID)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+        } catch {
+            alertError = store.presentableModerationError(error)
+        }
+    }
+
+    private func unblockUser() async {
+        isUpdatingBlock = true
+        defer { isUpdatingBlock = false }
+        do {
+            try await store.unblock(userID: displayedProfile.id)
+        } catch {
+            alertError = store.presentableModerationError(error)
+        }
     }
 
     private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {

@@ -312,6 +312,12 @@ struct SettingsView: View {
             } label: {
                 SettingsRowLabel(title: "Account Management", systemImage: "person.crop.circle.fill.badge.checkmark")
             }
+
+            NavigationLink {
+                BlockedUsersSettingsView()
+            } label: {
+                SettingsRowLabel(title: "Blocked Users", systemImage: "hand.raised.fill")
+            }
         } header: {
             Text("Account")
                 .fontStyle(.subheadline)

@@ -17,6 +17,8 @@ struct CommentView: View {
     var onReply: ((UUID) -> Void)?
     var onCancelReply: (() -> Void)?
     var onDelete: ((UUID) -> Void)?
+    var onReport: ((Comment) -> Void)?
+    var onBlockAuthor: ((Comment) -> Void)?
 
     @Environment(BoardStore.self) private var store
     @FocusState private var isEditorFocused: Bool
@@ -77,7 +79,9 @@ struct CommentView: View {
                                 onConfirmEdit: onConfirmEdit,
                                 onReply: onReply,
                                 onCancelReply: onCancelReply,
-                                onDelete: onDelete
+                                onDelete: onDelete,
+                                onReport: onReport,
+                                onBlockAuthor: onBlockAuthor
                             )
                         }
                     }
@@ -176,17 +180,36 @@ struct CommentView: View {
 
                     Spacer()
 
-                    if isInteractive, editingCommentID == nil, canEdit {
+                    // Own comments: edit/delete while the week is active.
+                    // Others' comments: report/block — available even on
+                    // archived weeks, since the content is still visible.
+                    if editingCommentID == nil, (isInteractive && canEdit) || !canEdit {
                         Menu {
-                            Button {
-                                onBeginEdit?(comment.id, comment.body)
-                            } label: {
-                                Label("Edit", systemImage: "pencil")
+                            if isInteractive, canEdit {
+                                Button {
+                                    onBeginEdit?(comment.id, comment.body)
+                                } label: {
+                                    Label("Edit", systemImage: "pencil")
+                                }
+                                Button(role: .destructive) {
+                                    onDelete?(comment.id)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
                             }
-                            Button(role: .destructive) {
-                                onDelete?(comment.id)
-                            } label: {
-                                Label("Delete", systemImage: "trash")
+                            if !canEdit {
+                                Button {
+                                    onReport?(comment)
+                                } label: {
+                                    Label("Report Comment", systemImage: "flag")
+                                }
+                                if comment.authorId != nil {
+                                    Button(role: .destructive) {
+                                        onBlockAuthor?(comment)
+                                    } label: {
+                                        Label("Block @\(comment.author)", systemImage: "hand.raised")
+                                    }
+                                }
                             }
                         } label: {
                             Image(systemName: "ellipsis")

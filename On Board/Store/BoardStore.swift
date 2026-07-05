@@ -43,6 +43,10 @@ final class BoardStore {
     private(set) var isLoading = false
     private(set) var accessibleBoards: [Board] = []
     var loadError: String?
+    /// Users the current user has blocked. Server RLS is the source of truth
+    /// (their content never arrives); this mirrors it for immediate UI state
+    /// (Blocked Users settings, profile screens, optimistic removal).
+    var blockedUserIDs: Set<UUID> = []
 
     // MARK: - Internals
 
@@ -162,6 +166,7 @@ final class BoardStore {
         currentUserID = nil
         userReactions = [:]
         userCommentVotes = [:]
+        blockedUserIDs = []
         postProxies = [:]
         commentsByPostID = [:]
         cachedArchiveWeekIDs = []
@@ -225,6 +230,7 @@ final class BoardStore {
                     )
                     apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
                     await refreshAccessibleBoards(for: userID)
+                    await refreshBlockedUsers(for: userID)
                     break
                 } catch {
                     if Task.isCancelled { break }

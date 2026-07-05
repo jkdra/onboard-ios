@@ -87,6 +87,16 @@ protocol BoardService: Sendable {
         bio: String?,
         avatarUrl: String?
     ) async throws -> Profile
+    func reportContent(
+        targetType: ReportTargetType,
+        targetID: UUID,
+        reason: ReportReason,
+        details: String?
+    ) async throws
+    func blockUser(blockedID: UUID) async throws
+    func unblockUser(blockedID: UUID) async throws
+    func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID]
+    func fetchProfiles(ids: [UUID]) async throws -> [Profile]
 }
 
 enum BoardServiceFactory {

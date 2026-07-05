@@ -16,16 +16,24 @@ extension PostDetailView {
         "\(livePost.title)\n\n\(livePost.description)\n\n— \(livePost.author) on On Board"
     }
 
-    var reportURL: URL {
-        var components = URLComponents(url: AppLinks.reportMailURL, resolvingAgainstBaseURL: false)!
-        components.queryItems = [
-            URLQueryItem(name: "subject", value: "Report post on On Board"),
-            URLQueryItem(
-                name: "body",
-                value: "Post ID: \(livePost.id.uuidString)\nAuthor: \(livePost.author)\nTitle: \(livePost.title)"
-            )
-        ]
-        return components.url ?? AppLinks.reportMailURL
+    /// Ownership only (unlike `canEdit`, not gated on the week being active),
+    /// so report/block stay available on archived content.
+    var isOwnPost: Bool {
+        store.canEdit(post: livePost)
+    }
+
+    // MARK: - Moderation
+
+    func blockUser(_ candidate: BlockCandidate) async {
+        do {
+            try await store.block(userID: candidate.userID)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            // Blocking the post's author removes the post from the store —
+            // don't leave the user on an empty screen.
+            if store.feedPost(id: livePost.id) == nil { dismiss() }
+        } catch {
+            alertError = store.presentableModerationError(error)
+        }
     }
 
     // MARK: - Post editing

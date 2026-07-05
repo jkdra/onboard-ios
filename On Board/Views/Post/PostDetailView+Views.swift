@@ -62,8 +62,19 @@ extension PostDetailView {
                     ShareLink(item: shareText, subject: Text(livePost.title), message: Text(shareText)) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
-                    if !canEdit {
-                        Link(destination: reportURL) { Label("Report", systemImage: "flag") }
+                    if !isOwnPost {
+                        Button {
+                            reportTarget = .post(livePost)
+                        } label: {
+                            Label("Report Post", systemImage: "flag")
+                        }
+                        if let authorID = livePost.authorId {
+                            Button(role: .destructive) {
+                                blockCandidate = BlockCandidate(userID: authorID, handle: authorProfile.handle)
+                            } label: {
+                                Label("Block @\(authorProfile.handle)", systemImage: "hand.raised")
+                            }
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis")
@@ -200,6 +211,13 @@ extension PostDetailView {
                         onCancelReply: { replyingToCommentID = nil },
                         onDelete: { commentID in
                             commentPendingDeletion = commentID
+                        },
+                        onReport: { comment in
+                            reportTarget = .comment(comment, postID: livePost.id)
+                        },
+                        onBlockAuthor: { comment in
+                            guard let authorID = comment.authorId else { return }
+                            blockCandidate = BlockCandidate(userID: authorID, handle: comment.author)
                         }
                     )
                 }

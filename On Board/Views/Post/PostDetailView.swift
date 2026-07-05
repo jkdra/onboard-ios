@@ -44,6 +44,10 @@ struct PostDetailView: View {
     @State var isLoadingComments = false
     @State var showImageViewer = false
 
+    // Moderation
+    @State var reportTarget: ReportTarget?
+    @State var blockCandidate: BlockCandidate?
+
     init(post: Post) {
         self.post = post
         _draftTone = State(initialValue: post.tone)
@@ -179,6 +183,28 @@ struct PostDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This permanently removes the post and its comments.")
+        }
+        .sheet(item: $reportTarget) { target in
+            ReportContentSheet(target: target) {
+                // Reporting the post itself hides it — leave the empty screen.
+                if case .post = target { dismiss() }
+            }
+        }
+        .confirmationDialog(
+            "Block @\(blockCandidate?.handle ?? "")?",
+            isPresented: Binding(
+                get: { blockCandidate != nil },
+                set: { if !$0 { blockCandidate = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: blockCandidate
+        ) { candidate in
+            Button("Block @\(candidate.handle)", role: .destructive) {
+                Task { await blockUser(candidate) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
         }
         .confirmationDialog(
             "Delete this comment?",
