@@ -16,6 +16,8 @@ enum AuthError: Error, Equatable, Sendable, LocalizedError {
     case cannotUnlinkLastSignInMethod
     case identityAlreadyLinked(AuthProvider)
     case invalidPhoneNumber
+    case invalidCredentials
+    case weakPassword
     case unknown(String)
 
     nonisolated var errorDescription: String? {
@@ -40,6 +42,10 @@ enum AuthError: Error, Equatable, Sendable, LocalizedError {
             "\(provider.label) is already linked to your account."
         case .invalidPhoneNumber:
             "Enter a valid phone number with country code, e.g. +1 555 555 0100."
+        case .invalidCredentials:
+            "Incorrect email or password."
+        case .weakPassword:
+            "Choose a stronger password — at least 8 characters."
         case .unknown(let message):
             message
         }

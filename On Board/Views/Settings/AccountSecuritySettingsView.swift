@@ -16,6 +16,7 @@ struct AccountSecuritySettingsView: View {
     @State private var identityPendingUnlink: LinkedIdentity?
     @State private var showAddMethodBeforeUnlink = false
     @State private var linkSheet: LinkSheet?
+    @State private var showPasswordSheet = false
     @State private var alertError: PresentableAlertError?
 
     private enum LinkSheet: Identifiable {
@@ -61,6 +62,11 @@ struct AccountSecuritySettingsView: View {
         }
         .refreshable {
             await refreshMethods()
+        }
+        .sheet(isPresented: $showPasswordSheet) {
+            SetPasswordView {
+                Task { await refreshMethods() }
+            }
         }
         .sheet(item: $linkSheet) { sheet in
             switch sheet {
@@ -108,6 +114,7 @@ struct AccountSecuritySettingsView: View {
             if let session = auth.session {
                 phoneMethodRow(session: session)
                 emailMethodRow(session: session)
+                passwordRow(session: session)
             } else if isRefreshing {
                 ProgressView("Loading sign-in methods…")
             }
@@ -115,9 +122,44 @@ struct AccountSecuritySettingsView: View {
             Text("Sign-In Methods")
                 .fontStyle(.subheadline)
         } footer: {
-            Text("Keep at least one way to sign in.")
-                .fontStyle(.footnote)
+            if auth.session?.hasEmailIdentity == false {
+                Text("Keep at least one way to sign in. Link an email to enable password sign-in.")
+                    .fontStyle(.footnote)
+            } else {
+                Text("Keep at least one way to sign in.")
+                    .fontStyle(.footnote)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func passwordRow(session: AuthSession) -> some View {
+        let canUsePassword = session.hasEmailIdentity
+        HStack(spacing: 12) {
+            SettingsIconBadge(systemImage: "key.fill")
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Password")
+                    .fontStyle(.body)
+                Text(
+                    canUsePassword
+                        ? (session.hasPassword ? "Sign in with your email and password" : "Not set")
+                        : "Link an email first"
+                )
+                .fontStyle(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if canUsePassword {
+                Button(session.hasPassword ? "Change" : "Set") {
+                    showPasswordSheet = true
+                }
+                .fontStyle(.subheadline)
+            }
+        }
+        .opacity(canUsePassword ? 1 : 0.55)
     }
 
     @ViewBuilder

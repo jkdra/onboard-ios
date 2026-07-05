@@ -15,6 +15,9 @@ struct AuthSession: Equatable, Codable, Sendable {
     /// provider and are display-only.
     let hasEmailIdentity: Bool
     let hasPhoneIdentity: Bool
+    /// True once the user has set a password (tracked via user metadata —
+    /// Supabase doesn't expose password presence directly).
+    let hasPassword: Bool
     let linkedIdentities: [LinkedIdentity]
 
     /// Backward-compatible alias for the primary sign-in provider.
@@ -27,6 +30,7 @@ struct AuthSession: Equatable, Codable, Sendable {
         phone: String? = nil,
         hasEmailIdentity: Bool = false,
         hasPhoneIdentity: Bool = false,
+        hasPassword: Bool = false,
         linkedIdentities: [LinkedIdentity] = []
     ) {
         self.userId = userId
@@ -35,6 +39,7 @@ struct AuthSession: Equatable, Codable, Sendable {
         self.phone = phone
         self.hasEmailIdentity = hasEmailIdentity
         self.hasPhoneIdentity = hasPhoneIdentity
+        self.hasPassword = hasPassword
         self.linkedIdentities = linkedIdentities
     }
 
@@ -66,6 +71,7 @@ struct AuthSession: Equatable, Codable, Sendable {
         case phone
         case hasEmailIdentity
         case hasPhoneIdentity
+        case hasPassword
         case linkedIdentities
     }
 
@@ -78,6 +84,7 @@ struct AuthSession: Equatable, Codable, Sendable {
         phone = try container.decodeIfPresent(String.self, forKey: .phone)
         hasEmailIdentity = try container.decodeIfPresent(Bool.self, forKey: .hasEmailIdentity) ?? false
         hasPhoneIdentity = try container.decodeIfPresent(Bool.self, forKey: .hasPhoneIdentity) ?? false
+        hasPassword = try container.decodeIfPresent(Bool.self, forKey: .hasPassword) ?? false
         linkedIdentities = try container.decodeIfPresent([LinkedIdentity].self, forKey: .linkedIdentities) ?? []
     }
 
@@ -89,6 +96,7 @@ struct AuthSession: Equatable, Codable, Sendable {
         try container.encodeIfPresent(phone, forKey: .phone)
         try container.encode(hasEmailIdentity, forKey: .hasEmailIdentity)
         try container.encode(hasPhoneIdentity, forKey: .hasPhoneIdentity)
+        try container.encode(hasPassword, forKey: .hasPassword)
         try container.encode(linkedIdentities, forKey: .linkedIdentities)
     }
 }

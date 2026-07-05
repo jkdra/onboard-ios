@@ -80,6 +80,39 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         return session
     }
 
+    func signInWithPassword(email: String, password: String) async throws -> AuthSession {
+        _ = password
+        try await Task.sleep(for: .milliseconds(350))
+        let session = makeSession(
+            userId: SampleProfileID.maya,
+            primaryProvider: .email,
+            email: email,
+            phone: nil,
+            linkedProviders: [],
+            hasPassword: true
+        )
+        persist(session)
+        return session
+    }
+
+    func setPassword(_ password: String) async throws -> AuthSession {
+        _ = password
+        try await Task.sleep(for: .milliseconds(350))
+        guard let session = try await restoreSession() else {
+            throw AuthError.sessionRestoreFailed
+        }
+        let updated = makeSession(
+            userId: session.userId,
+            primaryProvider: session.primaryProvider,
+            email: session.email,
+            phone: session.phone,
+            linkedProviders: session.linkedIdentities.map(\.provider),
+            hasPassword: true
+        )
+        persist(updated)
+        return updated
+    }
+
     func linkApple(idToken: String, nonce: String?) async throws -> AuthSession {
         _ = idToken
         _ = nonce
@@ -204,7 +237,8 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         primaryProvider: AuthProvider,
         email: String?,
         phone: String?,
-        linkedProviders: [AuthProvider]
+        linkedProviders: [AuthProvider],
+        hasPassword: Bool = false
     ) -> AuthSession {
         let linkedIdentities = linkedProviders
             .filter { $0 == .apple || $0 == .google }
@@ -223,6 +257,7 @@ final class MockAuthService: AuthService, @unchecked Sendable {
             phone: phone,
             hasEmailIdentity: email?.isEmpty == false,
             hasPhoneIdentity: phone?.isEmpty == false,
+            hasPassword: hasPassword,
             linkedIdentities: linkedIdentities
         )
     }

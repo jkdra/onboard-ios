@@ -247,6 +247,11 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func deleteComment(id: UUID) async throws {}
     func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {}
     func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { throw BoardServiceError.notConfigured }
+    func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws {}
+    func blockUser(blockedID: UUID) async throws {}
+    func unblockUser(blockedID: UUID) async throws {}
+    func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
+    func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
 }
 
 struct BoardStoreTests {
@@ -863,6 +868,8 @@ private final class ScriptedAuthService: AuthService, @unchecked Sendable {
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession { fatalError("unused") }
     func sendEmailOTP(email: String) async throws { fatalError("unused") }
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession { fatalError("unused") }
+    func signInWithPassword(email: String, password: String) async throws -> AuthSession { fatalError("unused") }
+    func setPassword(_ password: String) async throws -> AuthSession { fatalError("unused") }
     func linkApple(idToken: String, nonce: String?) async throws -> AuthSession { fatalError("unused") }
     func linkGoogle() async throws -> AuthSession { fatalError("unused") }
     func sendLinkPhoneOTP(phone: String) async throws { fatalError("unused") }
@@ -936,6 +943,12 @@ struct BoardSwitchRaceTests {
         func deleteComment(id: UUID) async throws { fatalError("unused") }
         func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws { fatalError("unused") }
         func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { fatalError("unused") }
+        func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws { fatalError("unused") }
+        func blockUser(blockedID: UUID) async throws { fatalError("unused") }
+        func unblockUser(blockedID: UUID) async throws { fatalError("unused") }
+        // refresh() fetches blocked IDs after every snapshot — must not trap.
+        func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
+        func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
     }
 
     @Test func switchingBoardsMidLoadLoadsTheNewBoard() async {

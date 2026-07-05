@@ -102,6 +102,23 @@ final class AuthStore {
         }
     }
 
+    func signInWithPassword(email: String, password: String) async {
+        state = .signingIn(.email)
+        do {
+            let session = try await service.signInWithPassword(email: email, password: password)
+            state = .signedIn(session)
+        } catch {
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Sets or changes the account password. Throws so the settings sheet can
+    /// present the failure inline without disturbing the signed-in state.
+    func setPassword(_ password: String) async throws {
+        let session = try await service.setPassword(password)
+        state = .signedIn(session)
+    }
+
     func linkApple(idToken: String, nonce: String?) async throws {
         let session = try await service.linkApple(idToken: idToken, nonce: nonce)
         state = .signedIn(session)

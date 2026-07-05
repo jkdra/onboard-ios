@@ -89,6 +89,52 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         return try await requireRefreshedSession()
     }
 
+    func signInWithPassword(email: String, password: String) async throws -> AuthSession {
+        let client = try requireClient()
+        do {
+            try await client.auth.signIn(email: email, password: password)
+        } catch {
+            throw Self.mapPasswordError(error)
+        }
+        return try await requireRefreshedSession()
+    }
+
+    func setPassword(_ password: String) async throws -> AuthSession {
+        let client = try requireClient()
+        do {
+            // has_password rides along in user metadata because Supabase never
+            // exposes whether an account has a password — the session needs it
+            // to decide between "Set Password" and "Change Password".
+            _ = try await client.auth.update(
+                user: UserAttributes(
+                    password: password,
+                    data: ["has_password": .bool(true)]
+                )
+            )
+        } catch {
+            throw Self.mapPasswordError(error)
+        }
+        return try await requireRefreshedSession()
+    }
+
+    /// Maps GoTrue's password-related API errors to friendly copy.
+    private static func mapPasswordError(_ error: Error) -> Error {
+        if NetworkErrorClassifier.isConnectivityFailure(error) {
+            return AuthError.networkUnavailable
+        }
+        let message = error.localizedDescription.lowercased()
+        if message.contains("invalid login credentials") {
+            return AuthError.invalidCredentials
+        }
+        if message.contains("password") && (message.contains("should be at least") || message.contains("weak")) {
+            return AuthError.weakPassword
+        }
+        if message.contains("different from the old password") {
+            return AuthError.unknown("Your new password must be different from your current one.")
+        }
+        return error
+    }
+
     func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession {
         let client = try requireClient()
 
@@ -142,12 +188,12 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         if let clientID = configuration.googleClientID {
             // Native Google Sign-In: GID SDK presents the account picker, returns an ID token,
             // which we exchange with Supabase directly without opening a browser.
-            let idToken = try await GoogleSignInService.signIn(clientID: clientID)
+            let credential = try await GoogleSignInService.signIn(clientID: clientID)
             session = try await client.auth.signInWithIdToken(
                 credentials: OpenIDConnectCredentials(
                     provider: .google,
-                    idToken: idToken,
-                    nonce: nil
+                    idToken: credential.idToken,
+                    nonce: credential.nonce
                 )
             )
         } else {
@@ -182,12 +228,12 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         let client = try requireClient()
 
         if let clientID = configuration.googleClientID {
-            let idToken = try await GoogleSignInService.signIn(clientID: clientID)
+            let credential = try await GoogleSignInService.signIn(clientID: clientID)
             _ = try await client.auth.linkIdentityWithIdToken(
                 credentials: OpenIDConnectCredentials(
                     provider: .google,
-                    idToken: idToken,
-                    nonce: nil
+                    idToken: credential.idToken,
+                    nonce: credential.nonce
                 )
             )
         } else {
@@ -337,6 +383,12 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         }
         let identityProviders = Set(identities.map(\.provider))
 
+        let hasPassword: Bool = if case .bool(true) = user.userMetadata["has_password"] {
+            true
+        } else {
+            false
+        }
+
         return AuthSession(
             userId: user.id,
             primaryProvider: primaryProvider(from: user, identities: identities),
@@ -344,6 +396,7 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             phone: user.phone,
             hasEmailIdentity: identityProviders.contains("email"),
             hasPhoneIdentity: identityProviders.contains("phone"),
+            hasPassword: hasPassword,
             linkedIdentities: linkedIdentities
         )
     }

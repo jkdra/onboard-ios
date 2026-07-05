@@ -24,7 +24,7 @@ struct Profile: Identifiable, Hashable, Codable {
     let joinedAt: Date
 
     enum CodingKeys: CodingKey {
-        case id, handle, displayName, bio, avatarUrl, joinedAt
+        case id, handle, displayName, bio, avatarUrl, joinedAt, createdAt
     }
 
     nonisolated init(
@@ -60,8 +60,21 @@ struct Profile: Identifiable, Hashable, Codable {
         // Map avatar_emoji to avatarUrl
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
         
-        // Handle gracefully if created_at is missing or renamed in the database
-        joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt) ?? .now
+        // The profiles table stores this as created_at (decoded as createdAt
+        // by the snake-case strategy) — joinedAt is only in local fixtures.
+        joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt)
+            ?? container.decodeIfPresent(Date.self, forKey: .createdAt)
+            ?? .now
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(handle, forKey: .handle)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(bio, forKey: .bio)
+        try container.encodeIfPresent(avatarUrl, forKey: .avatarUrl)
+        try container.encode(joinedAt, forKey: .joinedAt)
     }
 
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }
