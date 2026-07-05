@@ -237,10 +237,10 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { throw BoardServiceError.notConfigured }
     func fetchComments(for postID: UUID) async throws -> CommentThread { throw BoardServiceError.notConfigured }
     func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
-    func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post {
-        Post(authorId: authorID, boardWeekId: weekID, title: title, description: description, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio)
+    func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
+        Post(authorId: authorID, boardWeekId: weekID, title: title, description: description, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio, tags: tags)
     }
-    func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { throw BoardServiceError.notConfigured }
+    func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
     func deletePost(id: UUID) async throws {}
     func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws {}
     func updateComment(id: UUID, body: String) async throws {}
@@ -252,6 +252,13 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func unblockUser(blockedID: UUID) async throws {}
     func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
     func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
+    func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
+    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {}
+    func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { [:] }
+    func followUser(id: UUID) async throws {}
+    func unfollowUser(id: UUID) async throws {}
+    func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
+    func searchTags(query: String) async throws -> [On_Board.Tag] { [] }
 }
 
 struct BoardStoreTests {
@@ -935,8 +942,8 @@ struct BoardSwitchRaceTests {
         func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { fatalError("unused") }
         func fetchComments(for postID: UUID) async throws -> CommentThread { fatalError("unused") }
         func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws { fatalError("unused") }
-        func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { fatalError("unused") }
-        func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?) async throws -> Post { fatalError("unused") }
+        func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
+        func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
         func deletePost(id: UUID) async throws { fatalError("unused") }
         func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws { fatalError("unused") }
         func updateComment(id: UUID, body: String) async throws { fatalError("unused") }
@@ -949,6 +956,14 @@ struct BoardSwitchRaceTests {
         // refresh() fetches blocked IDs after every snapshot — must not trap.
         func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
         func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
+        func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
+        func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws { fatalError("unused") }
+        func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { [:] }
+        func followUser(id: UUID) async throws { fatalError("unused") }
+        func unfollowUser(id: UUID) async throws { fatalError("unused") }
+        // refresh() fetches followed IDs after every snapshot — must not trap.
+        func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
+        func searchTags(query: String) async throws -> [On_Board.Tag] { fatalError("unused") }
     }
 
     @Test func switchingBoardsMidLoadLoadsTheNewBoard() async {
@@ -969,5 +984,30 @@ struct BoardSwitchRaceTests {
 
         #expect(store.currentBoardId == boardB)
         #expect(store.activeBoardWeek?.boardId == boardB)
+    }
+}
+
+@MainActor
+struct NotificationSettingsTests {
+    @Test func decodesFromJSONWithSnakeCase() throws {
+        let json = """
+        {
+          "push_reactions": true,
+          "push_comments": false,
+          "push_new_posts": true
+        }
+        """.data(using: .utf8)!
+        
+        let settings = try BoardJSON.decoder.decode(NotificationSettings.self, from: json)
+        #expect(settings.pushReactions == true)
+        #expect(settings.pushComments == false)
+        #expect(settings.pushNewPosts == true)
+    }
+
+    @Test func providesDefaultValues() {
+        let settings = NotificationSettings()
+        #expect(settings.pushReactions == true)
+        #expect(settings.pushComments == true)
+        #expect(settings.pushNewPosts == true)
     }
 }

@@ -41,9 +41,7 @@ struct BoardListView: View {
             .navigationTitle("Your Boards")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { showSettings = true } label: {
-                        profileAvatar
-                    }
+                    Button { showSettings = true } label: { profileAvatar }
                     .accessibilityLabel("Settings")
                 }
             }
@@ -81,29 +79,37 @@ struct BoardListView: View {
     }
 
     // MARK: - Profile avatar
-
+    
     @ViewBuilder
     private var profileAvatar: some View {
         if let urlString = onboarding.status?.avatarUrl,
            let url = URL(string: urlString) {
-            LazyImage(request: OnBoardImagePipeline.request(url: url, width: 30)) { state in
+            LazyImage(request: OnBoardImagePipeline.request(url: url, width: 32)) { state in
                 if let image = state.image {
                     image
                         .resizable()
                         .scaledToFill()
-                        .frame(width: 30, height: 30)
+                        .frame(width: 32, height: 32)
                         .clipShape(Circle())
                 } else {
-                    Image(systemName: "person.circle")
-                        .font(.title3)
+                    Image(systemName: "person.circle.fill") // Using fill looks better as a toolbar placeholder
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 32, height: 32)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .frame(width: 30, height: 30)
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
         } else {
-            Image(systemName: "person.circle")
-                .font(.title3)
+            Image(systemName: "person.circle.fill")
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: 32, height: 32)
+                .foregroundStyle(.secondary)
         }
     }
+
 
     // MARK: - Row
 

@@ -20,6 +20,7 @@ struct RemotePostRow: Decodable, Sendable {
     let reactionCounts: [Reaction: Int]
     let imageUrl: String?
     let imageAspectRatio: Double?
+    let tags: [String]
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -34,6 +35,7 @@ struct RemotePostRow: Decodable, Sendable {
         case reactionCounts
         case imageUrl
         case imageAspectRatio
+        case tags
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -50,6 +52,7 @@ struct RemotePostRow: Decodable, Sendable {
         reactionCounts = Self.decodeReactionCounts(from: container)
         imageUrl = try container.decodeIfPresent(String.self, forKey: .imageUrl)
         imageAspectRatio = try container.decodeIfPresent(Double.self, forKey: .imageAspectRatio)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 
     func toPost(comments: [Comment] = []) -> Post {
@@ -66,7 +69,8 @@ struct RemotePostRow: Decodable, Sendable {
             comments: comments,
             createdAt: createdAt,
             imageUrl: imageUrl,
-            imageAspectRatio: imageAspectRatio
+            imageAspectRatio: imageAspectRatio,
+            tags: tags
         )
     }
 

@@ -264,7 +264,7 @@ struct AccountSecuritySettingsView: View {
     private func linkedOAuthRow(identity: LinkedIdentity, session: AuthSession) -> some View {
         HStack(spacing: 12) {
             if identity.provider == .google {
-                GoogleIconBadge(grayscale: true)
+                GoogleIconBadge()
             } else {
                 SettingsIconBadge(systemImage: identity.provider.systemImage)
             }
@@ -337,7 +337,7 @@ struct AccountSecuritySettingsView: View {
             Task { await linkGoogle() }
         } label: {
             HStack(spacing: 12) {
-                GoogleIconBadge(grayscale: false)
+                GoogleIconBadge()
                 Text("Link Google")
                     .fontStyle(.body)
                 Spacer()
@@ -356,7 +356,7 @@ struct AccountSecuritySettingsView: View {
     private func unavailableOAuthRow(provider: AuthProvider) -> some View {
         HStack(spacing: 12) {
             if provider == .google {
-                GoogleIconBadge(grayscale: false)
+                GoogleIconBadge()
             } else {
                 SettingsIconBadge(systemImage: provider.systemImage)
             }
@@ -445,7 +445,6 @@ struct AccountSecuritySettingsView: View {
 /// asset image rather than an SF Symbol — Google's logo shouldn't be
 /// recolored to `.primary`, so it sits on a plain neutral square instead.
 private struct GoogleIconBadge: View {
-    var grayscale: Bool
     @ScaledMetric(relativeTo: .body) private var size: CGFloat = 28
 
     var body: some View {
@@ -453,7 +452,6 @@ private struct GoogleIconBadge: View {
             .renderingMode(.original)
             .resizable()
             .scaledToFit()
-            .grayscale(grayscale ? 1.0 : 0.0)
             .frame(width: size * 0.6, height: size * 0.6)
             .frame(width: size, height: size)
             .background {

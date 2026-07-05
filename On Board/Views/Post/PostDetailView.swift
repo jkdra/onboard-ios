@@ -19,6 +19,8 @@ struct PostDetailView: View {
     @State var draftTitle = ""
     @State var draftDescription = ""
     @State var draftTone: PostTone
+    @State var draftTags: [String] = []
+    @State var showingTagSelection = false
 
     // Comment editing / replying
     @State var editingCommentID: UUID?
@@ -53,6 +55,7 @@ struct PostDetailView: View {
         _draftTone = State(initialValue: post.tone)
         _draftTitle = State(initialValue: post.title)
         _draftDescription = State(initialValue: post.description)
+        _draftTags = State(initialValue: post.tags)
     }
 
     // MARK: - Derived
@@ -112,6 +115,9 @@ struct PostDetailView: View {
                     TextField("Description", text: $draftDescription, axis: .vertical)
                         .fontStyle(.body)
                         .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
+                        
+                    editTagsSection
+                    
                     editImageSection
                         .transition(.opacity)
                 }
@@ -189,6 +195,9 @@ struct PostDetailView: View {
                 // Reporting the post itself hides it — leave the empty screen.
                 if case .post = target { dismiss() }
             }
+        }
+        .sheet(isPresented: $showingTagSelection) {
+            TagSelectionView(selectedTags: $draftTags)
         }
         .confirmationDialog(
             "Block @\(blockCandidate?.handle ?? "")?",

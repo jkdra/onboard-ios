@@ -171,6 +171,21 @@ struct GridCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(4)
                 .truncationMode(.tail)
+                
+            if !post.tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(post.tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .fontStyle(.caption2)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.primary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
             Spacer(minLength: 0)
             cardAuthorRow
             topReactionsRow

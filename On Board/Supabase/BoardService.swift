@@ -59,7 +59,8 @@ protocol BoardService: Sendable {
         description: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?
+        imageAspectRatio: Double?,
+        tags: [String]
     ) async throws -> Post
     func updatePost(
         id: UUID,
@@ -67,7 +68,8 @@ protocol BoardService: Sendable {
         description: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?
+        imageAspectRatio: Double?,
+        tags: [String]
     ) async throws -> Post
     func deletePost(id: UUID) async throws
     func createComment(
@@ -97,6 +99,15 @@ protocol BoardService: Sendable {
     func unblockUser(blockedID: UUID) async throws
     func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID]
     func fetchProfiles(ids: [UUID]) async throws -> [Profile]
+    func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings
+    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws
+    
+    func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int]
+    func followUser(id: UUID) async throws
+    func unfollowUser(id: UUID) async throws
+    func fetchFollowedUserIDs() async throws -> Set<UUID>
+    
+    func searchTags(query: String) async throws -> [Tag]
 }
 
 enum BoardServiceFactory {

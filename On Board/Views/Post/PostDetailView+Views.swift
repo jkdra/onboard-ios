@@ -129,6 +129,22 @@ extension PostDetailView {
             Text(livePost.description)
                 .fontStyle(.body)
                 .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
+                
+            if !livePost.tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(livePost.tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .fontStyle(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.primary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .doubleTapHeart(
@@ -223,6 +239,38 @@ extension PostDetailView {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    var editTagsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Tags (\(draftTags.count)/3)", systemImage: "number")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(draftTags.isEmpty ? "Add Tags" : "Edit") {
+                    showingTagSelection = true
+                }
+                .fontStyle(.subheadline)
+            }
+            
+            if !draftTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(draftTags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .fontStyle(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.primary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 8)
     }
 
     @ViewBuilder

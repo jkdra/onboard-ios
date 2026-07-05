@@ -43,6 +43,7 @@ extension PostDetailView {
         draftTitle = livePost.title
         draftDescription = livePost.description
         draftTone = livePost.tone
+        draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl
         draftImageAspectRatio = livePost.imageAspectRatio
         selectedEditPhotoData = nil
@@ -63,7 +64,8 @@ extension PostDetailView {
                 description: draftDescription.trimmed,
                 tone: draftTone,
                 imageUrl: effectiveImageUrl,
-                imageAspectRatio: effectiveAspectRatio
+                imageAspectRatio: effectiveAspectRatio,
+                tags: draftTags
             )
             guard succeeded else { return }
             withAnimation(.smooth(duration: 0.4)) { editMode = false }
@@ -74,6 +76,7 @@ extension PostDetailView {
         draftTitle = livePost.title
         draftDescription = livePost.description
         draftTone = livePost.tone
+        draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl
         draftImageAspectRatio = livePost.imageAspectRatio
         selectedEditPhotoData = nil

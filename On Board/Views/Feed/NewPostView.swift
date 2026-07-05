@@ -19,6 +19,7 @@ struct NewPostView: View {
 
     @State private var title = ""
     @State private var content = ""
+    @State private var tags: [String] = []
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
@@ -33,6 +34,7 @@ struct NewPostView: View {
     @State private var uploadedAspectRatio: Double?
     @State private var isUploadingImage = false
     @State private var isSubmitting = false
+    @State private var showingTagSelection = false
 
     @FocusState private var focus: Field?
     private enum Field { case title, content }
@@ -73,8 +75,10 @@ struct NewPostView: View {
                         .lineLimit(4...12)
                         .focused($focus, equals: .content)
                         .fontStyle(.body)
-
+                        
                     Divider()
+                    
+                    tagsRow
 
                     // Image attachment row
                     imageAttachmentRow
@@ -154,10 +158,43 @@ struct NewPostView: View {
             .onChange(of: selectedPhotoItem) { _, item in
                 Task { await loadAndUpload(item) }
             }
+            .sheet(isPresented: $showingTagSelection) {
+                TagSelectionView(selectedTags: $tags)
+            }
         }
     }
 
-    // MARK: - Image attachment
+    // MARK: - Image attachment & Tags
+    
+    private var tagsRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Tags (\(tags.count)/3)", systemImage: "number")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(tags.isEmpty ? "Add Tags" : "Edit") {
+                    showingTagSelection = true
+                }
+                .fontStyle(.subheadline)
+            }
+            
+            if !tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(tags, id: \.self) { tag in
+                            Text("#\(tag)")
+                                .fontStyle(.caption)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.primary.opacity(0.1))
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -263,7 +300,8 @@ struct NewPostView: View {
                 description: content.trimmed,
                 tone: resolvedTone,
                 imageUrl: uploadedImageUrl,
-                imageAspectRatio: uploadedAspectRatio
+                imageAspectRatio: uploadedAspectRatio,
+                tags: tags
             )
             isSubmitting = false
             guard succeeded else { return }

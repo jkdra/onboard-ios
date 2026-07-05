@@ -124,14 +124,16 @@ struct SettingsView: View {
                 accountSection
 
                 Section {
-                    Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
+                    NavigationLink {
+                        NotificationSettingsView()
+                    } label: {
                         SettingsRowLabel(title: "Notification Settings", systemImage: "bell.badge.fill")
                     }
                 } header: {
                     Text("Notifications")
                         .fontStyle(.subheadline)
                 } footer: {
-                    Text("Manage alerts for new boards and clearing reminders in iOS Settings.")
+                    Text("Manage which notifications you want to receive.")
                         .fontStyle(.footnote)
                 }
 

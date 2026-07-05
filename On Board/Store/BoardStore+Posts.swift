@@ -11,7 +11,8 @@ extension BoardStore {
         description: String,
         tone: PostTone,
         imageUrl: String? = nil,
-        imageAspectRatio: Double? = nil
+        imageAspectRatio: Double? = nil,
+        tags: [String] = []
     ) async -> Bool {
         guard canInteractWithBoard, let user = currentUser else { return false }
         // Backstop for the final-hour posting freeze (the UI hides the entry, this blocks any
@@ -35,7 +36,8 @@ extension BoardStore {
                 description: description,
                 tone: tone,
                 imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
+                imageAspectRatio: imageAspectRatio,
+                tags: tags
             )
             insertPost(post)
             return true
@@ -51,7 +53,8 @@ extension BoardStore {
         description: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?
+        imageAspectRatio: Double?,
+        tags: [String]
     ) async -> Bool {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
@@ -73,7 +76,8 @@ extension BoardStore {
                 comments: comments(for: id),
                 createdAt: existing.createdAt,
                 imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
+                imageAspectRatio: imageAspectRatio,
+                tags: tags
             )
             replacePost(at: index, with: updated)
             return true
@@ -86,7 +90,8 @@ extension BoardStore {
                 description: description,
                 tone: tone,
                 imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio
+                imageAspectRatio: imageAspectRatio,
+                tags: tags
             )
             replacePost(at: index, with: updated)
             return true

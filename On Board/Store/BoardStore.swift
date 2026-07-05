@@ -47,6 +47,7 @@ final class BoardStore {
     /// (their content never arrives); this mirrors it for immediate UI state
     /// (Blocked Users settings, profile screens, optimistic removal).
     var blockedUserIDs: Set<UUID> = []
+    var followedUserIDs: Set<UUID> = []
 
     // MARK: - Internals
 
@@ -167,6 +168,7 @@ final class BoardStore {
         userReactions = [:]
         userCommentVotes = [:]
         blockedUserIDs = []
+        followedUserIDs = []
         postProxies = [:]
         commentsByPostID = [:]
         cachedArchiveWeekIDs = []
@@ -185,6 +187,15 @@ final class BoardStore {
             accessibleBoards = try await boardService.listAccessibleBoards(for: userID)
         } catch {
             // Non-critical — switcher falls back to currentBoard
+        }
+    }
+
+    func refreshFollowedUsers(for userID: UUID) async {
+        guard let boardService else { return }
+        do {
+            followedUserIDs = try await boardService.fetchFollowedUserIDs()
+        } catch {
+            // Non-critical
         }
     }
 
@@ -231,6 +242,7 @@ final class BoardStore {
                     apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
                     await refreshAccessibleBoards(for: userID)
                     await refreshBlockedUsers(for: userID)
+                    await refreshFollowedUsers(for: userID)
                     break
                 } catch {
                     if Task.isCancelled { break }
@@ -640,5 +652,17 @@ final class BoardStore {
             commentsByPostID[postID] = thread
         }
         return changed
+    }
+
+    // MARK: - Notification Settings
+
+    func fetchNotificationSettings() async throws -> NotificationSettings {
+        guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
+        return try await boardService.fetchNotificationSettings(for: currentUserID)
+    }
+
+    func updateNotificationSettings(_ settings: NotificationSettings) async throws {
+        guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
+        try await boardService.updateNotificationSettings(settings, for: currentUserID)
     }
 }

@@ -18,11 +18,34 @@ extension SupabaseBoardService {
             .execute()
             .value
 
+        struct TagRow: Decodable, Sendable {
+            let postId: UUID
+            let tagName: String
+            enum CodingKeys: String, CodingKey {
+                case postId = "post_id"
+                case tagName = "tag_name"
+            }
+        }
+        async let tagRows: [TagRow] = client
+            .rpc("fetch_tags_for_week", params: ["p_week_id": weekID])
+            .execute()
+            .value
+
         let postRows = try await rows
         let reactionRows = try await reactions
+        let postTags = try? await tagRows
+
+        var tagsByPost: [UUID: [String]] = [:]
+        if let postTags {
+            for pt in postTags { tagsByPost[pt.postId, default: []].append(pt.tagName) }
+        }
 
         return BoardWeekPosts(
-            posts: postRows.map { $0.toPost() },
+            posts: postRows.map { row in
+                var post = row.toPost()
+                post.tags = tagsByPost[row.id] ?? []
+                return post
+            },
             userReactions: Dictionary(uniqueKeysWithValues: reactionRows.map { ($0.postId, $0.type) })
         )
     }
@@ -34,7 +57,8 @@ extension SupabaseBoardService {
         description: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?
+        imageAspectRatio: Double?,
+        tags: [String]
     ) async throws -> Post {
         struct Insert: Encodable {
             let boardWeekId: UUID
@@ -77,7 +101,16 @@ extension SupabaseBoardService {
             .rpc("fetch_post_by_id", params: ["p_post_id": inserted.id])
             .execute()
             .value
-        return enriched.toPost()
+            
+        struct SetTagsParams: Encodable {
+            let p_post_id: UUID
+            let p_tags: [String]
+        }
+        try await client.rpc("set_post_tags", params: SetTagsParams(p_post_id: inserted.id, p_tags: tags)).execute()
+            
+        var post = enriched.toPost()
+        post.tags = tags
+        return post
     }
 
     func updatePost(
@@ -86,7 +119,8 @@ extension SupabaseBoardService {
         description: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?
+        imageAspectRatio: Double?,
+        tags: [String]
     ) async throws -> Post {
         try await mapAuthErrors {
             struct Update: Encodable {
@@ -108,7 +142,16 @@ extension SupabaseBoardService {
                 .rpc("fetch_post_by_id", params: ["p_post_id": id])
                 .execute()
                 .value
-            return enriched.toPost()
+                
+            struct SetTagsParams: Encodable {
+                let p_post_id: UUID
+                let p_tags: [String]
+            }
+            try await client.rpc("set_post_tags", params: SetTagsParams(p_post_id: id, p_tags: tags)).execute()
+                
+            var post = enriched.toPost()
+            post.tags = tags
+            return post
         }
     }
 
@@ -120,5 +163,18 @@ extension SupabaseBoardService {
                 .eq("id", value: id.uuidString)
                 .execute()
         }
+    }
+    
+    func searchTags(query: String) async throws -> [Tag] {
+        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !cleanQuery.isEmpty else { return [] }
+        struct SearchParams: Encodable {
+            let prefix: String
+            let p_limit: Int
+        }
+        return try await client
+            .rpc("search_tags", params: SearchParams(prefix: cleanQuery, p_limit: 10))
+            .execute()
+            .value
     }
 }

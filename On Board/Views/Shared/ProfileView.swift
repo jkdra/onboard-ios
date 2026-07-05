@@ -40,6 +40,10 @@ struct ProfileView: View {
     @State private var blockCandidate: BlockCandidate?
     @State private var isUpdatingBlock = false
 
+    // Pop Score
+    @State private var popScore: [Reaction: Int]?
+    @State private var isLoadingPopScore = false
+
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
     }
@@ -113,6 +117,42 @@ struct ProfileView: View {
                     }
                     .fontStyle(.footnote)
                     .foregroundStyle(.secondary)
+                    
+                    if !editMode {
+                        if let popScore {
+                            PopScoreView(score: popScore)
+                                .padding(.top, 8)
+                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                        } else if isLoadingPopScore {
+                            ProgressView()
+                                .padding(.top, 8)
+                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                        }
+                        
+                        if !canEdit {
+                            let isFollowing = store.followedUserIDs.contains(profile.id)
+                            Button {
+                                Task {
+                                    if isFollowing {
+                                        await store.unfollowUser(id: profile.id)
+                                    } else {
+                                        await store.followUser(id: profile.id)
+                                    }
+                                }
+                            } label: {
+                                Label(
+                                    isFollowing ? "Following" : "Follow",
+                                    systemImage: isFollowing ? "person.fill.checkmark" : "person.badge.plus"
+                                )
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(isFollowing ? .secondary : .primary)
+                            .padding(.top, 8)
+                            .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .safeAreaPadding()
@@ -230,6 +270,16 @@ struct ProfileView: View {
                     ImageViewerView(url: url)
                         .navigationTransition(.zoom(sourceID: "avatarImage", in: profileNamespace))
                 }
+            }
+            .task {
+                guard popScore == nil, !isLoadingPopScore else { return }
+                isLoadingPopScore = true
+                do {
+                    popScore = try await store.boardService?.fetchUserReactionCounts(for: profile.id)
+                } catch {
+                    // Failed silently for now
+                }
+                isLoadingPopScore = false
             }
             .presentableErrorAlert(error: $alertError)
     }
@@ -393,4 +443,68 @@ extension UIImage: @retroactive Identifiable {
         ProfileView(profile: .currentUser)
     }
     .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
+}
+
+struct PopScoreView: View {
+    let score: [Reaction: Int]
+    
+    var body: some View {
+        let total = max(1, score.values.reduce(0, +))
+        let sortedReactions = Reaction.defaultOrder.filter { (score[$0] ?? 0) > 0 }
+        
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Personality Profile")
+                .fontStyle(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundStyle(.secondary)
+            
+            if score.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No reactions yet")
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("Post more to start building your score!")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                GeometryReader { geo in
+                    HStack(spacing: 2) {
+                        ForEach(sortedReactions, id: \.self) { reaction in
+                            let count = score[reaction] ?? 0
+                            // subtract 2 for the spacing to keep total width correct
+                            let spacingCorrection = CGFloat(sortedReactions.count - 1) * 2.0 / CGFloat(sortedReactions.count)
+                            let width = max(0, geo.size.width * CGFloat(count) / CGFloat(total) - spacingCorrection)
+                            Rectangle()
+                                .fill(color(for: reaction))
+                                .frame(width: width)
+                        }
+                    }
+                }
+                .frame(height: 12)
+                .clipShape(Capsule())
+                
+                HStack(spacing: 16) {
+                    ForEach(sortedReactions, id: \.self) { reaction in
+                        let count = score[reaction] ?? 0
+                        HStack(spacing: 4) {
+                            Text(reaction.emoji)
+                            Text("\(Int(round(Double(count) / Double(total) * 100)))%")
+                                .font(.caption2.weight(.medium))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private func color(for reaction: Reaction) -> Color {
+        switch reaction {
+        case .laugh: return .yellow
+        case .hug: return .green
+        case .like: return .pink
+        case .dislike: return .gray
+        }
+    }
 }

@@ -32,4 +32,26 @@ extension BoardStore {
             loadError = Self.mapLoadError(error)
         }
     }
+    
+    func followUser(id: UUID) async {
+        guard let boardService else { return }
+        followedUserIDs.insert(id)
+        do {
+            try await boardService.followUser(id: id)
+        } catch {
+            followedUserIDs.remove(id)
+            loadError = Self.mapLoadError(error)
+        }
+    }
+    
+    func unfollowUser(id: UUID) async {
+        guard let boardService else { return }
+        followedUserIDs.remove(id)
+        do {
+            try await boardService.unfollowUser(id: id)
+        } catch {
+            followedUserIDs.insert(id)
+            loadError = Self.mapLoadError(error)
+        }
+    }
 }

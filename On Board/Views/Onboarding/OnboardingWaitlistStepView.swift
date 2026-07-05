@@ -4,11 +4,14 @@
 //
 
 import SwiftUI
+import UserNotifications
 
 struct OnboardingWaitlistStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var appeared = false
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
     private var hasJoined: Bool {
         onboarding.status?.waitlistJoinedAt != nil
@@ -57,6 +60,19 @@ struct OnboardingWaitlistStepView: View {
                 await onboarding.refresh()
             }
         }
+        .task {
+            await checkNotificationStatus()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task { await checkNotificationStatus() }
+            }
+        }
+    }
+
+    private func checkNotificationStatus() async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        notificationStatus = settings.authorizationStatus
     }
 
     // MARK: - Header icon
@@ -132,9 +148,33 @@ struct OnboardingWaitlistStepView: View {
             .buttonStyle(.boardPrimary)
             .disabled(onboarding.isSubmitting)
         } else {
-            Label("You're on the waitlist", systemImage: "checkmark.circle.fill")
-                .fontStyle(.subheadline)
-                .foregroundStyle(.secondary)
+            if notificationStatus == .authorized || notificationStatus == .provisional {
+                Label("We'll let you know as soon as you're On Board!", systemImage: "checkmark.circle.fill")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    if notificationStatus == .notDetermined {
+                        Task {
+                            let center = UNUserNotificationCenter.current()
+                            let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+                            if granted == true {
+                                UIApplication.shared.registerForRemoteNotifications()
+                            }
+                            await checkNotificationStatus()
+                        }
+                    } else {
+                        if let url = URL(string: UIApplication.openSettingsURLString) {
+                            UIApplication.shared.open(url)
+                        }
+                    }
+                } label: {
+                    Label(notificationStatus == .notDetermined ? "Notify me" : "Enable notifications", systemImage: "bell.badge.fill")
+                        .padding(.horizontal, 8)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.primary)
+            }
         }
     }
 }
