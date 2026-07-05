@@ -20,6 +20,7 @@ struct SettingsView: View {
     @State private var triggerShake = 0
     @State private var previewRotations: [Double] = [0, 0, 0, 0]
     @State private var showProfanityInfo = false
+    @State private var webDocument: WebDocument?
 
     private let previewWidth: CGFloat = 184
     private let previewHeight: CGFloat = 256
@@ -124,8 +125,7 @@ struct SettingsView: View {
 
                 Section {
                     Link(destination: URL(string: UIApplication.openSettingsURLString)!) {
-                        Label("Notification Settings", systemImage: "bell.badge.fill")
-                            .fontStyle(.body)
+                        SettingsRowLabel(title: "Notification Settings", systemImage: "bell.badge.fill")
                     }
                 } header: {
                     Text("Notifications")
@@ -137,12 +137,10 @@ struct SettingsView: View {
 
                 Section {
                     Link(destination: URL(string: "mailto:\(AppLinks.supportEmail)")!) {
-                        Label("Contact Support", systemImage: "envelope.fill")
-                            .fontStyle(.body)
+                        SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill")
                     }
                     Link(destination: AppLinks.reportMailURL) {
-                        Label("Report a Problem", systemImage: "exclamationmark.bubble.fill")
-                            .fontStyle(.body)
+                        SettingsRowLabel(title: "Report a Problem", systemImage: "exclamationmark.bubble.fill")
                     }
                 } header: {
                     Text("Support")
@@ -150,14 +148,16 @@ struct SettingsView: View {
                 }
 
                 Section {
-                    Link(destination: AppLinks.privacyPolicyURL) {
-                        Label("Privacy Policy", systemImage: "hand.raised.fill")
-                            .fontStyle(.body)
-                    }
-                    Link(destination: AppLinks.termsOfServiceURL) {
-                        Label("Terms of Service", systemImage: "doc.text.fill")
-                            .fontStyle(.body)
-                    }
+                    legalLinkRow(
+                        title: "Privacy Policy",
+                        systemImage: "hand.raised.fill",
+                        url: AppLinks.privacyPolicyURL
+                    )
+                    legalLinkRow(
+                        title: "Terms of Service",
+                        systemImage: "doc.text.fill",
+                        url: AppLinks.termsOfServiceURL
+                    )
                 } header: {
                     Text("Legal")
                         .fontStyle(.subheadline)
@@ -194,7 +194,34 @@ struct SettingsView: View {
                 guard !isSignedIn else { return }
                 dismiss()
             }
+            .sheet(item: $webDocument) { document in
+                WebContentSheet(document: document)
+            }
         }
+    }
+
+    // MARK: - Legal links
+
+    private func legalLinkRow(title: String, systemImage: String, url: URL) -> some View {
+        Button {
+            webDocument = WebDocument(title: title, url: url)
+        } label: {
+            HStack(spacing: 12) {
+                SettingsIconBadge(systemImage: systemImage)
+                Text(title).fontStyle(.body)
+                Spacer(minLength: 8)
+                // Signals this row shows external (web) content, even though
+                // it opens in-app rather than handing off to Safari.
+                Image(systemName: "arrow.up.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .accessibilityHint("Opens in a web view")
     }
 
     // MARK: - Board preview
@@ -277,15 +304,13 @@ struct SettingsView: View {
             NavigationLink {
                 AccountSecuritySettingsView()
             } label: {
-                Label("Security", systemImage: "lock.shield.fill")
-                    .fontStyle(.body)
+                SettingsRowLabel(title: "Security", systemImage: "lock.shield.fill")
             }
 
             NavigationLink {
                 AccountManagementSettingsView()
             } label: {
-                Label("Account Management", systemImage: "person.crop.circle.fill.badge.checkmark")
-                    .fontStyle(.body)
+                SettingsRowLabel(title: "Account Management", systemImage: "person.crop.circle.fill.badge.checkmark")
             }
         } header: {
             Text("Account")

@@ -19,16 +19,14 @@ struct AccountManagementSettingsView: View {
                 Button {
                     showExportConfirmation = true
                 } label: {
-                    Label("Request Data Export", systemImage: "doc.text.magnifyingglass")
-                        .fontStyle(.body)
+                    SettingsRowLabel(title: "Request Data Export", systemImage: "doc.text.magnifyingglass")
                 }
                 .tint(.primary)
-                
+
                 Button {
                     // Placeholder for blocked users functionality
                 } label: {
-                    Label("Blocked Users", systemImage: "person.crop.circle.fill.badge.xmark")
-                        .fontStyle(.body)
+                    SettingsRowLabel(title: "Blocked Users", systemImage: "person.crop.circle.fill.badge.xmark")
                 }
                 .tint(.primary)
             } header: {
@@ -43,8 +41,7 @@ struct AccountManagementSettingsView: View {
                 Button {
                     Task { await auth.signOut() }
                 } label: {
-                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right.fill")
-                        .fontStyle(.body)
+                    SettingsRowLabel(title: "Sign Out", systemImage: "rectangle.portrait.and.arrow.right.fill")
                 }
                 .tint(.primary)
             } header: {
@@ -57,8 +54,7 @@ struct AccountManagementSettingsView: View {
                     showDisableConfirmation = true
                 } label: {
                     HStack {
-                        Label("Disable Account", systemImage: "person.crop.circle.fill.badge.xmark")
-                            .fontStyle(.body)
+                        SettingsRowLabel(title: "Disable Account", systemImage: "person.crop.circle.fill.badge.xmark", tint: .red)
                         Spacer()
                         if isDisabling {
                             ProgressView()
@@ -66,11 +62,9 @@ struct AccountManagementSettingsView: View {
                     }
                 }
                 .disabled(isDisabling)
-                
+
                 NavigationLink(destination: DeleteAccountView()) {
-                    Label("Delete Account", systemImage: "trash.fill")
-                        .fontStyle(.body)
-                        .foregroundStyle(.red)
+                    SettingsRowLabel(title: "Delete Account", systemImage: "trash.fill", tint: .red)
                 }
             } header: {
                 Text("Danger Zone")

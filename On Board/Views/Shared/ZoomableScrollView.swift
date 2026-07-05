@@ -81,14 +81,14 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
         init(_ parent: ZoomableScrollView) {
             self.parent = parent
         }
-
+        
         // Explicit (if empty) — Xcode Cloud's Swift 6.3.2 crashes in the
         // EarlyPerfInliner SIL pass while inlining the *synthesized* deinit for
         // this generic-nested class (release build, whole-module optimization
         // only). Behavior is identical either way; this just avoids the
         // compiler-generated deinit path that pass trips on.
         deinit {}
-
+        
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             return hostingController?.view
         }

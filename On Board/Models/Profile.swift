@@ -27,7 +27,7 @@ struct Profile: Identifiable, Hashable, Codable {
         case id, handle, displayName, bio, avatarUrl, joinedAt
     }
 
-    init(
+    nonisolated init(
         id: UUID = UUID(),
         handle: String,
         displayName: String,

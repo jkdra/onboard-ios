@@ -190,9 +190,7 @@ struct AccountSecuritySettingsView: View {
         changeAction: @escaping () -> Void
     ) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: provider.systemImage)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
+            SettingsIconBadge(systemImage: provider.systemImage)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.securityLabel)
@@ -223,19 +221,12 @@ struct AccountSecuritySettingsView: View {
 
     private func linkedOAuthRow(identity: LinkedIdentity, session: AuthSession) -> some View {
         HStack(spacing: 12) {
-            Group {
-                if identity.provider == .google {
-                    Image("Google_Favicon_2025").renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                        .grayscale(1.0)
-                } else {
-                    Image(systemName: identity.provider.systemImage)
-                }
+            if identity.provider == .google {
+                GoogleIconBadge(grayscale: true)
+            } else {
+                SettingsIconBadge(systemImage: identity.provider.systemImage)
             }
-            .frame(width: 22, height: 22)
-            .foregroundStyle(.secondary)
-            
+
             VStack(alignment: .leading, spacing: 2) {
                 Text(identity.provider.securityLabel)
                     .fontStyle(.body)
@@ -283,8 +274,7 @@ struct AccountSecuritySettingsView: View {
             Task { await linkApple() }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: AuthProvider.apple.systemImage)
-                    .frame(width: 22)
+                SettingsIconBadge(systemImage: AuthProvider.apple.systemImage)
                 Text("Link Sign in with Apple")
                     .fontStyle(.body)
                 Spacer()
@@ -305,10 +295,7 @@ struct AccountSecuritySettingsView: View {
             Task { await linkGoogle() }
         } label: {
             HStack(spacing: 12) {
-                Image("Google_Favicon_2025").renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 22, height: 22)
+                GoogleIconBadge(grayscale: false)
                 Text("Link Google")
                     .fontStyle(.body)
                 Spacer()
@@ -326,17 +313,11 @@ struct AccountSecuritySettingsView: View {
 
     private func unavailableOAuthRow(provider: AuthProvider) -> some View {
         HStack(spacing: 12) {
-            Group {
-                if provider == .google {
-                    Image("Google_Favicon_2025").renderingMode(.original)
-                        .resizable()
-                        .scaledToFit()
-                } else {
-                    Image(systemName: provider.systemImage)
-                }
+            if provider == .google {
+                GoogleIconBadge(grayscale: false)
+            } else {
+                SettingsIconBadge(systemImage: provider.systemImage)
             }
-            .frame(width: 22, height: 22)
-            .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(provider.securityLabel)
@@ -351,9 +332,7 @@ struct AccountSecuritySettingsView: View {
 
     private func securityPlaceholder(title: String, subtitle: String, systemImage: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .foregroundStyle(.secondary)
-                .frame(width: 22)
+            SettingsIconBadge(systemImage: systemImage)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
@@ -417,6 +396,29 @@ struct AccountSecuritySettingsView: View {
         } catch {
             alertError = PresentableAlertError.from(error)
         }
+    }
+}
+
+/// Matches `SettingsIconBadge`'s sizing/corner radius, but for Google's brand
+/// asset image rather than an SF Symbol — Google's logo shouldn't be
+/// recolored to `.primary`, so it sits on a plain neutral square instead.
+private struct GoogleIconBadge: View {
+    var grayscale: Bool
+    @ScaledMetric(relativeTo: .body) private var size: CGFloat = 28
+
+    var body: some View {
+        Image("Google_Favicon_2025")
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .grayscale(grayscale ? 1.0 : 0.0)
+            .frame(width: size * 0.6, height: size * 0.6)
+            .frame(width: size, height: size)
+            .background {
+                RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
+                    .fill(Color(.secondarySystemFill))
+            }
+            .accessibilityHidden(true)
     }
 }
 
