@@ -60,8 +60,11 @@ struct PostDetailView: View {
 
     // MARK: - Derived
 
+    // O(1) index lookup with no comment-array copy. The comments section reads
+    // `store.comments(for:)` directly, so livePost never needs them attached —
+    // and this property is evaluated many times per body pass.
     var livePost: Post {
-        store.post(with: post.id) ?? post
+        store.feedPost(id: post.id) ?? post
     }
 
     var tone: PostTone {
