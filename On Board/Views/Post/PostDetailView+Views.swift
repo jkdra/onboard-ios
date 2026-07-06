@@ -102,13 +102,20 @@ extension PostDetailView {
                 HStack(spacing: 10) {
                     AvatarView(profile: authorProfile, size: .small)
                     VStack(alignment: .leading, spacing: 1) {
-                        Text(authorProfile.displayName)
-                            .fontStyle(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-                        Text("@\(authorProfile.handle)")
-                            .fontStyle(.caption)
-                            .foregroundStyle(.secondary)
+                        if authorProfile.displayName.isEmpty {
+                            Text("@\(authorProfile.handle)")
+                                .fontStyle(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                        } else {
+                            Text(authorProfile.displayName)
+                                .fontStyle(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                            Text("@\(authorProfile.handle)")
+                                .fontStyle(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)

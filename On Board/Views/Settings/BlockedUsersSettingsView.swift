@@ -29,7 +29,7 @@ struct BlockedUsersSettingsView: View {
                 ForEach(profiles) { profile in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(!profile.displayName.isEmpty ? profile.displayName : profile.handle)
+                            Text(profile.displayNameOrHandle)
                                 .fontStyle(.headline)
                             if !profile.displayName.isEmpty {
                                 Text("@\(profile.handle)")

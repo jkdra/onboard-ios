@@ -79,4 +79,12 @@ struct Profile: Identifiable, Hashable, Codable {
 
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+    /// Display name is optional — a user can identify by just their handle.
+    /// Use this instead of `displayName` anywhere it's shown as an identity
+    /// (profile header, post/comment author rows, settings) so an empty
+    /// display name falls back to `@handle` consistently everywhere.
+    var displayNameOrHandle: String {
+        displayName.isEmpty ? handle : displayName
+    }
 }

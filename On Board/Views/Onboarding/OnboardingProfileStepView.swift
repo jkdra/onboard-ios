@@ -25,9 +25,10 @@ struct OnboardingProfileStepView: View {
     private let displayNameLimit = 50
     private let bioLimit = 300
 
+    // Display name is optional — a user can identify by just their handle,
+    // set on the next step.
     private var canContinue: Bool {
-        !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !onboarding.isSubmitting
+        !onboarding.isSubmitting
             && displayName.count <= displayNameLimit
             && bio.count <= bioLimit
     }

@@ -63,14 +63,29 @@ struct ProfileView: View {
 
                         VStack(alignment: .leading, spacing: 3) {
                             if !editMode {
-                                Text(displayedProfile.displayName)
-                                    .fontStyle(.title)
-                                    .fontWeight(.heavy)
-                                    .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
-                                Text("@\(displayedProfile.handle)")
-                                    .fontStyle(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                                // Display name is optional. When absent, promote the
+                                // handle into the title slot instead of leaving a
+                                // blank title line above it. It keeps the "username"
+                                // id (not "displayName") so entering edit mode morphs
+                                // it smoothly into the now-secondary username field;
+                                // the empty display-name field simply fades in above
+                                // it, which reads as "you can add one" rather than a
+                                // glitchy content swap.
+                                if displayedProfile.displayName.isEmpty {
+                                    Text("@\(displayedProfile.handle)")
+                                        .fontStyle(.title)
+                                        .fontWeight(.heavy)
+                                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                                } else {
+                                    Text(displayedProfile.displayName)
+                                        .fontStyle(.title)
+                                        .fontWeight(.heavy)
+                                        .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                                    Text("@\(displayedProfile.handle)")
+                                        .fontStyle(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                                }
                             } else {
                                 TextField("Display Name", text: $draftDisplayName)
                                     .lineLimit(1)
@@ -455,19 +470,23 @@ struct PopScoreView: View {
         let sortedReactions = Reaction.defaultOrder.filter { (score[$0] ?? 0) > 0 }
         
         VStack(alignment: .leading, spacing: 12) {
-            Text("Personality Profile")
+            Text("Pop Score")
                 .fontStyle(.subheadline)
                 .fontWeight(.semibold)
                 .foregroundStyle(.secondary)
             
             if score.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 4) {
                     Text("No reactions yet")
                         .fontStyle(.footnote)
                         .foregroundStyle(.secondary)
+                    
+                    Circle()
+                        .frame(width: 4, height: 4)
+                    
                     Text("Post more to start building your score!")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.tertiary)
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             } else {
                 GeometryReader { geo in
