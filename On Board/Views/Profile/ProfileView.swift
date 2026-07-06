@@ -72,7 +72,8 @@ struct ProfileView: View {
                                     .foregroundStyle(.secondary)
                                     .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
                             } else {
-                                TextField("Display Name", text: $draftDisplayName, axis: .vertical)
+                                TextField("Display Name", text: $draftDisplayName)
+                                    .lineLimit(1)
                                     .fontStyle(.title)
                                     .fontWeight(.heavy)
                                     .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
@@ -82,7 +83,8 @@ struct ProfileView: View {
                                         .foregroundStyle(draftDisplayName.count > displayNameLimit ? Color.red : Color.orange)
                                         .monospacedDigit()
                                 }
-                                TextField("username", text: $draftHandle, axis: .vertical)
+                                TextField("username", text: $draftHandle)
+                                    .lineLimit(1)
                                     .fontStyle(.subheadline)
                                     .foregroundStyle(.secondary)
                                     .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
