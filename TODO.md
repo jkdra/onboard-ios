@@ -67,3 +67,57 @@ tries to reposition the bar) — a known-bad combination. The fill animation
 the namespace, so removing `NamespaceWrapper`/`OnboardingNamespaceKey` and its
 injection in `OnboardingCoordinator` couldn't lose it, and removes the one
 thing that was causing the jump.
+
+## ~~6. BoardStore split~~ — DONE
+665 → 448 lines. Classified every private property by actual read/write
+coupling before splitting anything — the core caching cluster (`postsByWeek`,
+`postsByID`, `profileIndex`, `postProxies`, feed-items cache) is genuinely
+tangled (`rebuildCaches`, `apply`, `mergeWeekPosts`, `feedItems(for:)`,
+`profile(id:)` all reach into it), and splitting it out would've forced
+widening it all past `private` for organizational tidiness alone — Swift
+extensions can't hold stored properties, so any method that moves to a new
+file needs its backing state accessible from there. Left that cluster fully
+private in the core file.
+
+Extracted instead:
+- `BoardStore+Refresh.swift` — network refresh, archive loading/LRU, comment
+  fetches, notification settings. Archive eviction now goes through two new
+  narrow methods on `BoardStore` (`cachedPostIDs(inWeek:)`,
+  `removeProxies(for:)`) instead of touching `postsByWeek`/`postProxies`
+  directly, so those stayed private. Only real widening: the refresh-task
+  trio, `cachedArchiveWeekIDs`, and the `isLoading`/`accessibleBoards`
+  setters — single-workflow bookkeeping, not shared caching structures.
+- `BoardStore+Lookups.swift` — `currentUser`, `canEdit`/`isOwned`,
+  `canInteract`, `comments(for:)`, `mutateComments`. Zero widening needed;
+  none of it touches a raw private dict.
+
+Also found and fixed two real bugs while auditing this:
+- `clearFeedItemsCache()` was silently wiping `postsByID` (an unrelated
+  index) as a side effect of a function named for a much smaller cache —
+  removed.
+- That side effect was the *only* thing keeping `resetForSignOut()` from
+  leaking stale cross-session data — `postsByWeek`, `profileIndex`,
+  `boardWeeksByID`, and `archivedWeeks` were never actually rebuilt on
+  sign-out. Fixed by calling `rebuildCaches()` directly.
+- `boardWeeksByID` itself was fully dead (written every rebuild, read
+  nowhere) — removed. `rebuildBoardWeeksIndex` renamed `rebuildArchivedWeeks`
+  since that's all it does now.
+
+## 7. SignInView split (not started)
+`Views/Auth/SignInView.swift` is 604 lines — the next-largest file in the app
+after `BoardStore.swift` was. Same classification approach should apply
+before splitting anything: check what local `@State` each cluster of
+computed properties/methods actually touches before assuming a clean
+boundary exists. Not investigated yet — no known blocker, just not started.
+
+## 8. Backend: `get_active_board_week`/`maintain_board_weeks` missing board-membership check (deferred, low severity)
+Found during the Supabase QC pass (see chat history, not a migration). Both
+are callable by any signed-in user for *any* `board_id`, not just the
+caller's own — a user could view week-timing metadata or trigger a
+maintenance no-op for a board they're not a member of. Real severity is low:
+`maintain_board_weeks`'s rollover is internally time-gated
+(`if now() >= ends_at`), so there's no way to force an early rollover, only
+an early metadata read. Not fixed because it needs to know how onboarding's
+board-access sequencing works (does a user have a `board_members` row before
+they're allowed to call this?) to avoid breaking that flow — needs
+investigation, not a blind fix.
