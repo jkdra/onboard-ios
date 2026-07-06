@@ -93,6 +93,11 @@ final class NotificationService {
     }
 
     private func upload(tokenData: Data, userID: UUID) async {
+        // The upload is scheduled asynchronously from setPendingToken/onSignedIn;
+        // on a fast sign-out→sign-in the active user can change before it runs.
+        // Bail if this token is no longer for the current session so we don't
+        // register the device against the wrong account.
+        guard currentUserID == userID else { return }
         let hex = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
         currentTokenHex = hex
         guard let client = SupabaseClientFactory.client(for: .current) else { return }

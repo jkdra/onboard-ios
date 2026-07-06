@@ -113,6 +113,10 @@ struct On_BoardApp: App {
                     for await (event, _) in client.auth.authStateChanges {
                         if event == .signedIn && !auth.isSignedIn {
                             await auth.restoreSession()
+                        } else if event == .signedOut {
+                            // Ignored when the app initiated the sign-out; only
+                            // fires for externally-revoked sessions.
+                            await auth.handleExternalSignOut()
                         }
                     }
                 }

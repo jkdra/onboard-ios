@@ -13,6 +13,12 @@ final class AuthStore {
 
     private let service: any AuthService
 
+    /// True while the app is deliberately ending the session (sign out, delete,
+    /// session-expired handling). The SDK emits a `.signedOut` auth event during
+    /// these, which the app-level observer must ignore so it doesn't treat our
+    /// own sign-out as an externally-revoked session.
+    @ObservationIgnored private var isPerformingIntentionalSignOut = false
+
     var session: AuthSession? { state.session }
     var isSignedIn: Bool { state.isSignedIn }
 
@@ -174,8 +180,19 @@ final class AuthStore {
     }
 
     func reportSessionExpired() async {
+        isPerformingIntentionalSignOut = true
+        defer { isPerformingIntentionalSignOut = false }
         try? await service.signOut()
         state = .failed(AuthError.sessionExpired.localizedDescription)
+    }
+
+    /// Called by the app-level `authStateChanges` observer when the SDK reports a
+    /// `.signedOut` the app didn't initiate (refresh token revoked, password
+    /// changed on another device, admin revoke). Drives the UI to a signed-out
+    /// error state instead of leaving a dead session showing the feed.
+    func handleExternalSignOut() async {
+        guard !isPerformingIntentionalSignOut, isSignedIn else { return }
+        await reportSessionExpired()
     }
 
     func cancelSignIn() {
@@ -188,6 +205,8 @@ final class AuthStore {
     }
 
     func signOut() async {
+        isPerformingIntentionalSignOut = true
+        defer { isPerformingIntentionalSignOut = false }
         do {
             try await service.signOut()
         } catch {
@@ -198,6 +217,8 @@ final class AuthStore {
     }
 
     func deleteAccount() async throws {
+        isPerformingIntentionalSignOut = true
+        defer { isPerformingIntentionalSignOut = false }
         try await service.deleteAccount()
         state = .signedOut
     }
