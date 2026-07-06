@@ -11,39 +11,38 @@ are deleted. Replaced with pull-to-refresh (existing) + foreground refresh
 (existing) + a silent ~45s poll in `ContentView` while the feed is visible
 (`BoardStore.refresh(for:)` already coalesces concurrent calls, so polling it is
 cheap). See CLAUDE.md's Database section for the current freshness model.
+Confirmed working: reactions still apply/persist correctly post-removal.
 
-## 1. BoardStore observation churn — partially fixed, one part genuinely needs on-device verification
-- **Fixed:** `mergeWeekPosts` was building the incremental proxy dict by hand
-  and then discarding that work with a full `rebuildCaches()` call (which
-  redundantly rebuilt proxies again, plus reindexed profiles/boardWeeks that it
-  never touched). Now calls only `rebuildPostsIndex()`, which is all that's
-  actually needed after appending posts.
-- **Still deferred, and deeper than it first looked:** `setReaction` /
-  `setCommentVote` optimistic apply goes through `patchPostInWeekCache`, which
-  mutates `postsByWeek` and `postsByID` on every single reaction/vote (not just
-  the whole `posts` array). Those two dictionaries are also what
-  `PostDetailView.livePost` (via `feedPost(id:)`) and `ArchiveCalendarView`'s
-  counts (via `posts(for:)`) read for their *live* reaction-count display — so
-  this isn't a "just read a different property" fix. Decoupling the per-post
-  count path so only the `PostStateProxy` updates (which is what `FeedGridCard`
-  already observes) means re-plumbing `PostDetailView` and `ArchiveCalendarView`
-  to read counts from the proxy too, then verifying on-device that reaction
-  counts still update correctly in both places. Do this on a branch with a
-  physical device/simulator, not blind.
+## ~~2. BoardStore observation churn~~ — mostly done
+- **Fixed:** `mergeWeekPosts` no longer discards its incremental proxy update
+  with a full `rebuildCaches()`; calls only `rebuildPostsIndex()`.
+- **Fixed:** `PostDetailView.livePost` now reads through `postProxies[id]`
+  (same pattern `FeedGridCard` uses) instead of `postsByID`, so viewing a post
+  no longer re-evaluates on every *other* post's reaction/vote. Built and
+  verified reactions still work correctly end-to-end.
+- **Left as documented residual, not a bug:** `ArchiveCalendarView`'s per-week
+  post count still reads `postsByWeek` directly. There's no per-week proxy to
+  switch to, and it's a low-traffic screen (Archive), so introducing a new
+  count-cache just for one badge wasn't worth it. If this screen ever gets
+  busier, the fix is a `postCountByWeek: [UUID: Int]` cache invalidated only
+  when posts are added/removed (not on reaction taps).
 
-## 2. Auth-failure alert dedup (maintainability)
+## 1. Auth-failure alert dedup (maintainability)
 `SignInView`, `DeleteAccountView`, `AccountManagementSettingsView` repeat the
 `authFailureMessage` + `onChange` + `presentableErrorAlert`-clear block. A shared
 modifier is non-trivial because these views multiplex `alertError` for other
 error sources too — extract carefully and verify alert behavior on each screen.
 
-## 3. SettingsView split (maintainability)
-`Views/Settings/SettingsView.swift` bundles the haptics/board-preview feature
-(`boardPreview`, `shakeAndVibrate`, `ZigZagMark`, `PreviewCard`) with the settings
-form. Extract to `SettingsHapticsPreview.swift` — but it threads `@State`
-(rotations, shake trigger), so verify the preview still animates.
+## ~~2. SettingsView split~~ — DONE
+Extracted `SettingsHapticsPreview.swift` (the board-mockup/haptic-shake demo:
+`boardPreview`, `shakeAndVibrate`, `ZigZagMark`, `PreviewCard`) out of
+`SettingsView.swift` (420 → 235 + 213 lines). It's fully self-contained via its
+own `@AppStorage` reads (same UserDefaults keys as the toggles/slider that stay
+in `SettingsView`, kept in sync automatically) — no threading needed. Built
+clean; **still needs**: open Settings on-device and confirm the preview still
+shakes/animates and the haptics toggle still triggers it.
 
-## 4. OnboardingProgressBar namespace (verify, then maybe delete)
+## 3. OnboardingProgressBar namespace (verify, then maybe delete)
 `Views/Onboarding/OnboardingProgressBar.swift` uses a `NamespaceWrapper` +
 `matchedGeometryEffect` so the bar can animate across steps. Each step view
 instantiates a *separate* bar, so confirm on-device the cross-step transition
