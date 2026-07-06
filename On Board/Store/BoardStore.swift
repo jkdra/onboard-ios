@@ -63,7 +63,6 @@ final class BoardStore {
     private var refreshTask: Task<Void, Never>?
     private var refreshTaskID: UUID?
     private var refreshTaskBoardID: UUID?
-    var reactionRealtimeListener: ReactionRealtimeListener?
     // Keyed per-post so only the reacted card re-renders, not the whole feed.
     private(set) var postProxies: [UUID: PostStateProxy] = [:]
     // One in-flight reaction sync per post. A new tap cancels the prior request
@@ -179,9 +178,6 @@ final class BoardStore {
         cachedArchiveWeekIDs = []
         clearFeedItemsCache()
         loadError = nil
-        let listenerToStop = reactionRealtimeListener
-        reactionRealtimeListener = nil
-        Task { await listenerToStop?.stop() }
     }
 
     // MARK: - Network refresh
@@ -510,7 +506,6 @@ final class BoardStore {
         let validWeekIDs = Set(boardWeeks.map(\.id))
         cachedArchiveWeekIDs = cachedArchiveWeekIDs.filter { validWeekIDs.contains($0) }
         rebuildCaches()
-        restartReactionRealtime()
     }
 
     func mergeWeekPosts(_ loadedPosts: [Post], reactions: [UUID: Reaction]) {
@@ -525,7 +520,12 @@ final class BoardStore {
             updated[feedPost.id] = PostStateProxy(post: feedPost, reaction: reactions[feedPost.id])
         }
         postProxies = updated
-        rebuildCaches()
+        // Only postsByWeek/postsByID need reindexing for the appended posts —
+        // profiles and boardWeeks are untouched here, and proxies were just
+        // updated incrementally above, so the full rebuildCaches() (which would
+        // redo all of that plus rebuild every proxy again) is unneeded work on
+        // every archive-week merge.
+        rebuildPostsIndex()
     }
 
     func replacePost(at index: Int, with post: Post) {

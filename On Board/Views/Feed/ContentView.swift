@@ -20,7 +20,6 @@ struct ContentView: View {
 
     @State private var navigationPath = NavigationPath()
     @State private var showNewPost = false
-    @State private var timerTick = 0
     @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
     @State private var alertError: PresentableAlertError?
@@ -144,9 +143,14 @@ struct ContentView: View {
         }
         .navigationTitle("This Week")
         .task {
+            // No realtime subscription for reactions/posts (removed — the app is
+            // weekly-cadence, not a live chat, so instant cross-user updates aren't
+            // worth the always-on connection). This silent poll is the replacement:
+            // pull-to-refresh and foreground-refresh cover the rest.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(60))
-                timerTick &+= 1
+                try? await Task.sleep(for: .seconds(45))
+                guard !Task.isCancelled else { break }
+                await store.refresh(for: store.currentUserID)
             }
         }
         .task(id: store.activeBoardWeek?.endsAt) {

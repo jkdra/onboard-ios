@@ -115,7 +115,6 @@ struct RootView: View {
             await onboarding.refresh()
             if onboarding.isComplete {
                 await syncBoardState()
-                store.restartReactionRealtime()
             }
         }
     }
