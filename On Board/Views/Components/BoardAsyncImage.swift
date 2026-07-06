@@ -77,7 +77,20 @@ private struct MeasureWidth: ViewModifier {
 
     func body(content: Content) -> some View {
         if isActive {
-            content.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+            content.onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
+                // Lock in the first real measurement rather than tracking width for
+                // the view's whole lifetime. A self-measuring image pushed via a
+                // `.navigationTransition(.zoom(...))` (e.g. PostDetailView) has its
+                // frame animated from a small source card up to full screen, so
+                // onGeometryChange fires many times with a different width each
+                // frame. That width feeds straight into the image request, and Nuke
+                // cancels + restarts the load whenever the request changes — a large
+                // image can keep losing that race until the animation ends and then
+                // never get requested again, leaving the placeholder spinning
+                // forever even though the same URL loads fine elsewhere.
+                guard width == 0, newWidth > 0 else { return }
+                width = newWidth
+            }
         } else {
             content
         }
