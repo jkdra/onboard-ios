@@ -476,18 +476,9 @@ struct PopScoreView: View {
                 .foregroundStyle(.secondary)
             
             if score.isEmpty {
-                HStack(spacing: 4) {
-                    Text("No reactions yet")
-                        .fontStyle(.footnote)
-                        .foregroundStyle(.secondary)
-                    
-                    Circle()
-                        .frame(width: 4, height: 4)
-                    
-                    Text("Post more to start building your score!")
-                        .fontStyle(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Post more to start building your score!")
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
             } else {
                 GeometryReader { geo in
                     HStack(spacing: 2) {
