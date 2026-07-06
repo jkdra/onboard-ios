@@ -6,8 +6,9 @@
 //  this type holds fetched data, the current user's reactions/votes, and
 //  optimistic updates while mutations are in flight.
 //
-//  Preview/offline fixtures live in `BoardStore+Preview.swift`.
-//  Mutations and social interactions live in `BoardStore+Interactions.swift`.
+//  Preview/offline fixtures live in `BoardStore+Preview.swift`. Social
+//  interactions are split by concern: `+Posts`, `+Comments`, `+Reactions`,
+//  `+Moderation`, `+Profiles`.
 //
 
 import Foundation
@@ -176,8 +177,13 @@ final class BoardStore {
         postProxies = [:]
         commentsByPostID = [:]
         cachedArchiveWeekIDs = []
-        clearFeedItemsCache()
         loadError = nil
+        // Previously only cleared postsByID (as a side effect of
+        // clearFeedItemsCache()) — postsByWeek, profileIndex, boardWeeksByID,
+        // and archivedWeeks were left stale from the prior session. All the
+        // source arrays above are already empty, so rebuilding here is cheap
+        // and correctly zeroes every derived index.
+        rebuildCaches()
     }
 
     // MARK: - Network refresh
@@ -603,7 +609,6 @@ final class BoardStore {
     private func clearFeedItemsCache() {
         cachedFeedItemsByWeek = [:]
         feedItemsCacheKeys = [:]
-        postsByID = [:]
     }
 
     func removePost(id: UUID) {
