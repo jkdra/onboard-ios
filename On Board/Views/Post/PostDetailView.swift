@@ -60,11 +60,17 @@ struct PostDetailView: View {
 
     // MARK: - Derived
 
-    // O(1) index lookup with no comment-array copy. The comments section reads
-    // `store.comments(for:)` directly, so livePost never needs them attached —
-    // and this property is evaluated many times per body pass.
+    // Resolve through the per-post proxy, not postsByID — postsByID is a single
+    // dictionary property, so reading it here would make this view re-evaluate
+    // on *every* post's reaction/vote anywhere in the app, not just this one.
+    // The proxy (same pattern FeedGridCard uses) only invalidates observers when
+    // *this* post changes. patchPostInWeekCache keeps both in sync, so the data
+    // is identical either way — this only changes what gets observed.
+    // The comments section reads `store.comments(for:)` directly, so livePost
+    // never needs them attached, and this property is evaluated many times per
+    // body pass.
     var livePost: Post {
-        store.feedPost(id: post.id) ?? post
+        store.postProxies[post.id]?.post ?? post
     }
 
     var tone: PostTone {
