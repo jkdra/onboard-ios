@@ -108,7 +108,14 @@ struct GridCard: View {
 
     private var stickerCorner: Corner {
         guard !typeSize.isAccessibilitySize else { return .topTrailing }
-        return isLeadingColumn ? .topTrailing : .topLeading
+        // Point outward (toward the screen edge's generous safe-area margin),
+        // not inward at the narrow 12pt inter-column gutter. The sticker's
+        // overhang (13pt) is wider than that gutter, so an inward-facing pill
+        // can cross into the neighboring column's card — which, since the two
+        // masonry columns are separate LazyVStacks, may render on top of it
+        // depending on staggered row heights. Facing outward removes the
+        // contested space entirely.
+        return isLeadingColumn ? .topLeading : .topTrailing
     }
 
     private var pillRotation: Double {
