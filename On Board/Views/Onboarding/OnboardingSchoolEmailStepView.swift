@@ -34,6 +34,9 @@ struct OnboardingSchoolEmailStepView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                OnboardingProgressBar(step: 3)
+                    .padding(.bottom, 8)
+
                 Text("Use your .edu email to join your campus board.")
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
@@ -50,10 +53,9 @@ struct OnboardingSchoolEmailStepView: View {
                 schoolMatchLabel
 
                 if codeSent {
-                    TextField("Verification code", text: $otpCode)
-                        .textFieldStyle(.board)
-                        .keyboardType(.numberPad)
-                        .textContentType(.oneTimeCode)
+                    OTPCodeField(code: $otpCode, isEnabled: !onboarding.isSubmitting) {
+                        Task { await verifyCode() }
+                    }
 
                     Button {
                         Task { await verifyCode() }
@@ -61,7 +63,7 @@ struct OnboardingSchoolEmailStepView: View {
                         LoadingButtonLabel("Verify email", systemImage: "checkmark.seal.fill", isLoading: onboarding.isSubmitting)
                     }
                     .buttonStyle(.boardPrimary)
-                    .disabled(onboarding.isSubmitting || otpCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(onboarding.isSubmitting || otpCode.isEmpty)
 
                     HStack(spacing: 4) {
                         Text("Didn't get it?")
@@ -222,8 +224,7 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private func verifyCode() async {
-        let token = otpCode.trimmingCharacters(in: .whitespacesAndNewlines)
-        _ = await onboarding.verifySchoolEmail(normalizedEmail, code: token)
+        _ = await onboarding.verifySchoolEmail(normalizedEmail, code: otpCode)
     }
 }
 

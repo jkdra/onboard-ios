@@ -23,6 +23,7 @@ protocol AuthService: Sendable {
     func sendLinkEmailOTP(email: String) async throws
     func verifyLinkEmailOTP(email: String, token: String) async throws -> AuthSession
     func unlinkIdentity(id: String) async throws -> AuthSession
+    func revokeApple(authorizationCode: String) async throws
     func refreshAuthSession() async throws -> AuthSession?
     func signOut() async throws
     func deleteAccount() async throws

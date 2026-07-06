@@ -141,7 +141,10 @@ struct BoardFeedView: View {
     }
 
     private func estimatedHeight(for item: FeedItem) -> CGFloat {
-        let base: CGFloat = 200
+        // Base text card height (matches GridCard logic)
+        let idealBase = columnWidth * 1.15
+        let base: CGFloat = max(180, min(idealBase, 260))
+        
         guard columnWidth > 0,
               case .post(let postID, _) = item,
               let post = store.feedPost(id: postID),
@@ -161,10 +164,10 @@ struct BoardFeedView: View {
             }
             .buttonStyle(.plain)
         case .countdown(let week, let isArchived):
-            CountdownCard(week: week, isArchived: isArchived)
+            CountdownCard(week: week, isArchived: isArchived, columnWidth: columnWidth)
         case .newPost:
             if let onNewPost {
-                Button(action: onNewPost) { NewPostCard() }
+                Button(action: onNewPost) { NewPostCard(columnWidth: columnWidth) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("New post")
             }

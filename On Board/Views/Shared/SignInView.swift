@@ -68,48 +68,64 @@ struct SignInView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                SignInHeaderView(appeared: appeared)
-                    .padding(.top, 80)
-                    .padding(.bottom, 36)
-                    .padding(.horizontal, 24)
-
-                formCard
-                    .padding(.horizontal, 20)
-
-                if !otpSent {
+        VStack(alignment: .leading, spacing: 14) {
+//            SignInHeaderView(appeared: appeared)
+            
+            Spacer()
+            
+            Text("Let's get you On Board")
+                .fontStyle(.largeTitle)
+                .fontWeight(.heavy)
+                .accessibilityAddTraits(.isHeader)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 10)
+            
+            formCard
+            
+            Spacer(minLength: 40)
+            
+            if !otpSent && !usePassword {
+                VStack(spacing: 16) {
+                    Button(credentialMode == .phone ? "Use Email Instead" : "Use Phone Instead") {
+                        withAnimation(.snappy(duration: 0.3)) {
+                            credentialMode = credentialMode == .phone ? .email : .phone
+                        }
+                    }
+                    .buttonStyle(.boardSecondary)
+                    .disabled(isSendingOTP)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    
                     socialSection
-                        .padding(.horizontal, 20)
-                        .padding(.top, 14)
-                }
-
-                if !usesLiveBackend {
-                    SignInFooterView(appeared: appeared)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 20)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 48)
         }
+        .safeAreaPadding()
         .scrollDismissesKeyboard(.interactively)
         .scrollBounceBehavior(.basedOnSize)
-        .ignoresSafeArea(edges: .top)
         // Fresh sign-in: keep the form interactive-locked (not swapped for a loading
         // screen) until onboarding status resolves and the coordinator pushes the next step.
         .disabled(isResolvingPostSignIn)
         .keyboardDoneToolbar()
-        .presentableErrorAlert(error: $alertError) {
-            clearAuthFailureIfNeeded()
+        .toolbar {
+            if otpSent || usePassword {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        withAnimation(.snappy(duration: 0.35)) {
+                            resetOTPSession()
+                        }
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                    }
+                    .accessibilityLabel("Back to sign in")
+                }
+            }
         }
+        .presentableErrorAlert(error: $alertError) { clearAuthFailureIfNeeded() }
         .onChange(of: authFailureMessage) { _, message in
             guard let message else { return }
             alertError = PresentableAlertError(message: message)
         }
-        .onChange(of: credentialMode) { _, _ in
-            resetOTPSession()
-        }
+        .onChange(of: credentialMode) { _, _ in resetOTPSession() }
         // Once status resolves (or auth drops out), stop holding the button spinner.
         .onChange(of: onboarding.hasResolvedStatus) { _, resolved in
             if resolved { resolvingProvider = nil }
@@ -134,32 +150,11 @@ struct SignInView: View {
     // MARK: - Form card
 
     private var formCard: some View {
-        VStack(spacing: 14) {
-            if !otpSent {
-                Picker("Sign-in method", selection: $credentialMode) {
-                    ForEach(CredentialMode.allCases) { mode in
-                        Text(mode.label).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .disabled(isSendingOTP)
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .accessibilityLabel("Sign-in method")
-            }
-
+        VStack(spacing: 12) {
             credentialBlock
 
             primaryButton
         }
-        .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.thinMaterial)
-                .shadow(
-                    color: .black.opacity(scheme == .dark ? 0.38 : 0.10),
-                    radius: 18, x: 0, y: 8
-                )
-        )
         .animation(.snappy(duration: 0.35), value: otpSent)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 22)
@@ -167,7 +162,32 @@ struct SignInView: View {
 
     @ViewBuilder
     private var credentialBlock: some View {
-        if otpSent {
+        if usePassword {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    Image(systemName: "envelope.fill")
+                        .foregroundStyle(.secondary)
+                        .font(.subheadline)
+                    Text(emailAddress)
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                SecureField("Password", text: $password)
+                    .textFieldStyle(.board)
+                    .textContentType(.password)
+                    .submitLabel(.go)
+                    .onSubmit {
+                        Task { await signInWithPassword() }
+                    }
+                    .disabled(isSigningInCredential)
+                    .accessibilityLabel("Password")
+            }
+            .transition(.asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            ))
+        } else if otpSent {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
@@ -185,20 +205,14 @@ struct SignInView: View {
                 .accessibilityHint("Enter the 6-digit code we sent you")
 
                 HStack(alignment: .center) {
+                    Spacer()
                     OTPResendControl(
                         channel: credentialMode == .phone ? "text" : "email",
                         secondsRemaining: resendCooldown.secondsRemaining,
                         isSending: isSendingOTP,
                         onResend: { Task { await sendOTP(isResend: true) } }
                     )
-
                     Spacer()
-
-                    Button(credentialMode == .phone ? "Change number" : "Change email") {
-                        withAnimation(.snappy(duration: 0.35)) { resetOTPSession() }
-                    }
-                    .fontStyle(.footnote)
-                    .foregroundStyle(.secondary)
                 }
             }
             .transition(.asymmetric(
@@ -229,19 +243,6 @@ struct SignInView: View {
                             .autocorrectionDisabled()
                             .disabled(isSendingOTP)
                             .accessibilityLabel("Email address")
-
-                        if usePassword {
-                            SecureField("Password", text: $password)
-                                .textFieldStyle(.board)
-                                .textContentType(.password)
-                                .submitLabel(.go)
-                                .onSubmit {
-                                    Task { await signInWithPassword() }
-                                }
-                                .disabled(isSigningInCredential)
-                                .accessibilityLabel("Password")
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                        }
                     }
                 }
             }
@@ -254,27 +255,7 @@ struct SignInView: View {
 
     @ViewBuilder
     private var primaryButton: some View {
-        if otpSent {
-            Button {
-                Task { await verifyOTP() }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: credentialMode == .phone
-                          ? AuthProvider.phone.systemImage
-                          : AuthProvider.email.systemImage)
-                    Text("Verify Code")
-                        .fontStyle(.headline)
-                    Spacer()
-                    if isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) {
-                        ProgressView().tint(Color(.systemBackground))
-                    }
-                }
-            }
-            .buttonStyle(.boardPrimary)
-            .disabled(isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) || !OTPCodeInput.isComplete(otpCode))
-            .accessibilityLabel("Verify code")
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        } else if credentialMode == .email, usePassword {
+        if usePassword {
             VStack(spacing: 10) {
                 Button {
                     Task { await signInWithPassword() }
@@ -290,7 +271,7 @@ struct SignInView: View {
                     }
                 }
                 .buttonStyle(.boardPrimary)
-                .disabled(isSigningInCredential || isResolving(.email) || normalizedCredentialValue.isEmpty || password.isEmpty)
+                .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty)
                 .accessibilityLabel("Sign in with password")
 
                 Button("Use a one-time code instead") {
@@ -302,6 +283,38 @@ struct SignInView: View {
                 .fontStyle(.footnote)
                 .foregroundStyle(.secondary)
                 .disabled(isSigningInCredential)
+            }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        } else if otpSent {
+            VStack(spacing: 10) {
+                Button {
+                    Task { await verifyOTP() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: credentialMode == .phone
+                              ? AuthProvider.phone.systemImage
+                              : AuthProvider.email.systemImage)
+                        Text("Verify Code")
+                            .fontStyle(.headline)
+                        Spacer()
+                        if isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) {
+                            ProgressView().tint(Color(.systemBackground))
+                        }
+                    }
+                }
+                .buttonStyle(.boardPrimary)
+                .disabled(isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) || !OTPCodeInput.isComplete(otpCode))
+                .accessibilityLabel("Verify code")
+                
+                if credentialMode == .email {
+                    Button("Have a password? Sign in with it") {
+                        withAnimation(.snappy(duration: 0.3)) { usePassword = true }
+                    }
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                    .disabled(isVerifyingOTP)
+                }
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         } else {
@@ -317,21 +330,12 @@ struct SignInView: View {
                             .fontStyle(.headline)
                         Spacer()
                         if isSendingOTP || isSigningInCredential {
-                            ProgressView()
+                            ProgressView().tint(Color(.systemBackground))
                         }
                     }
                 }
-                .buttonStyle(.boardSecondary)
+                .buttonStyle(.boardPrimary)
                 .disabled(isSendingOTP || isSigningInCredential || normalizedCredentialValue.isEmpty)
-
-                if credentialMode == .email {
-                    Button("Have a password? Sign in with it") {
-                        withAnimation(.snappy(duration: 0.3)) { usePassword = true }
-                    }
-                    .fontStyle(.footnote)
-                    .foregroundStyle(.secondary)
-                    .disabled(isSendingOTP)
-                }
             }
             .transition(.move(edge: .bottom).combined(with: .opacity))
         }

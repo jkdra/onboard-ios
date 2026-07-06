@@ -59,7 +59,7 @@ extension PostDetailView {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                    ShareLink(item: shareText, subject: Text(livePost.title), message: Text(shareText)) {
+                    ShareLink(item: shareURL, subject: Text(livePost.title)) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
                     if !isOwnPost {

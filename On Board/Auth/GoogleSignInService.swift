@@ -43,6 +43,11 @@ enum GoogleSignInService {
         GIDSignIn.sharedInstance.handle(url)
     }
 
+    /// Revoke the Google OAuth token. Called when the user deletes their account.
+    static func disconnect() {
+        GIDSignIn.sharedInstance.disconnect()
+    }
+
     // MARK: - Private
 
     private static func randomNonce(length: Int = 32) -> String {

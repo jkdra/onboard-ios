@@ -192,6 +192,11 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         return updated
     }
 
+    func revokeApple(authorizationCode: String) async throws {
+        _ = authorizationCode
+        try await Task.sleep(for: .milliseconds(350))
+    }
+
     func refreshAuthSession() async throws -> AuthSession? {
         try await restoreSession()
     }

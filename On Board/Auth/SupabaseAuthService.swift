@@ -286,9 +286,31 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             throw AuthError.unknown("That sign-in method is no longer linked.")
         }
 
+        if identity.provider == "google" {
+            await MainActor.run {
+                GoogleSignInService.disconnect()
+            }
+        }
+
         try await client.auth.unlinkIdentity(identity)
         _ = try await client.auth.refreshSession()
         return try await requireRefreshedSession()
+    }
+
+    func revokeApple(authorizationCode: String) async throws {
+        let client = try requireClient()
+        struct RevokeRequest: Encodable {
+            let authorizationCode: String
+        }
+        
+        do {
+            _ = try await client.functions.invoke(
+                "revoke-apple",
+                options: FunctionInvokeOptions(body: RevokeRequest(authorizationCode: authorizationCode))
+            )
+        } catch {
+            throw AuthError.unknown("Failed to revoke Apple Sign In: \(error.localizedDescription)")
+        }
     }
 
     func refreshAuthSession() async throws -> AuthSession? {
@@ -324,6 +346,11 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
                 "We couldn't delete your account right now. Try again later or contact support."
             )
         }
+        
+        await MainActor.run {
+            GoogleSignInService.disconnect()
+        }
+        
         try await client.auth.signOut()
     }
 

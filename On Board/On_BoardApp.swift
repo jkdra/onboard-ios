@@ -71,6 +71,20 @@ struct On_BoardApp: App {
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }
+                    
+                    // Deep-link post sharing
+                    // Universal Link: https://onboardapp.org/post/<UUID>
+                    // Custom Scheme: onboard://post/<UUID>
+                    let isUniversalLink = url.host == "onboardapp.org" && url.pathComponents.count >= 3 && url.pathComponents[1] == "post"
+                    let isCustomScheme = url.scheme == "onboard" && url.host == "post" && url.pathComponents.count >= 2
+                    
+                    if isUniversalLink || isCustomScheme {
+                        if let uuidString = url.pathComponents.last, let postID = UUID(uuidString: uuidString) {
+                            NotificationService.shared.setPendingPostID(postID)
+                            return
+                        }
+                    }
+
                     // Deep-link OAuth callbacks (linkIdentity's default URL opener, web
                     // OAuth fallback) resolve via UIApplication.open, not an in-app
                     // ASWebAuthenticationSession — per the SDK's own docs, the app must
@@ -90,6 +104,17 @@ struct On_BoardApp: App {
                     NotificationService.shared.clearBadge()
                     guard let userID = auth.session?.userId else { return }
                     Task { await NotificationService.shared.updateLastSeen(userID: userID) }
+                }
+                .task {
+                    // Magic links and external deep-links process via client.auth.handle(url)
+                    // silently in the background. We must observe the SDK's auth state
+                    // changes to sync the UI when those external sign-ins succeed.
+                    guard let client = SupabaseClientFactory.client(for: .current) else { return }
+                    for await (event, _) in client.auth.authStateChanges {
+                        if event == .signedIn && !auth.isSignedIn {
+                            await auth.restoreSession()
+                        }
+                    }
                 }
         }
     }

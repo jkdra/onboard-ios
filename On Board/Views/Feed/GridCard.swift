@@ -31,7 +31,14 @@ struct GridCard: View {
     }
 
     private var tone: PostTone { post.tone }
-    private var cardHeight: CGFloat { typeSize.isAccessibilitySize ? 300 : 200 }
+    
+    private var cardHeight: CGFloat {
+        if typeSize.isAccessibilitySize { return 300 }
+        // The standard iPhone width yields a column of ~174pt.
+        // 200pt height / 174pt width ≈ 1.15 ratio.
+        let idealHeight = columnWidth * 1.15
+        return max(180, min(idealHeight, 260)) // Clamped between 180 and 260
+    }
 
     // MARK: - Body
 
@@ -187,8 +194,18 @@ struct GridCard: View {
                 }
             }
             Spacer(minLength: 0)
-            cardAuthorRow
-            topReactionsRow
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .bottom) {
+                    topReactionsRow
+                    Spacer(minLength: 4)
+                    cardAuthorRow
+                }
+                
+                VStack(alignment: .leading, spacing: 6) {
+                    cardAuthorRow
+                    topReactionsRow
+                }
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -198,7 +215,6 @@ struct GridCard: View {
     // opened post detail still shows the author + profile link.
     private var cardAuthorRow: some View {
         HStack(spacing: 4) {
-            Image(systemName: "clock")
             Text(post.createdAt.boardRelativeAge)
                 .lineLimit(1)
         }
@@ -212,11 +228,10 @@ struct GridCard: View {
         HStack(spacing: 0) {
             ForEach(Array(displayedReactions.enumerated()), id: \.element.reaction) { idx, entry in
                 if idx > 0 {
-                    Spacer(minLength: 0)
                     Circle()
                         .fill(.secondary.opacity(0.35))
                         .frame(width: 4, height: 4)
-                    Spacer(minLength: 0)
+                        .padding(.horizontal, 6)
                 }
                 reactionChip(entry)
             }

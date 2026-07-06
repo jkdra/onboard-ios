@@ -23,9 +23,7 @@ struct AccountManagementSettingsView: View {
                 }
                 .tint(.primary)
 
-                Button {
-                    // Placeholder for blocked users functionality
-                } label: {
+                NavigationLink(destination: BlockedUsersSettingsView()) {
                     SettingsRowLabel(title: "Blocked Users", systemImage: "person.crop.circle.fill.badge.xmark")
                 }
                 .tint(.primary)

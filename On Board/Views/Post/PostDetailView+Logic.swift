@@ -12,8 +12,9 @@ extension PostDetailView {
 
     // MARK: - Derived
 
-    var shareText: String {
-        "\(livePost.title)\n\n\(livePost.description)\n\n— \(livePost.author) on On Board"
+    
+    var shareURL: URL {
+        URL(string: "https://onboardapp.org/post/\(livePost.id)")!
     }
 
     /// Ownership only (unlike `canEdit`, not gated on the week being active),

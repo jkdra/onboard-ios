@@ -11,6 +11,7 @@
 import SwiftUI
 
 struct OnboardingCoordinator: View {
+    @Namespace private var onboardingNamespace
     /// DEBUG-only: drive the path manually with on-screen Next/Back controls,
     /// bypassing auth/status so the real screens (and the glow bloom) can be
     /// walked without entering any input.
@@ -53,23 +54,7 @@ struct OnboardingCoordinator: View {
                     }
                 }
         }
-        // One persistent glow pinned above the whole stack, emitting from the bottom
-        // edge. `path.count` is the step depth (0 = sign-in … 4 = waitlist), so it grows
-        // forward as each screen is pushed. It's an overlay, not a background, because
-        // NavigationStack paints an opaque background that would occlude anything behind
-        // it — and the glow is a transparent band, so overlaying doesn't obscure content.
-        //
-        // On sign-in (step 0) the fill is 0, so the glow renders empty and draws on from
-        // the leading edge as each step is pushed — a continuous sweep, no abrupt appear.
-        .overlay {
-            OnboardingProgressBackground(
-                step: path.count,
-                edge: .bottom,
-                tintColor: .primary,
-                useDotMask: true,
-                dotFieldFraction: 0.36
-            )
-        }
+        .environment(\.onboardingNamespace, NamespaceWrapper(id: onboardingNamespace))
         .overlay {
             // Cover SignInView only on a cold-launch session restore, where showing the
             // sign-in form (even briefly) would be wrong. A *fresh* interactive sign-in

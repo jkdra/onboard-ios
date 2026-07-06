@@ -42,6 +42,9 @@ struct OnboardingProfileStepView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                OnboardingProgressBar(step: 2)
+                    .padding(.bottom, 6)
+
                 Text("This is how you'll appear on the board.")
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)

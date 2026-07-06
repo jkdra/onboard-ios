@@ -158,6 +158,10 @@ final class AuthStore {
         state = .signedIn(updated)
     }
 
+    func revokeApple(authorizationCode: String) async throws {
+        try await service.revokeApple(authorizationCode: authorizationCode)
+    }
+
     func refreshLinkedMethods() async {
         guard isSignedIn else { return }
         do {
@@ -172,10 +176,6 @@ final class AuthStore {
     func reportSessionExpired() async {
         try? await service.signOut()
         state = .failed(AuthError.sessionExpired.localizedDescription)
-    }
-
-    func reportFailure(_ message: String) {
-        state = .failed(message)
     }
 
     func cancelSignIn() {
@@ -197,14 +197,8 @@ final class AuthStore {
         state = .signedOut
     }
 
-    func deleteAccount() async {
-        do {
-            try await service.deleteAccount()
-            state = .signedOut
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
-        } catch {
-            state = .failed(error.localizedDescription)
-        }
+    func deleteAccount() async throws {
+        try await service.deleteAccount()
+        state = .signedOut
     }
 }

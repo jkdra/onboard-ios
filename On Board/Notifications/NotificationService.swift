@@ -42,6 +42,10 @@ final class NotificationService {
         pendingPostID = nil
     }
 
+    func setPendingPostID(_ id: UUID) {
+        pendingPostID = id
+    }
+
     // Called by On_BoardApp when auth session changes to signed-in.
     func onSignedIn(userID: UUID) async {
         currentUserID = userID

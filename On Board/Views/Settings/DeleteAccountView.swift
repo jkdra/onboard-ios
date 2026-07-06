@@ -122,7 +122,17 @@ struct DeleteAccountView: View {
         isDeleting = true
         defer { isDeleting = false }
 
-        await auth.deleteAccount()
+        do {
+            if auth.session?.linkedIdentities.contains(where: { $0.provider == .apple }) == true {
+                let authorization = try await AppleSignInCoordinator.requestAuthorization()
+                let code = try AppleSignInCoordinator.authorizationCode(from: authorization.credential)
+                try await auth.revokeApple(authorizationCode: code)
+            }
+
+            try await auth.deleteAccount()
+        } catch {
+            alertError = PresentableAlertError(message: error.localizedDescription)
+        }
     }
 }
 

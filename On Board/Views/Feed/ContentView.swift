@@ -76,9 +76,13 @@ struct ContentView: View {
             // in the Archive stack.
             navigationPath = NavigationPath([BoardRoute.post(postID)])
         } else if !store.isLoading, store.loadError == nil, store.activeBoardWeek != nil {
-            // Feed is loaded but the post is gone (weekly reset or deleted) —
-            // drop the stale route instead of retrying forever.
+            // Feed is loaded but the post is gone (weekly reset, deleted, or wrong board) —
+            // drop the stale route instead of retrying forever and alert the user.
             NotificationService.shared.clearPendingPostID()
+            alertError = PresentableAlertError(
+                message: "Post unavailable",
+                recoverySuggestion: "This post could not be found or you don't have access to this board."
+            )
         }
     }
 

@@ -107,7 +107,7 @@ enum BoardSchedule {
         }
     }
 
-    /// True during the final 12 hours before the weekly board reset.
+    /// True during the final 3 hours before the weekly board reset.
     static func isClearingSoon(
         weekEnd: Date? = nil,
         from now: Date = .now,
@@ -120,15 +120,15 @@ enum BoardSchedule {
             remaining = secondsUntilNextMonday(from: now, calendar: calendar)
         }
         guard let remaining else { return false }
-        let twelveHours: TimeInterval = 12 * 60 * 60
-        return remaining > 0 && remaining < twelveHours
+        let threeHours: TimeInterval = 3 * 60 * 60
+        return remaining > 0 && remaining < threeHours
     }
 
     static func timeRemaining(
         weekEnd: Date? = nil,
         from now: Date = .now,
         calendar: Calendar = .current
-    ) -> (days: Int, hours: Int, minutes: Int) {
+    ) -> (days: Int, hours: Int, minutes: Int, seconds: Int, totalSeconds: TimeInterval) {
         let totalSeconds: TimeInterval?
         if let weekEnd {
             totalSeconds = secondsUntilWeekEnd(weekEnd, from: now)
@@ -136,13 +136,15 @@ enum BoardSchedule {
             totalSeconds = secondsUntilNextMonday(from: now, calendar: calendar)
         }
         guard let totalSeconds else {
-            return (0, 0, 0)
+            return (0, 0, 0, 0, 0)
         }
         let seconds = max(0, Int(totalSeconds))
         return (
             days: seconds / 86_400,
             hours: (seconds % 86_400) / 3_600,
-            minutes: (seconds % 3_600) / 60
+            minutes: (seconds % 3_600) / 60,
+            seconds: seconds % 60,
+            totalSeconds: totalSeconds
         )
     }
 }

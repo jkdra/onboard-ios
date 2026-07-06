@@ -62,12 +62,13 @@ struct WebContentSheet: View {
                     ProgressView()
                 }
             }
+            .ignoresSafeArea()
             .navigationTitle(document.title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
-                        Label("Close", systemImage: "xmark").toolbarActionLabel()
+                        Label("Close", systemImage: "xmark")
                     }
                 }
             }

@@ -65,6 +65,9 @@ RootView
 ### Configuration
 `AppConfiguration.swift` reads `SupabaseURL`, `SupabaseAnonKey`, and optionally `GoogleClientID` from `Info.plist` (populated by `Secrets.xcconfig` at build time). If either Supabase key is missing/placeholder, `AppConfiguration.isConfigured` returns `false` and the app runs in mock mode.
 
+### Deep Linking
+Post sharing supports both a universal link (`https://onboardapp.org/post/<UUID>`, requires the `com.apple.developer.associated-domains` entitlement pointing at `applinks:onboardapp.org`) and a custom scheme fallback (`onboard://post/<UUID>`). Both are parsed in `On_BoardApp.swift`'s `onOpenURL`, which hands the post ID to `NotificationService.shared.setPendingPostID(_:)` — the same pending-post mechanism used by push notification taps. OAuth callback URLs and magic-link URLs pass through the same `onOpenURL` but are routed to Supabase's `client.auth.handle(url)` instead. Because magic-link/external sign-ins resolve silently in the SDK, `On_BoardApp.swift` also observes `client.auth.authStateChanges` and calls `auth.restoreSession()` on a `.signedIn` event the app didn't initiate interactively.
+
 ### Database
 Supabase migrations live in `supabase/migrations/`. Board data is fetched via Supabase RPC functions (`fetch_active_board_week`, `fetch_posts_for_week`, `fetch_my_reactions_for_week`). Realtime subscriptions on the `reactions` table merge remote changes without overwriting the current user's local state.
 
@@ -75,6 +78,7 @@ Supabase migrations live in `supabase/migrations/`. Board data is fetched via Su
 - **Keyboard dismissal:** attach `.keyboardDoneToolbar()` (adds a "Done" key accessory) and `.scrollDismissesKeyboard(.interactively)` to any screen hosting text input. Both route through `KeyboardDismisser.dismiss()` (see `Extensions/View+KeyboardDismiss.swift`), which resigns first responder app-wide — no per-field `@FocusState` plumbing needed.
 - **Composed tap gestures:** a double-tap that coexists with drag/magnification gestures must use `SpatialTapGesture(count: 2)` (location + count in one recognizer) or a `.simultaneousGesture(TapGesture(count: 2))` — a plain `.onTapGesture(count: 2)` loses gesture arbitration and silently never fires.
 - **Auth → onboarding transition:** a fresh interactive sign-in keeps `SignInView` in place (form disabled, tapped button spinning) until status resolves; only a silent cold-launch `restoreSession` shows the covering loader (`OnboardingCoordinator.interactiveSignIn` gates this — interactive sign-ins pass through `.signingIn`, restore does not).
+- **Onboarding progress bar:** `OnboardingProgressBar` (replaced the old `OnboardingProgressBackground`) animates via a shared `Namespace` injected through `EnvironmentValues.onboardingNamespace` (set once in `OnboardingCoordinator`) and a `matchedGeometryEffect`, not a per-step `.overlay` positioned by `path.count`. Any new step view needs no special wiring — it inherits the environment namespace automatically.
 
 ### Push Notifications
 Push is delivered via APNs using a `.p8` key stored as a Supabase Edge Function secret. The `send-notifications` Edge Function handles four triggers fired by `pg_cron` jobs:
@@ -91,6 +95,7 @@ The Edge Function uses `api.sandbox.push.apple.com` — change to `api.push.appl
 ## Key Conventions
 
 - **Adding a new auth provider**: touch `AuthProvider.swift`, `AuthService.swift` protocol, `SupabaseAuthService.swift`, and `MockAuthService.swift`. Both impls must stay in sync.
+- **Unlinking or deleting an account with a linked Apple/Google identity**: revoke the provider token first, then unlink/delete — don't skip this, Apple/Google otherwise still consider the app authorized. Apple requires an authorization code (obtained via a fresh `AppleSignInCoordinator.requestAuthorization()` + `authorizationCode(from:)`) passed to `AuthStore.revokeApple(authorizationCode:)`, which calls the `revoke-apple` Supabase Edge Function. Google is simpler — `GoogleSignInService.disconnect()` is called locally (no server round-trip) from `SupabaseAuthService`'s unlink/sign-out paths. Both `AccountSecuritySettingsView` (unlink) and `DeleteAccountView` (delete) call the Apple revoke step before their respective `AuthStore` call.
 - **Adding a new post/comment field**: update `Post.swift` / `Comment.swift`, `RemotePostRow.swift` (JSON decoding adapter), and the relevant Supabase RPC or table query in `SupabaseBoardService.swift`.
 - **Changing onboarding steps**: `OnboardingStatus.swift` defines the step enum; `OnboardingStore.swift` drives the state machine.
 - **Changing notification logic**: update `NotificationService.swift` (iOS) and the `send-notifications` Edge Function together. The SQL helper functions `get_reengagement_targets` and `get_clearing_soon_targets` live in `supabase/migrations/20260624000000_push_notifications.sql`.

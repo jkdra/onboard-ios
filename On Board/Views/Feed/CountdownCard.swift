@@ -8,8 +8,16 @@ import SwiftUI
 struct CountdownCard: View {
     let week: BoardWeek?
     let isArchived: Bool
+    var columnWidth: CGFloat = 0
 
     @Environment(BoardStore.self) private var store
+    @Environment(\.dynamicTypeSize) private var typeSize
+
+    private var cardHeight: CGFloat {
+        if typeSize.isAccessibilitySize { return 300 }
+        let idealHeight = columnWidth * 1.15
+        return max(180, min(idealHeight, 260))
+    }
 
     private let weekFormatter: Date.FormatStyle = .dateTime
         .month(.abbreviated)
@@ -19,7 +27,7 @@ struct CountdownCard: View {
         if isArchived {
             archivedNotice
         } else {
-            TimelineView(.periodic(from: .now, by: 60)) { context in
+            TimelineView(.periodic(from: .now, by: 1)) { context in
                 activeCountdown(now: context.date)
             }
         }
@@ -46,59 +54,77 @@ struct CountdownCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 200)
+        .frame(height: cardHeight)
         .background(cardBackground())
+    }
+
+    private func countdownConfig(remaining: TimeInterval) -> (title: String, bodyText: String, showRed: Bool) {
+        let is12Hours = remaining <= 43200
+        let is3Hours = remaining <= 10800
+        
+        if is3Hours {
+            return ("Clears soon!", "The board's about to clear! Last chance to react and comment!", true)
+        } else if is12Hours {
+            return ("Clears tonight!", "The board clears tonight. Get your final posts in before the reset.", false)
+        } else {
+            return ("Clears Monday", "The board resets every monday at midnight.", false)
+        }
     }
 
     @ViewBuilder
     private func activeCountdown(now: Date) -> some View {
         let weekEnd = week?.endsAt ?? store.activeBoardWeek?.endsAt
-        let clearingSoon = BoardSchedule.isClearingSoon(weekEnd: weekEnd, from: now)
         let remaining = BoardSchedule.timeRemaining(weekEnd: weekEnd, from: now)
+        let is3Hours = remaining.totalSeconds <= 10800
+        let config = countdownConfig(remaining: remaining.totalSeconds)
 
         VStack(alignment: .leading, spacing: 8) {
-            Text(!clearingSoon ? "Clears Monday" : "Clears tonight!")
+            Text(config.title)
                 .fontStyle(.title3)
                 .fontWeight(.heavy)
                 .foregroundStyle(.primary)
-            Text(!clearingSoon ? "The board resets every monday at midnight." : "The board's clearing tonight! Last chance to post and comment!")
+            Text(config.bodyText)
                 .fontStyle(.callout)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                if !clearingSoon {
-                    counterColumn(value: remaining.days, label: "d", clearingSoon: clearingSoon)
+            HStack(alignment: .bottom, spacing: 10) {
+                if !is3Hours {
+                    counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
                 }
-                counterColumn(value: remaining.hours, label: "h", clearingSoon: clearingSoon)
-                counterColumn(value: remaining.minutes, label: "m", clearingSoon: clearingSoon)
+                counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
+                counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
+                if is3Hours {
+                    counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+                }
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(minHeight: 200)
-        .background(cardBackground(clearingSoon: clearingSoon))
+        .frame(height: cardHeight)
+        .background(cardBackground(showRed: config.showRed))
     }
 
-    private func counterColumn(value: Int, label: String, clearingSoon: Bool) -> some View {
-        HStack(spacing: 2) {
-            Text("\(value)")
+    private func counterColumn(value: Int, label: String, showRed: Bool) -> some View {
+        let displayValue = label == "d" ? "\(value)" : String(format: "%02d", value)
+        return HStack(spacing: 2) {
+            Text(displayValue)
                 .fontStyle(.title3)
-                .foregroundStyle(clearingSoon ? .red : .primary)
+                .foregroundStyle(showRed ? .red : .primary)
                 .contentTransition(.numericText(value: Double(value)))
                 .animation(.snappy(duration: 0.4), value: value)
             Text(label)
                 .font(.custom("ZalandoSansSemiExpanded-Regular", size: 12, relativeTo: .caption))
-                .foregroundStyle(clearingSoon ? .red : .secondary)
+                .foregroundStyle(showRed ? .red : .secondary)
         }
     }
 
     @ViewBuilder
-    private func cardBackground(clearingSoon: Bool = false) -> some View {
-        let border = clearingSoon ? Color.red.opacity(0.4) : Color.secondary.opacity(0.25)
+    private func cardBackground(showRed: Bool = false) -> some View {
+        let border = showRed ? Color.red.opacity(0.4) : Color.secondary.opacity(0.25)
         if #available(iOS 26.0, *) {
             Color.clear
                 .glassEffect(
-                    clearingSoon ? .regular.tint(Color.red.opacity(0.12)) : .regular,
+                    showRed ? .regular.tint(Color.red.opacity(0.12)) : .regular,
                     in: .rect(cornerRadius: 18, style: .continuous)
                 )
                 .clipShape(.rect(cornerRadius: 18, style: .continuous))

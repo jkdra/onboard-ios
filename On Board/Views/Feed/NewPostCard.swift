@@ -6,6 +6,15 @@
 import SwiftUI
 
 struct NewPostCard: View {
+    var columnWidth: CGFloat = 0
+    
+    @Environment(\.dynamicTypeSize) private var typeSize
+    
+    private var cardHeight: CGFloat {
+        if typeSize.isAccessibilitySize { return 300 }
+        let idealHeight = columnWidth * 1.15
+        return max(180, min(idealHeight, 260))
+    }
     
     let strokeStyle: StrokeStyle = .init(lineWidth: 4, lineCap: .round, dash: [12])
     
@@ -13,7 +22,7 @@ struct NewPostCard: View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
             .stroke(style: strokeStyle)
             .foregroundStyle(.secondary.opacity(0.45))
-            .frame(minHeight: 200)
+            .frame(height: cardHeight)
             .overlay {
                 ZStack {
                     Circle()

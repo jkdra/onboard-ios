@@ -42,6 +42,14 @@ enum AppleSignInCoordinator {
         return idToken
     }
 
+    static func authorizationCode(from credential: ASAuthorizationAppleIDCredential) throws -> String {
+        guard let codeData = credential.authorizationCode,
+              let code = String(data: codeData, encoding: .utf8) else {
+            throw AuthError.unknown("Could not read your Apple authorization code.")
+        }
+        return code
+    }
+
     static func fullName(from credential: ASAuthorizationAppleIDCredential) -> String? {
         let name = credential.fullName?.formatted().trimmingCharacters(in: .whitespacesAndNewlines)
         return name?.isEmpty == false ? name : nil

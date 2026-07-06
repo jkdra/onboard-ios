@@ -406,6 +406,11 @@ struct AccountSecuritySettingsView: View {
     private func unlink(_ identity: LinkedIdentity) async {
         identityPendingUnlink = nil
         do {
+            if identity.provider == .apple {
+                let authorization = try await AppleSignInCoordinator.requestAuthorization()
+                let code = try AppleSignInCoordinator.authorizationCode(from: authorization.credential)
+                try await auth.revokeApple(authorizationCode: code)
+            }
             try await auth.unlinkIdentity(identity)
         } catch let error as AuthError where error == .cannotUnlinkLastSignInMethod {
             showAddMethodBeforeUnlink = true
