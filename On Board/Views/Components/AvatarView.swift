@@ -64,6 +64,16 @@ struct AvatarView: View {
             }
         }
         .frame(width: size.diameter, height: size.diameter)
+        // A Shape (Circle here) stretches to fill whatever rect it's actually
+        // given — .frame only *proposes* a size. Most containers honor it
+        // exactly, but toolbar items get bridged through UIBarButtonItem/
+        // UIHostingController internals, which can propose a marginally wider
+        // box (e.g. for a minimum tap-target width) than the frame asked for,
+        // turning the circle into a very subtle ellipse. .fixedSize() forces
+        // this view to use its own ideal size regardless of what any
+        // container proposes, which is the correct contract for a
+        // fixed-diameter avatar everywhere it's placed.
+        .fixedSize()
         .accessibilityHidden(true)
     }
 
