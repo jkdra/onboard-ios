@@ -102,20 +102,7 @@ struct DeleteAccountView: View {
         } message: {
             Text("You won't be able to recover your account or any content you've shared.")
         }
-        .presentableErrorAlert(error: $alertError) {
-            if case .failed = auth.state {
-                auth.cancelSignIn()
-            }
-        }
-        .onChange(of: authFailureMessage) { _, message in
-            guard let message else { return }
-            alertError = PresentableAlertError(message: message)
-        }
-    }
-    
-    private var authFailureMessage: String? {
-        if case .failed(let message) = auth.state { message }
-        else { nil }
+        .authFailureAlert(auth, error: $alertError)
     }
 
     private func deleteAccount() async {

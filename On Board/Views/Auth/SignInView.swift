@@ -118,11 +118,7 @@ struct SignInView: View {
                 }
             }
         }
-        .presentableErrorAlert(error: $alertError) { clearAuthFailureIfNeeded() }
-        .onChange(of: authFailureMessage) { _, message in
-            guard let message else { return }
-            alertError = PresentableAlertError(message: message)
-        }
+        .authFailureAlert(auth, error: $alertError)
         .onChange(of: credentialMode) { _, _ in resetOTPSession() }
         // Once status resolves (or auth drops out), stop holding the button spinner.
         .onChange(of: onboarding.hasResolvedStatus) { _, resolved in
@@ -486,20 +482,9 @@ struct SignInView: View {
         }
     }
 
-    private var authFailureMessage: String? {
-        if case .failed(let message) = auth.state { message }
-        else { nil }
-    }
-
     private func presentAlert(_ error: PresentableAlertError?) {
         guard let error else { return }
         alertError = error
-    }
-
-    private func clearAuthFailureIfNeeded() {
-        if case .failed = auth.state {
-            auth.cancelSignIn()
-        }
     }
 
     private var isSigningInCredential: Bool {

@@ -91,20 +91,7 @@ struct AccountManagementSettingsView: View {
         } message: {
             Text("We'll send an email with a link to download your data within a few minutes.")
         }
-        .presentableErrorAlert(error: $alertError) {
-            if case .failed = auth.state {
-                auth.cancelSignIn()
-            }
-        }
-        .onChange(of: authFailureMessage) { _, message in
-            guard let message else { return }
-            alertError = PresentableAlertError(message: message)
-        }
-    }
-
-    private var authFailureMessage: String? {
-        if case .failed(let message) = auth.state { message }
-        else { nil }
+        .authFailureAlert(auth, error: $alertError)
     }
 
     private func disableAccount() async {

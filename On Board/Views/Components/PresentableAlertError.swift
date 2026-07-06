@@ -9,13 +9,25 @@ import AuthenticationServices
 import Foundation
 import SwiftUI
 
+/// Conform a domain error enum (AuthError, OnboardingError, BoardServiceError,
+/// or any future one) to this and it gets first-class treatment in every alert
+/// in the app automatically — PresentableAlertError.init checks for
+/// `any PresentableDomainError` once, instead of once per concrete type.
+protocol PresentableDomainError: LocalizedError {
+    nonisolated var recoverySuggestion: String? { get }
+}
+
 struct PresentableAlertError: LocalizedError, Identifiable {
     let id = UUID()
     private let storedDescription: String
     private let storedRecoverySuggestion: String?
 
-    var errorDescription: String? { storedDescription }
-    var recoverySuggestion: String? { storedRecoverySuggestion }
+    // Errors must stay nonisolated — they're thrown/caught across actor
+    // boundaries constantly — but this project defaults new declarations to
+    // @MainActor (SWIFT_DEFAULT_ACTOR_ISOLATION), so these need to opt out
+    // explicitly to satisfy LocalizedError's nonisolated requirements.
+    nonisolated var errorDescription: String? { storedDescription }
+    nonisolated var recoverySuggestion: String? { storedRecoverySuggestion }
 
     /// Returns nil for user cancellation — no alert should be shown.
     static func from(_ error: Error) -> PresentableAlertError? {
@@ -32,12 +44,9 @@ struct PresentableAlertError: LocalizedError, Identifiable {
             let nsError = error as NSError
             storedDescription = Self.description(forCode: code, nsError: nsError)
             storedRecoverySuggestion = nsError.localizedRecoverySuggestion
-        } else if let authError = error as? AuthError {
-            storedDescription = authError.localizedDescription
-            storedRecoverySuggestion = authError.recoverySuggestion
-        } else if let onboardingError = error as? OnboardingError {
-            storedDescription = onboardingError.localizedDescription
-            storedRecoverySuggestion = onboardingError.recoverySuggestion
+        } else if let domainError = error as? any PresentableDomainError {
+            storedDescription = domainError.localizedDescription
+            storedRecoverySuggestion = domainError.recoverySuggestion
         } else if let localized = error as? LocalizedError,
                   let description = localized.errorDescription, !description.isEmpty {
             storedDescription = description
@@ -114,8 +123,8 @@ struct PresentableAlertError: LocalizedError, Identifiable {
     }
 }
 
-extension AuthError {
-    var recoverySuggestion: String? {
+extension AuthError: PresentableDomainError {
+    nonisolated var recoverySuggestion: String? {
         switch self {
         case .networkUnavailable:
             String(localized: "Check your connection and try again.")
@@ -129,8 +138,8 @@ extension AuthError {
     }
 }
 
-extension OnboardingError {
-    var recoverySuggestion: String? {
+extension OnboardingError: PresentableDomainError {
+    nonisolated var recoverySuggestion: String? {
         switch self {
         case .networkUnavailable:
             String(localized: "Check your connection and try again.")
@@ -149,6 +158,19 @@ extension OnboardingError {
         case .profileIncomplete:
             String(localized: "Add a display name to continue.")
         default:
+            nil
+        }
+    }
+}
+
+extension BoardServiceError: PresentableDomainError {
+    nonisolated var recoverySuggestion: String? {
+        switch self {
+        case .notAuthenticated, .sessionExpired:
+            String(localized: "Sign in again to continue.")
+        case .notConfigured:
+            String(localized: "Add your Supabase keys to Secrets.xcconfig.")
+        case .missingActiveWeek:
             nil
         }
     }
