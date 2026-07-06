@@ -66,6 +66,11 @@ final class BoardStore {
     var reactionRealtimeListener: ReactionRealtimeListener?
     // Keyed per-post so only the reacted card re-renders, not the whole feed.
     private(set) var postProxies: [UUID: PostStateProxy] = [:]
+    // One in-flight reaction sync per post. A new tap cancels the prior request
+    // so its (now stale) rollback can't fire against already-moved state.
+    @ObservationIgnored var reactionSyncTasks: [UUID: Task<Void, Never>] = [:]
+    // Same guard for comment up/down votes, keyed per comment.
+    @ObservationIgnored var commentVoteSyncTasks: [UUID: Task<Void, Never>] = [:]
 
     // MARK: - Archive LRU
 

@@ -24,7 +24,12 @@ extension BoardStore {
         )
 
         guard let boardService, let currentUserID else { return }
-        Task {
+
+        // Supersede any in-flight sync for this post: a rapid second tap must not
+        // let the first request's rollback invert state that has already moved on.
+        reactionSyncTasks[postId]?.cancel()
+        reactionSyncTasks[postId] = Task {
+            defer { reactionSyncTasks[postId] = nil }
             do {
                 try await boardService.setReaction(
                     postID: postId,
@@ -32,6 +37,12 @@ extension BoardStore {
                     reaction: reaction
                 )
             } catch {
+                // A newer tap cancelled us, or the user has since changed their
+                // reaction — either way our optimistic value is stale, so rolling
+                // it back would corrupt the current state. Only revert if what we
+                // set is still what's shown.
+                if Task.isCancelled { return }
+                guard userReactions[postId] == reaction else { return }
                 applyReactionChange(
                     postId: postId,
                     previous: reaction,

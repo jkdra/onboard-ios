@@ -144,7 +144,12 @@ extension BoardStore {
         )
 
         guard let boardService, let currentUserID else { return }
-        Task {
+
+        // Supersede any in-flight vote sync for this comment so a rapid re-vote's
+        // rollback can't invert state that has already moved on.
+        commentVoteSyncTasks[commentID]?.cancel()
+        commentVoteSyncTasks[commentID] = Task {
+            defer { commentVoteSyncTasks[commentID] = nil }
             do {
                 try await boardService.setCommentVote(
                     commentID: commentID,
@@ -153,6 +158,8 @@ extension BoardStore {
                     vote: vote
                 )
             } catch {
+                if Task.isCancelled { return }
+                guard userCommentVotes[commentID] == vote else { return }
                 applyCommentVoteChange(
                     postID: postID,
                     commentID: commentID,
