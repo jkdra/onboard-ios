@@ -11,7 +11,6 @@
 import SwiftUI
 
 struct OnboardingCoordinator: View {
-    @Namespace private var onboardingNamespace
     /// DEBUG-only: drive the path manually with on-screen Next/Back controls,
     /// bypassing auth/status so the real screens (and the glow bloom) can be
     /// walked without entering any input.
@@ -54,7 +53,6 @@ struct OnboardingCoordinator: View {
                     }
                 }
         }
-        .environment(\.onboardingNamespace, NamespaceWrapper(id: onboardingNamespace))
         .overlay {
             // Cover SignInView only on a cold-launch session restore, where showing the
             // sign-in form (even briefly) would be wrong. A *fresh* interactive sign-in

@@ -5,27 +5,10 @@
 
 import SwiftUI
 
-struct NamespaceWrapper {
-    let id: Namespace.ID
-}
-
-struct OnboardingNamespaceKey: EnvironmentKey {
-    static var defaultValue: NamespaceWrapper? = nil
-}
-
-extension EnvironmentValues {
-    var onboardingNamespace: NamespaceWrapper? {
-        get { self[OnboardingNamespaceKey.self] }
-        set { self[OnboardingNamespaceKey.self] = newValue }
-    }
-}
-
 struct OnboardingProgressBar: View {
     let step: Int
     var totalSteps: Int = 4
-    
-    @Environment(\.onboardingNamespace) private var namespace
-    
+
     @State private var shimmerPhase: CGFloat = 0
     @State private var fill: CGFloat = 0
 
@@ -43,7 +26,7 @@ struct OnboardingProgressBar: View {
     }
     
     var body: some View {
-        let content = GeometryReader { proxy in
+        GeometryReader { proxy in
             ZStack(alignment: .leading) {
                 // Background track
                 Capsule(style: .continuous)
@@ -77,12 +60,6 @@ struct OnboardingProgressBar: View {
         .onChange(of: step) { _, _ in
             withAnimation(.smooth(duration: growDuration)) { fill = target }
         }
-        
-        if let ns = namespace?.id {
-            content.matchedGeometryEffect(id: "onboarding_bar", in: ns)
-        } else {
-            content
-        }
     }
     
     private func startShimmer() {
@@ -98,8 +75,6 @@ struct OnboardingProgressBar: View {
 }
 
 #Preview {
-    @Previewable @Namespace var ns
     OnboardingProgressBar(step: 2)
         .padding()
-        .environment(\.onboardingNamespace, NamespaceWrapper(id: ns))
 }
