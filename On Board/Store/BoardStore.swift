@@ -442,10 +442,6 @@ final class BoardStore {
         return post
     }
 
-    func boardWeek(for id: UUID) -> BoardWeek? {
-        boardWeeksByID[id]
-    }
-
     func profile(id: UUID) -> Profile? {
         profileIndex.profile(id: id)
     }
@@ -615,10 +611,6 @@ final class BoardStore {
         commentsByPostID.removeValue(forKey: id)
         userReactions.removeValue(forKey: id)
         rebuildCaches()
-    }
-
-    func replaceComments(_ comments: [Comment], for postID: UUID) {
-        commentsByPostID[postID] = comments
     }
 
     static func mapLoadError(_ error: Error) -> String {
