@@ -162,17 +162,21 @@ extension PostDetailView {
         )
 
         if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
-            Button { showImageViewer = true } label: {
-                BoardAsyncImage(url: url, tone: tone, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(tone.color.opacity(0.25), lineWidth: 0.9)
-                    }
-            }
-            .buttonStyle(.plain)
-            .matchedTransitionSource(id: "postImage", in: postNamespace)
+            BoardAsyncImage(url: url, tone: tone, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(tone.color.opacity(0.25), lineWidth: 0.9)
+                }
+                .matchedTransitionSource(id: "postImage", in: postNamespace)
+                .doubleTapHeart(
+                    size: 80,
+                    isEnabled: !isReadOnly,
+                    isLiked: { store.userReaction(for: livePost.id) == .like },
+                    onLike: { store.setReaction(postId: livePost.id, reaction: .like) },
+                    onSingleTap: { showImageViewer = true }
+                )
         }
     }
 

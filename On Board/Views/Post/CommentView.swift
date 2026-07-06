@@ -159,32 +159,60 @@ struct CommentView: View {
             .disabled(isBeingEdited)
 
             VStack(alignment: .leading, spacing: 5) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(authorProfile.displayName.isEmpty ? "@\(authorProfile.handle)" : authorProfile.displayName)
-                        .fontStyle(.caption)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if !authorProfile.displayName.isEmpty {
-                        Text("@\(authorProfile.handle)")
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(authorProfile.displayName.isEmpty ? "@\(authorProfile.handle)" : authorProfile.displayName)
+                            .fontStyle(.caption)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        if !authorProfile.displayName.isEmpty {
+                            Text("@\(authorProfile.handle)")
+                                .fontStyle(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
+
+                        Text("· \(comment.createdAt.boardRelativeAge)")
                             .fontStyle(.caption)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
-                            .truncationMode(.tail)
+                            .layoutPriority(1)
+
+                        Spacer(minLength: 28)
                     }
 
-                    Text("· \(comment.createdAt.boardRelativeAge)")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .layoutPriority(1)
-
-                    Spacer()
-
+                    if isBeingEdited {
+                        TextField("Comment", text: $draftCommentBody, axis: .vertical)
+                            .fontStyle(.callout)
+                            .foregroundStyle(.primary)
+                            .textFieldStyle(.plain)
+                            .lineLimit(1...8)
+                            .focused($isEditorFocused)
+                            // Multi-line editing: confirmed via the toolbar "Save" button. Return
+                            // inserts a newline instead of submitting, so a pasted line break or a
+                            // deliberate paragraph no longer silently ends the edit.
+                    } else {
+                        Text(comment.body)
+                            .fontStyle(.callout)
+                            .foregroundStyle(.primary)
+                    }
+                }
+                .doubleTapHeart(
+                    size: 36,
+                    isEnabled: isInteractive && editingCommentID == nil && !isBeingEdited,
+                    isLiked: { store.userCommentVote(for: comment.id) == .like },
+                    onLike: { store.setCommentVote(commentID: comment.id, postID: postID, vote: .like) }
+                )
+                .overlay(alignment: .topTrailing) {
                     // Own comments: edit/delete while the week is active.
                     // Others' comments: report/block — available even on
                     // archived weeks, since the content is still visible.
+                    // Kept as a sibling overlay (not inside the doubleTapHeart-wrapped
+                    // VStack above) so its tap target never competes with the
+                    // double-tap gesture's arbitration.
                     if editingCommentID == nil, (isInteractive && canEdit) || !canEdit {
                         Menu {
                             if isInteractive, canEdit {
@@ -217,24 +245,10 @@ struct CommentView: View {
                             Image(systemName: "ellipsis")
                                 .fontStyle(.caption)
                                 .foregroundStyle(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(.rect)
                         }
                     }
-                }
-
-                if isBeingEdited {
-                    TextField("Comment", text: $draftCommentBody, axis: .vertical)
-                        .fontStyle(.callout)
-                        .foregroundStyle(.primary)
-                        .textFieldStyle(.plain)
-                        .lineLimit(1...8)
-                        .focused($isEditorFocused)
-                        // Multi-line editing: confirmed via the toolbar "Save" button. Return
-                        // inserts a newline instead of submitting, so a pasted line break or a
-                        // deliberate paragraph no longer silently ends the edit.
-                } else {
-                    Text(comment.body)
-                        .fontStyle(.callout)
-                        .foregroundStyle(.primary)
                 }
 
                 if !isBeingEdited {
@@ -263,12 +277,6 @@ struct CommentView: View {
                     }
                 }
             }
-            .doubleTapHeart(
-                size: 36,
-                isEnabled: isInteractive && editingCommentID == nil && !isBeingEdited,
-                isLiked: { store.userCommentVote(for: comment.id) == .like },
-                onLike: { store.setCommentVote(commentID: comment.id, postID: postID, vote: .like) }
-            )
         }
         .padding(.vertical, isBeingEdited ? 10 : 0)
         .opacity(isDimmed ? 0.32 : 1)
