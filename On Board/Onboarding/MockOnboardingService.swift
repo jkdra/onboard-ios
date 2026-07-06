@@ -86,7 +86,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
 
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else {
             throw OnboardingError.invalidSchoolEmail
         }
@@ -113,7 +113,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
 
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         guard let match = Self.match(for: normalized) else {
             throw OnboardingError.schoolUnsupported
         }
@@ -174,7 +174,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
     }
 
     private static func match(for email: String) -> SchoolMatch? {
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized),
               normalized.hasSuffix("@example.edu") else {
             return nil

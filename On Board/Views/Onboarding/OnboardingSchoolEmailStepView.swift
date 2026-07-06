@@ -24,7 +24,7 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private var normalizedEmail: String {
-        email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        EmailNormalizer.normalized(email)
     }
 
     private var canSendCode: Bool {

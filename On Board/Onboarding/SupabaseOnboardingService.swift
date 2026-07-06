@@ -88,7 +88,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
     }
 
     func lookupSchool(for email: String) async throws -> SchoolMatch? {
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else { return nil }
 
         let client = try requireClient()
@@ -100,7 +100,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
     }
 
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else {
             throw OnboardingError.invalidSchoolEmail
         }
@@ -125,7 +125,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
     }
 
     func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep {
-        let normalized = email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalized = EmailNormalizer.normalized(email)
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let client = try requireClient()
         let step: OnboardingStep = try await client

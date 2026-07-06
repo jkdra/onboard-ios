@@ -69,8 +69,6 @@ struct SignInView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-//            SignInHeaderView(appeared: appeared)
-            
             Spacer()
             
             Text("Let's get you On Board")
@@ -532,7 +530,7 @@ struct SignInView: View {
         case .phone:
             phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
         case .email:
-            emailAddress.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            EmailNormalizer.normalized(emailAddress)
         }
     }
 

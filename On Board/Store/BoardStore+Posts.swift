@@ -93,7 +93,13 @@ extension BoardStore {
                 imageAspectRatio: imageAspectRatio,
                 tags: tags
             )
-            replacePost(at: index, with: updated)
+            // `posts` can be rewritten by a concurrent refresh/realtime change while
+            // the network call is in flight, so the index captured above is stale.
+            // Re-resolve by id before writing (mirrors the reaction apply path).
+            guard let currentIndex = posts.firstIndex(where: { $0.id == id }) else {
+                return true
+            }
+            replacePost(at: currentIndex, with: updated)
             return true
         } catch {
             loadError = Self.mapLoadError(error)

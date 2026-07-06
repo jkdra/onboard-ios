@@ -27,8 +27,20 @@ struct CountdownCard: View {
         if isArchived {
             archivedNotice
         } else {
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                activeCountdown(now: context.date)
+            // Tick once a minute for most of the week; only drop to a 1s cadence
+            // inside the final 3 hours, where the seconds counter is actually shown.
+            // Avoids an all-week per-second view rebuild (battery/CPU) for a display
+            // that otherwise only changes each minute.
+            TimelineView(.periodic(from: .now, by: 60)) { minuteContext in
+                let weekEnd = week?.endsAt ?? store.activeBoardWeek?.endsAt
+                let remaining = BoardSchedule.timeRemaining(weekEnd: weekEnd, from: minuteContext.date)
+                if remaining.totalSeconds <= 10800 {
+                    TimelineView(.periodic(from: .now, by: 1)) { secondContext in
+                        activeCountdown(now: secondContext.date)
+                    }
+                } else {
+                    activeCountdown(now: minuteContext.date)
+                }
             }
         }
     }
