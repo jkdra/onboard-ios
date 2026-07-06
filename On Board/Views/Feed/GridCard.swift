@@ -298,7 +298,6 @@ private struct ReactionStickerPill: View {
             Text(reaction.emoji)
                 .font(.system(size: 11))
         }
-//        .padding(.horizontal, 6)
         .padding(3)
         .background(Capsule(style: .continuous).fill(tone.color))
         .allowsHitTesting(false)
