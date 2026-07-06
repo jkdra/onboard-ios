@@ -43,9 +43,6 @@ On Board/          SwiftUI app
   Models/          Data types
   Utilities/       Board schedule math, phone normalizer, handle rules
 Styling/           Shared fonts, button styles, nav chrome
-supabase/
-  migrations/      SQL schema (source of truth)
-  functions/       Edge Functions for push notification delivery
 On BoardTests/     Swift Testing unit tests
 ```
 
