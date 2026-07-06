@@ -8,11 +8,9 @@
 //
 
 import SwiftUI
-import NukeUI
 
 struct BoardListView: View {
     @Environment(BoardStore.self) private var store
-    @Environment(OnboardingStore.self) private var onboarding
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -80,27 +78,15 @@ struct BoardListView: View {
 
     // MARK: - Profile avatar
     
+    // Reuses the shared AvatarView (same component every other avatar in the
+    // app uses) instead of duplicating LazyImage/frame/clipShape logic here.
+    // The duplicated version double-applied .frame().clipShape(Circle()) —
+    // once inside the loaded-image branch, again around the whole LazyImage —
+    // which is what produced the slightly-wider-than-circular "capsule" shape.
     @ViewBuilder
     private var profileAvatar: some View {
-        if let urlString = onboarding.status?.avatarUrl,
-           let url = URL(string: urlString) {
-            LazyImage(request: OnBoardImagePipeline.request(url: url, width: 32)) { state in
-                if let image = state.image {
-                    image
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 32, height: 32)
-                        .clipShape(Circle())
-                } else {
-                    Image(systemName: "person.circle.fill") // Using fill looks better as a toolbar placeholder
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 32, height: 32)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 32, height: 32)
-            .clipShape(Circle())
+        if let profile = store.currentUser {
+            AvatarView(profile: profile, size: .small)
         } else {
             Image(systemName: "person.circle.fill")
                 .resizable()
