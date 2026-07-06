@@ -8,7 +8,17 @@
 //
 //  Preview/offline fixtures live in `BoardStore+Preview.swift`. Social
 //  interactions are split by concern: `+Posts`, `+Comments`, `+Reactions`,
-//  `+Moderation`, `+Profiles`.
+//  `+Moderation`, `+Profiles`. Network refresh/archive loading is in
+//  `+Refresh`; ownership/interaction-gating lookups are in `+Lookups`.
+//
+//  This file keeps the caching dicts (postsByWeek, postsByID, profileIndex,
+//  postProxies, the feed-items cache) and every method that touches them
+//  directly, fully private — Swift extensions can't hold stored properties,
+//  so splitting these out further would mean widening them past `private`
+//  for a cluster of methods (rebuildCaches, apply, mergeWeekPosts,
+//  feedItems(for:), profile(id:), etc.) that are genuinely this
+//  interdependent. +Refresh's archive eviction reaches this state only
+//  through cachedPostIDs(inWeek:)/removeProxies(for:), not directly.
 //
 
 import Foundation
@@ -41,8 +51,10 @@ final class BoardStore {
     var currentUserID: UUID?
     var userReactions: [UUID: Reaction] = [:]
     var userCommentVotes: [UUID: CommentVote] = [:]
-    private(set) var isLoading = false
-    private(set) var accessibleBoards: [Board] = []
+    // Set from BoardStore+Refresh; not private(set) since that file needs to
+    // write them too, but nothing outside BoardStore's own extensions should.
+    var isLoading = false
+    var accessibleBoards: [Board] = []
     var loadError: String?
     /// Users the current user has blocked. Server RLS is the source of truth
     /// (their content never arrives); this mirrors it for immediate UI state
@@ -53,17 +65,25 @@ final class BoardStore {
     // MARK: - Internals
 
     var boardService: (any BoardService)?
+    // These caching dicts (and the rebuild/apply/merge methods that touch
+    // them) all stay in *this* file, not split into an extension — Swift
+    // extensions can't hold stored properties, so any method that moves to a
+    // different file needs its backing state widened past `private`. These
+    // dicts are read/written by a genuinely tangled cluster of methods
+    // (rebuildCaches, apply, mergeWeekPosts, feedItems(for:), profile(id:),
+    // etc.), so splitting them out would cost real encapsulation for no
+    // functional gain — kept fully private instead.
     private var profileIndex = ProfileIndex(profiles: [])
     private var postsByWeek: [UUID: [Post]] = [:]
     private var postsByID: [UUID: Post] = [:]
-    private var boardWeeksByID: [UUID: BoardWeek] = [:]
     private(set) var archivedWeeks: [BoardWeek] = []
     var commentsByPostID: [UUID: [Comment]] = [:]
     private var cachedFeedItemsByWeek: [UUID: [FeedItem]] = [:]
     private var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
-    private var refreshTask: Task<Void, Never>?
-    private var refreshTaskID: UUID?
-    private var refreshTaskBoardID: UUID?
+    // Refresh-in-flight bookkeeping — only BoardStore+Refresh.swift touches these.
+    var refreshTask: Task<Void, Never>?
+    var refreshTaskID: UUID?
+    var refreshTaskBoardID: UUID?
     // Keyed per-post so only the reacted card re-renders, not the whole feed.
     private(set) var postProxies: [UUID: PostStateProxy] = [:]
     // One in-flight reaction sync per post. A new tap cancels the prior request
@@ -74,11 +94,12 @@ final class BoardStore {
 
     // MARK: - Archive LRU
 
-    private static let maxCachedArchiveWeeks = 3
-    private static let maxConnectivityRetries = 2
-    private var cachedArchiveWeekIDs: [UUID] = []
+    static let maxCachedArchiveWeeks = 3
+    static let maxConnectivityRetries = 2
+    // Only BoardStore+Refresh.swift touches this (archive LRU bookkeeping).
+    var cachedArchiveWeekIDs: [UUID] = []
 
-    private struct FeedItemsCacheKey: Equatable {
+    fileprivate struct FeedItemsCacheKey: Equatable {
         let postSignatures: [String]
         let canInteract: Bool
     }
@@ -179,179 +200,16 @@ final class BoardStore {
         cachedArchiveWeekIDs = []
         loadError = nil
         // Previously only cleared postsByID (as a side effect of
-        // clearFeedItemsCache()) — postsByWeek, profileIndex, boardWeeksByID,
-        // and archivedWeeks were left stale from the prior session. All the
-        // source arrays above are already empty, so rebuilding here is cheap
-        // and correctly zeroes every derived index.
+        // clearFeedItemsCache()) — postsByWeek, profileIndex, and archivedWeeks
+        // were left stale from the prior session. All the source arrays above
+        // are already empty, so rebuilding here is cheap and correctly zeroes
+        // every derived index.
         rebuildCaches()
     }
 
-    // MARK: - Network refresh
+    // MARK: - Feed-safe post lookup
 
-    func refreshAccessibleBoards(for userID: UUID) async {
-        guard let boardService else { return }
-        do {
-            accessibleBoards = try await boardService.listAccessibleBoards(for: userID)
-        } catch {
-            // Non-critical — switcher falls back to currentBoard
-        }
-    }
-
-    func refreshFollowedUsers(for userID: UUID) async {
-        guard let boardService else { return }
-        do {
-            followedUserIDs = try await boardService.fetchFollowedUserIDs()
-        } catch {
-            // Non-critical
-        }
-    }
-
-    func refresh(for userID: UUID?) async {
-        guard let boardService, let userID else { return }
-        // Never fall back to the sample/dev board on live paths: no assigned
-        // board means there is nothing to fetch yet (waitlisted user).
-        guard let boardID = currentBoardId else { return }
-
-        if let inFlight = refreshTask {
-            if refreshTaskBoardID == boardID {
-                await inFlight.value
-                return
-            }
-            // The in-flight load is for a different board (user switched mid-load).
-            // Supersede it: cancel, wait it out, then load the selected board.
-            inFlight.cancel()
-            await inFlight.value
-        }
-
-        // Only treat the cache as warm when it belongs to the board being fetched —
-        // on a board switch the old board's feed must not suppress the loading state.
-        let hasCachedFeed = activeBoardWeek?.boardId == boardID && !posts.isEmpty
-
-        let task = Task { @MainActor in
-            if !hasCachedFeed {
-                isLoading = true
-            }
-            loadError = nil
-            defer { isLoading = false }
-
-            // A weak connection can drop a single request (e.g. a zero-byte response),
-            // so retry transient connectivity failures a couple of times before
-            // surfacing the "Couldn't load board" state.
-            var attempt = 0
-            while true {
-                do {
-                    async let snapshot = boardService.loadActiveBoard(boardID: boardID, for: userID)
-                    async let archivedWeeks = boardService.listArchivedWeeks(
-                        boardID: boardID,
-                        limit: 52,
-                        offset: 0
-                    )
-                    apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
-                    await refreshAccessibleBoards(for: userID)
-                    await refreshBlockedUsers(for: userID)
-                    await refreshFollowedUsers(for: userID)
-                    break
-                } catch {
-                    if Task.isCancelled { break }
-                    attempt += 1
-                    guard NetworkErrorClassifier.isConnectivityFailure(error),
-                          attempt <= Self.maxConnectivityRetries else {
-                        loadError = Self.mapLoadError(error)
-                        break
-                    }
-                    try? await Task.sleep(for: .milliseconds(400 * attempt))
-                }
-            }
-        }
-
-        let taskID = UUID()
-        refreshTask = task
-        refreshTaskID = taskID
-        refreshTaskBoardID = boardID
-        await task.value
-        if refreshTaskID == taskID {
-            refreshTask = nil
-            refreshTaskID = nil
-            refreshTaskBoardID = nil
-        }
-    }
-
-    func loadArchivedWeek(_ week: BoardWeek, for userID: UUID?) async {
-        guard let boardService, let userID else { return }
-        guard week.boardId == currentBoardId else { return }
-
-        if cachedArchiveWeekIDs.contains(week.id) {
-            cachedArchiveWeekIDs.removeAll { $0 == week.id }
-            cachedArchiveWeekIDs.append(week.id)
-            Task { await validateArchiveWeek(week, for: userID) }
-            return
-        }
-
-        do {
-            let loaded = try await boardService.fetchPosts(forWeek: week.id, userID: userID)
-            mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
-            cachedArchiveWeekIDs.append(week.id)
-            evictOldArchiveWeeksIfNeeded()
-        } catch {
-            loadError = Self.mapLoadError(error)
-        }
-    }
-
-    private func evictOldArchiveWeeksIfNeeded() {
-        while cachedArchiveWeekIDs.count > Self.maxCachedArchiveWeeks {
-            evictArchiveWeekPosts(weekID: cachedArchiveWeekIDs.removeFirst())
-        }
-    }
-
-    private func evictArchiveWeekPosts(weekID: UUID) {
-        guard let weekPosts = postsByWeek[weekID] else { return }
-        let evictedIDs = Set(weekPosts.map(\.id))
-        posts.removeAll { evictedIDs.contains($0.id) }
-        for id in evictedIDs {
-            commentsByPostID.removeValue(forKey: id)
-            userReactions.removeValue(forKey: id)
-        }
-        postProxies = postProxies.filter { !evictedIDs.contains($0.key) }
-        rebuildCaches()
-    }
-
-    private func validateArchiveWeek(_ week: BoardWeek, for userID: UUID) async {
-        guard let boardService else { return }
-        do {
-            let loaded = try await boardService.fetchPosts(forWeek: week.id, userID: userID)
-            let cachedIDs = Set((postsByWeek[week.id] ?? []).map(\.id))
-            let loadedIDs = Set(loaded.posts.map(\.id))
-            guard cachedIDs != loadedIDs else { return }
-            let staleIDs = cachedIDs.subtracting(loadedIDs)
-            if !staleIDs.isEmpty {
-                posts.removeAll { staleIDs.contains($0.id) }
-            }
-            mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
-        } catch {
-            // Keep stale cache on network error
-        }
-    }
-
-    func loadComments(for postID: UUID) async {
-        guard let boardService else { return }
-        guard posts.contains(where: { $0.id == postID }) else { return }
-
-        do {
-            let thread = try await boardService.fetchComments(for: postID)
-            commentsByPostID[postID] = thread.comments
-            for (commentID, vote) in thread.userVotes {
-                userCommentVotes[commentID] = vote
-            }
-        } catch {
-            loadError = Self.mapLoadError(error)
-        }
-    }
-
-    func comments(for postID: UUID) -> [Comment] {
-        commentsByPostID[postID] ?? []
-    }
-
-    /// Feed-safe post lookup — O(1) via postsByID index.
+    /// O(1) via postsByID index.
     func feedPost(id: UUID) -> Post? {
         postsByID[id]
     }
@@ -399,50 +257,7 @@ final class BoardStore {
         feedItems.contains { if case .post = $0 { return true }; return false }
     }
 
-    var currentBoardWeeks: [BoardWeek] {
-        guard let boardID = currentBoardId else { return boardWeeks }
-        return boardWeeks.filter { $0.boardId == boardID }
-    }
-
-    var clearingBannerText: String? {
-        BoardSchedule.finalHourBannerText(weekEnd: activeBoardWeek?.endsAt)
-    }
-
-    var canInteractWithBoard: Bool {
-        guard let activeBoardWeek else { return false }
-        return canInteract(with: activeBoardWeek)
-    }
-
-    func canInteract(with week: BoardWeek) -> Bool {
-        week.status == .active
-            && week.id == activeBoardWeek?.id
-            && week.boardId == currentBoardId
-    }
-
-    func canInteract(with post: Post) -> Bool {
-        canInteractWithBoard && !post.isReadOnly
-    }
-
-    // MARK: - Lookups
-
-    var currentUser: Profile? {
-        guard let currentUserID else { return nil }
-        return profile(id: currentUserID)
-    }
-
-    func setCurrentUser(id: UUID) {
-        currentUserID = id
-    }
-
-    func clearCurrentUser() {
-        currentUserID = nil
-    }
-
-    func post(with id: UUID) -> Post? {
-        guard var post = feedPost(id: id) else { return nil }
-        post.comments = comments(for: id)
-        return post
-    }
+    // MARK: - Profile lookups
 
     func profile(id: UUID) -> Profile? {
         profileIndex.profile(id: id)
@@ -463,19 +278,6 @@ final class BoardStore {
             profiles.append(profile)
         }
         rebuildCaches()
-    }
-
-    func canEdit(post: Post) -> Bool {
-        isOwned(by: post.authorId, authorHandle: post.author)
-    }
-
-    func canEdit(comment: Comment) -> Bool {
-        isOwned(by: comment.authorId, authorHandle: comment.author)
-    }
-
-    func canEdit(profile: Profile) -> Bool {
-        guard let currentUserID else { return false }
-        return profile.id == currentUserID
     }
 
     // MARK: - Internal cache updates
@@ -548,24 +350,15 @@ final class BoardStore {
     func rebuildCaches() {
         rebuildProfileIndex()
         rebuildPostsIndex()
-        rebuildBoardWeeksIndex()
+        rebuildArchivedWeeks()
         rebuildPostProxies()
-    }
-
-    func isOwned(by authorId: UUID?, authorHandle: String) -> Bool {
-        guard let currentUserID else { return false }
-        if let authorId { return authorId == currentUserID }
-        return currentUser?.handle.compare(authorHandle, options: .caseInsensitive) == .orderedSame
     }
 
     private func rebuildProfileIndex() {
         profileIndex = ProfileIndex(profiles: profiles)
     }
 
-    private func rebuildBoardWeeksIndex() {
-        // A week can transiently appear twice (e.g. it flips active→archived between
-        // the two concurrent fetches in refresh) — never trap on the duplicate.
-        boardWeeksByID = Dictionary(boardWeeks.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+    private func rebuildArchivedWeeks() {
         guard let currentBoardId else { archivedWeeks = []; return }
         archivedWeeks = boardWeeks
             .filter { $0.boardId == currentBoardId && $0.status == .archived }
@@ -598,6 +391,23 @@ final class BoardStore {
         }
         weekPosts[index] = feedPost
         postsByWeek[weekID] = weekPosts
+    }
+
+    // MARK: - Narrow accessors for BoardStore+Refresh's archive eviction
+    //
+    // Archive eviction (loading an old week, LRU-evicting a cached one) needs
+    // to know which post IDs belong to a week and to drop their proxies, but
+    // shouldn't reach into postsByWeek/postProxies directly — that would
+    // force those dicts to widen past `private`. These two narrow, purpose-
+    // built methods let BoardStore+Refresh.swift do both without the dicts
+    // themselves ever leaving this file.
+
+    func cachedPostIDs(inWeek weekID: UUID) -> Set<UUID> {
+        Set((postsByWeek[weekID] ?? []).map(\.id))
+    }
+
+    func removeProxies(for ids: Set<UUID>) {
+        postProxies = postProxies.filter { !ids.contains($0.key) }
     }
 
     private func stripForFeed(_ post: Post) -> Post {
@@ -644,27 +454,5 @@ final class BoardStore {
             }
         }
         postProxies = updated
-    }
-
-    @discardableResult
-    func mutateComments(for postID: UUID, _ transform: (inout [Comment]) -> Bool) -> Bool {
-        guard var thread = commentsByPostID[postID] else { return false }
-        let changed = transform(&thread)
-        if changed {
-            commentsByPostID[postID] = thread
-        }
-        return changed
-    }
-
-    // MARK: - Notification Settings
-
-    func fetchNotificationSettings() async throws -> NotificationSettings {
-        guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
-        return try await boardService.fetchNotificationSettings(for: currentUserID)
-    }
-
-    func updateNotificationSettings(_ settings: NotificationSettings) async throws {
-        guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
-        try await boardService.updateNotificationSettings(settings, for: currentUserID)
     }
 }
