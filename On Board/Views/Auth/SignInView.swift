@@ -21,9 +21,12 @@ struct SignInView: View {
         }
     }
 
-    @Environment(AuthStore.self) private var auth
+    // Not private: SignInView+Social.swift's Apple/Google flow reads auth/network
+    // state and shares resolvingProvider/appleFlowInFlight/alertError/appeared with
+    // the rest of this form.
+    @Environment(AuthStore.self) var auth
     @Environment(OnboardingStore.self) private var onboarding
-    @Environment(NetworkMonitor.self) private var network
+    @Environment(NetworkMonitor.self) var network
     @Environment(\.colorScheme) private var scheme
 
     @State private var credentialMode: CredentialMode = .phone
@@ -34,16 +37,16 @@ struct SignInView: View {
     @State private var otpCode = ""
     @State private var otpSent = false
     @State private var isSendingOTP = false
-    @State private var alertError: PresentableAlertError?
+    @State var alertError: PresentableAlertError?
     @State private var submittedDestination = ""
     @State private var resendCooldown = OTPCooldown()
     @State private var isVerifyingOTP = false
-    @State private var appleFlowInFlight = false
-    @State private var appeared = false
+    @State var appleFlowInFlight = false
+    @State var appeared = false
     /// The provider whose sign-in succeeded and is now waiting on onboarding status
     /// to resolve. Keeps that button's spinner running through the post-sign-in
     /// window so we never swap in a separate loading screen here.
-    @State private var resolvingProvider: AuthProvider?
+    @State var resolvingProvider: AuthProvider?
 
     private let otpCooldownSeconds = 60
 
@@ -53,15 +56,15 @@ struct SignInView: View {
         auth.isSignedIn && !onboarding.hasResolvedStatus
     }
 
-    private func isResolving(_ provider: AuthProvider) -> Bool {
+    func isResolving(_ provider: AuthProvider) -> Bool {
         resolvingProvider == provider && isResolvingPostSignIn
     }
 
-    private var usesLiveBackend: Bool {
+    var usesLiveBackend: Bool {
         AppConfiguration.current.isSupabaseConfigured
     }
 
-    private var googleSignInAvailable: Bool {
+    var googleSignInAvailable: Bool {
         AppConfiguration.current.isGoogleOAuthAvailable
     }
 
@@ -91,7 +94,7 @@ struct SignInView: View {
                     }
                     .buttonStyle(.boardSecondary)
                     .disabled(isSendingOTP)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(.opacity)
                     
                     socialSection
                 }
@@ -137,6 +140,9 @@ struct SignInView: View {
                 appeared = true
             }
         }
+        .background {
+            AnimatedLogoBackgroundView(opacity: 0.05)
+        }
     }
 
 
@@ -177,10 +183,7 @@ struct SignInView: View {
                     .disabled(isSigningInCredential)
                     .accessibilityLabel("Password")
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .transition(.opacity)
         } else if otpSent {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
@@ -209,10 +212,7 @@ struct SignInView: View {
                     Spacer()
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .trailing).combined(with: .opacity),
-                removal: .move(edge: .leading).combined(with: .opacity)
-            ))
+            .transition(.opacity)
         } else {
             Group {
                 if credentialMode == .phone {
@@ -240,10 +240,7 @@ struct SignInView: View {
                     }
                 }
             }
-            .transition(.asymmetric(
-                insertion: .move(edge: .leading).combined(with: .opacity),
-                removal: .move(edge: .trailing).combined(with: .opacity)
-            ))
+            .transition(.opacity)
         }
     }
 
@@ -278,7 +275,7 @@ struct SignInView: View {
                 .foregroundStyle(.secondary)
                 .disabled(isSigningInCredential)
             }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.opacity)
         } else if otpSent {
             VStack(spacing: 10) {
                 Button {
@@ -310,7 +307,7 @@ struct SignInView: View {
                     .disabled(isVerifyingOTP)
                 }
             }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.opacity)
         } else {
             VStack(spacing: 10) {
                 Button {
@@ -331,128 +328,9 @@ struct SignInView: View {
                 .buttonStyle(.boardPrimary)
                 .disabled(isSendingOTP || isSigningInCredential || normalizedCredentialValue.isEmpty)
             }
-            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .transition(.opacity)
         }
     }
-
-    // MARK: - Social sign-in
-
-    private var socialSection: some View {
-        VStack(spacing: 12) {
-            Text("Or continue with")
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                appleSignInButton
-                googleSignInButton
-            }
-        }
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 18)
-        .transition(.opacity.combined(with: .move(edge: .bottom)))
-    }
-
-    /// Shared label so the Apple and Google buttons stay visually identical:
-    /// the provider logo (or an inline spinner while busy) next to the one-word name.
-    private func socialButtonLabel(systemImage: String? = nil, assetImage: String? = nil, title: String, isLoading: Bool) -> some View {
-        HStack(spacing: 8) {
-            if isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(.primary)
-            } else if let assetImage {
-                Image(assetImage).renderingMode(.original)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 16, height: 16)
-            } else if let systemImage {
-                Image(systemName: systemImage)
-            }
-            Text(title)
-        }
-    }
-
-    // MARK: - Apple sign-in
-    //
-    // Custom button (not SignInWithAppleButton) so it matches the Google button exactly.
-    // The one-word "Apple" label is an intentional product choice; the Apple logo and a
-    // neutral (non-brand-colored) treatment are kept. Auth runs through the same
-    // programmatic ASAuthorizationController path via AppleSignInCoordinator.
-
-    private var appleSignInButton: some View {
-        let isSigningIn = if case .signingIn(.apple) = auth.state { true } else { false }
-        let busy = appleFlowInFlight || isSigningIn || isResolving(.apple)
-
-        return Button {
-            Task { await runAppleSignIn() }
-        } label: {
-            socialButtonLabel(systemImage: "applelogo", title: "Apple", isLoading: busy)
-        }
-        .buttonStyle(.boardSecondary)
-        .disabled(busy)
-        .accessibilityLabel("Continue with Apple")
-    }
-
-    private func runAppleSignIn() async {
-        if usesLiveBackend, !network.isConnected {
-            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
-            return
-        }
-
-        appleFlowInFlight = true
-        resolvingProvider = .apple
-        defer { appleFlowInFlight = false }
-
-        do {
-            let authorization = try await AppleSignInCoordinator.requestAuthorization()
-            let idToken = try AppleSignInCoordinator.idToken(from: authorization.credential)
-            let fullName = AppleSignInCoordinator.fullName(from: authorization.credential)
-            await auth.signInWithApple(idToken: idToken, nonce: authorization.rawNonce, fullName: fullName)
-        } catch {
-            // Cancellation maps to a nil alert (silent); real failures surface.
-            if let alert = PresentableAlertError.from(error) {
-                presentAlert(alert)
-            }
-            resolvingProvider = nil
-            auth.cancelSignIn()
-        }
-    }
-
-    // MARK: - Google sign-in
-
-    @ViewBuilder
-    private var googleSignInButton: some View {
-        if googleSignInAvailable {
-            let isSigningIn = if case .signingIn(.google) = auth.state { true } else { false }
-            let busy = isSigningIn || isResolving(.google)
-
-            Button {
-                resolvingProvider = .google
-                Task { await auth.signInWithGoogle() }
-            } label: {
-                socialButtonLabel(assetImage: "Google_Favicon_2025", title: "Google", isLoading: busy)
-            }
-            .buttonStyle(.boardSecondary)
-            .disabled(busy)
-            .accessibilityLabel("Continue with Google")
-        } else {
-            // Same shape as `.boardSecondary`, dimmed, for the not-yet-available state.
-            socialButtonLabel(assetImage: "Google_Favicon_2025", title: "Google", isLoading: false)
-                .fontStyle(.headline)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 14)
-                .frame(maxWidth: .infinity)
-                .background(Capsule(style: .continuous).fill(.thinMaterial))
-                .overlay(Capsule(style: .continuous).stroke(Color.secondary.opacity(0.20), lineWidth: 1))
-                .opacity(0.50)
-                .accessibilityLabel("Google, coming soon")
-                .accessibilityAddTraits(.isStaticText)
-        }
-    }
-
-
 
     // MARK: - Helpers (logic unchanged)
 
@@ -482,7 +360,7 @@ struct SignInView: View {
         }
     }
 
-    private func presentAlert(_ error: PresentableAlertError?) {
+    func presentAlert(_ error: PresentableAlertError?) {
         guard let error else { return }
         alertError = error
     }

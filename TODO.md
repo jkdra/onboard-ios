@@ -103,12 +103,29 @@ Also found and fixed two real bugs while auditing this:
   nowhere) — removed. `rebuildBoardWeeksIndex` renamed `rebuildArchivedWeeks`
   since that's all it does now.
 
-## 7. SignInView split (not started)
-`Views/Auth/SignInView.swift` is 604 lines — the next-largest file in the app
-after `BoardStore.swift` was. Same classification approach should apply
-before splitting anything: check what local `@State` each cluster of
-computed properties/methods actually touches before assuming a clean
-boundary exists. Not investigated yet — no known blocker, just not started.
+## ~~7. SignInView split~~ — DONE
+598 → 482 lines (+132 in a new file). Same classification approach as the
+`BoardStore` split: checked what `@State` each cluster actually touches before
+assuming a boundary exists. Most of the file — form layout, credential block,
+primary button, and the phone/email/OTP/password helpers — is one tangled
+flow that all shares `credentialMode`/`phoneNumber`/`emailAddress`/`password`/
+`otpCode`/`otpSent`/`submittedDestination`/`resendCooldown`, so (per the same
+"don't force widening for tidiness alone" rule from the BoardStore split) it
+stays together.
+
+The one genuinely separable piece was Apple/Google sign-in — it never touches
+any of that credential state, only `auth`/`network`, `resolvingProvider`/
+`appleFlowInFlight`/`alertError`/`appeared`, and `presentAlert`. Extracted to
+`SignInView+Social.swift`. Required widening those specific properties/the
+`auth`/`network` environment values from `private` (same extension-can't-hold-
+stored-properties constraint as before) — nothing else.
+
+Also applied a perf tweak while in the area: the new `AnimatedLogoBackgroundView`
+(added for the sign-in screen's aesthetic) ran its tiled-logo `Canvas` redraw
+via `TimelineView` at 60fps continuously while on screen. Dropped to 30fps
+(`minimumInterval: 1.0/30.0`) — the drift is slow enough (15pt/sec) that the
+rate change is imperceptible, but it halves the recurring per-frame tile-draw
+cost (~150-200 `draw()` calls/frame) for as long as the sign-in screen is up.
 
 ## 8. Backend: `get_active_board_week`/`maintain_board_weeks` missing board-membership check (deferred, low severity)
 Found during the Supabase QC pass (see chat history, not a migration). Both
