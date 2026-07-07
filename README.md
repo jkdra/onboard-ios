@@ -1,4 +1,7 @@
+
 # On Board
+
+<img src="README/images/app-icon.png" width="96" height="96" alt="On Board app icon">
 
 ![Platform](https://img.shields.io/badge/platform-iOS%2018%2B-black?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-6.3-F05138?logo=swift&logoColor=white)
@@ -45,9 +48,6 @@ On Board/          SwiftUI app
   Models/          Data types
   Utilities/       Board schedule math, phone normalizer, handle rules
 Styling/           Shared fonts, button styles, nav chrome
-supabase/
-  migrations/      SQL schema (source of truth)
-  functions/       Edge Functions for push notification delivery
 On BoardTests/     Swift Testing unit tests
 ```
 
