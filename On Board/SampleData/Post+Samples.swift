@@ -32,7 +32,7 @@ extension Post {
             description: "covered in stickers, one says 'do not crash'. left it on a table monday around 2am while i was crying over assembly. pls help i need water to live",
             reactionCounts: [.like: 9, .hug: 19],
             comments: Comment.hydroflaskComments,
-            imageUrl: "https://loremflickr.com/900/600/hydroflask",
+            imageUrl: "https://loremflickr.com/900/600/hydroflask?lock=7",
             imageAspectRatio: 1.5,
             tags: ["lost-and-found"]
         ),
@@ -43,7 +43,7 @@ extension Post {
             description: "ive been standing here for 18 minutes for an iced cap. they are STAFFED. multiple humans behind the counter. nothing is happening. send help",
             reactionCounts: [.laugh: 47, .like: 22, .hug: 6],
             comments: Comment.timsLineComments,
-            imageUrl: "https://loremflickr.com/800/600/coffee,shop",
+            imageUrl: "https://loremflickr.com/800/600/coffee,shop?lock=3",
             imageAspectRatio: 1.333,
             tags: ["venting", "coffee"]
         ),
@@ -72,7 +72,7 @@ extension Post {
             description: "software eng club meeting, like 4 untouched boxes. get over here before engsoc smells it and ransacks the place",
             reactionCounts: [.like: 59, .laugh: 6],
             comments: Comment.freePizzaComments,
-            imageUrl: "https://loremflickr.com/800/500/pizzabox",
+            imageUrl: "https://loremflickr.com/800/500/pizzabox?lock=5",
             imageAspectRatio: 1.6,
             tags: ["free-food", "promo"]
         ),
@@ -92,7 +92,7 @@ extension Post {
             description: "one of them made direct eye contact w me today while i was eating a granola bar. i felt threatened. should we be worried",
             reactionCounts: [.laugh: 52, .like: 17, .hug: 2],
             comments: Comment.squirrelComments,
-            imageUrl: "https://loremflickr.com/1000/600/squirrel",
+            imageUrl: "https://loremflickr.com/1000/600/squirrel?lock=9",
             imageAspectRatio: 1.667,
             tags: ["campus-life", "funny"]
         ),

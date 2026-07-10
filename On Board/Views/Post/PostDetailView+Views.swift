@@ -157,9 +157,15 @@ extension PostDetailView {
         VStack(alignment: .leading, spacing: 8) {
             Text(livePost.title)
                 .fontStyle(.largeTitle)
+                // matchedGeometryEffect with properties: .position (no .size) can still
+                // leave Text trusting a stale cached frame from the transition, wrapping
+                // it to one line until the next layout pass. fixedSize forces it to always
+                // measure its own natural multiline height instead.
+                .fixedSize(horizontal: false, vertical: true)
                 .matchedGeometryEffect(id: "postTitle", in: postNamespace, properties: .position, anchor: .leading)
             Text(livePost.description)
                 .fontStyle(.body)
+                .fixedSize(horizontal: false, vertical: true)
                 .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
                 
             if !livePost.tags.isEmpty {
