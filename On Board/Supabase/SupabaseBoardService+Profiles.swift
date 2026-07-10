@@ -110,9 +110,15 @@ extension SupabaseBoardService {
                 case followingId = "following_id"
             }
         }
+        // upsert, not insert: `follows` has a (follower_id, following_id) primary
+        // key, so a plain insert throws a unique-violation whenever local state is
+        // stale relative to the server (e.g. followedUserIDs hasn't finished its
+        // refresh yet, or the same follow happened from another device) — the
+        // desired end state ("I follow them") already holds, so this should no-op
+        // rather than surface an error.
         try await client
             .from("follows")
-            .insert(Payload(followingId: id))
+            .upsert(Payload(followingId: id), onConflict: "follower_id,following_id")
             .execute()
     }
     
