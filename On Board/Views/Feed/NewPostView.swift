@@ -121,7 +121,7 @@ struct NewPostView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
-                        Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                        Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -129,11 +129,11 @@ struct NewPostView: View {
                         if isSubmitting {
                             ProgressView()
                         } else {
-                            Label("Post", systemImage: "paperplane.fill").toolbarActionLabel()
+                            Label("Post", systemImage: "paperplane.fill").fontWeight(.semibold)
                         }
                     }
                     .tint(previewTone?.color ?? Color(uiColor: .label))
-                    .buttonStyle(.boardPrimary)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }

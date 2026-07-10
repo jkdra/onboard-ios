@@ -171,7 +171,7 @@ struct ImageCropView: View {
                         Button {
                             onCancel()
                         } label: {
-                            Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                            Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                         }
                     }
 
@@ -179,9 +179,9 @@ struct ImageCropView: View {
                         Button {
                             cropImage(maskSize: maskSize, baseWidth: baseWidth, baseHeight: baseHeight)
                         } label: {
-                            Label("Confirm", systemImage: "checkmark").toolbarActionLabel()
+                            Label("Confirm", systemImage: "checkmark").fontWeight(.semibold)
                         }
-                        .buttonStyle(.boardPrimary)
+                        .buttonStyle(.borderedProminent)
                     }
                 }
             }

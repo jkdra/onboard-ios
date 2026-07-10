@@ -121,7 +121,7 @@ struct SignInView: View {
                             resetOTPSession()
                         }
                     } label: {
-                        Label("Back", systemImage: "chevron.left")
+                        Label("Back", systemImage: "chevron.left").fontWeight(.semibold)
                     }
                     .accessibilityLabel("Back to sign in")
                 }

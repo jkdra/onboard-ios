@@ -41,7 +41,7 @@ struct ContentView: View {
                                 navigationPath = []
                                 dismiss()
                             } label: {
-                                Image(systemName: "list.bullet")
+                                Image(systemName: "list.bullet").fontWeight(.semibold)
                             }
                             .accessibilityLabel("Boards")
                         }
@@ -195,7 +195,7 @@ struct ContentView: View {
                 Button {
                     navigationPath.append(BoardRoute.archive)
                 } label: {
-                    Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                    Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90").fontWeight(.semibold)
                 }
                 .accessibilityLabel("Archive")
             }

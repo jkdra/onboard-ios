@@ -147,7 +147,7 @@ struct SettingsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                    Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
                 }
             }
             .onChange(of: auth.isSignedIn) { _, isSignedIn in

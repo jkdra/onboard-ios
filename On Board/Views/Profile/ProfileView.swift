@@ -203,7 +203,7 @@ struct ProfileView: View {
                 if editMode {
                     ToolbarItem(placement: .topBarLeading) {
                         Button { cancelEditing() } label: {
-                            Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                            Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                         }
                     }
                     ToolbarItem(placement: .principal) {
@@ -213,20 +213,20 @@ struct ProfileView: View {
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button { saveProfile() } label: {
-                            Label("Save", systemImage: "checkmark").toolbarActionLabel()
+                            Label("Save", systemImage: "checkmark").fontWeight(.semibold)
                         }
-                        .buttonStyle(.boardPrimary)
+                        .buttonStyle(.borderedProminent)
                         .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
                     }
                 } else {
                     if presentation == .sheet {
                         ToolbarItem(placement: .topBarLeading) {
-                            Button { dismiss() } label: { Label("Close", systemImage: "xmark") }
+                            Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
                         }
                     }
                     if canEdit {
                         ToolbarItem(placement: .topBarTrailing) {
-                            Button { beginEditing() } label: { Label("Edit", systemImage: "pencil") }
+                            Button { beginEditing() } label: { Label("Edit", systemImage: "pencil").fontWeight(.semibold) }
                         }
                     } else {
                         ToolbarItem(placement: .topBarTrailing) {
@@ -253,7 +253,7 @@ struct ProfileView: View {
                                     }
                                 }
                             } label: {
-                                Image(systemName: "ellipsis")
+                                Image(systemName: "ellipsis").fontWeight(.semibold)
                             }
                             .disabled(isUpdatingBlock)
                         }

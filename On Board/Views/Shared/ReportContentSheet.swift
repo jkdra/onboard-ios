@@ -88,7 +88,7 @@ struct ReportContentSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Label("Cancel", systemImage: "xmark") }
+                    Button { dismiss() } label: { Label("Cancel", systemImage: "xmark").fontWeight(.semibold) }
                         .disabled(isSubmitting)
                 }
             }

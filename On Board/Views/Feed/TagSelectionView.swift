@@ -84,7 +84,7 @@ struct TagSelectionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismiss() } label: { Label("Done", systemImage: "checkmark") }
+                    Button { dismiss() } label: { Label("Done", systemImage: "checkmark").fontWeight(.semibold) }
                 }
             }
         }

@@ -17,7 +17,7 @@ extension PostDetailView {
         if editMode {
             ToolbarItem(placement: .topBarLeading) {
                 Button { cancelEditing() } label: {
-                    Label("Cancel", systemImage: "xmark").toolbarActionLabel()
+                    Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                 }
             }
             ToolbarItem(placement: .principal) {
@@ -27,9 +27,9 @@ extension PostDetailView {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { saveEdits() } label: {
-                    Label("Save", systemImage: "checkmark").toolbarActionLabel()
+                    Label("Save", systemImage: "checkmark").fontWeight(.semibold)
                 }
-                .buttonStyle(.boardPrimary)
+                .buttonStyle(.borderedProminent)
                 .tint(draftTone.color)
             }
             ToolbarItem(placement: .bottomBar) { Spacer() }
@@ -77,18 +77,18 @@ extension PostDetailView {
                         }
                     }
                 } label: {
-                    Image(systemName: "ellipsis")
+                    Image(systemName: "ellipsis").fontWeight(.semibold)
                 }
             }
         }
 
         if isCommentEditing {
             ToolbarItem(placement: .bottomBar) {
-                Button { confirmCommentEditing() } label: { Label("Save", systemImage: "checkmark") }
+                Button { confirmCommentEditing() } label: { Label("Save", systemImage: "checkmark").fontWeight(.semibold) }
             }
             ToolbarItem(placement: .bottomBar) { Spacer() }
             ToolbarItem(placement: .bottomBar) {
-                Button { cancelCommentEditing() } label: { Label("Cancel", systemImage: "xmark") }
+                Button { cancelCommentEditing() } label: { Label("Cancel", systemImage: "xmark").fontWeight(.semibold) }
             }
         }
     }

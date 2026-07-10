@@ -68,7 +68,7 @@ struct WebContentSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: {
-                        Label("Close", systemImage: "xmark")
+                        Label("Close", systemImage: "xmark").fontWeight(.semibold)
                     }
                 }
             }
