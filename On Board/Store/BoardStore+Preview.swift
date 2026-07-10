@@ -8,13 +8,22 @@
 import Foundation
 
 extension BoardStore {
+    /// A handful of profiles the current user already follows, so the follow
+    /// graph (and the feed's followed-post treatment) has something to show
+    /// out of the box instead of starting completely empty.
+    private static let sampleFollowedUserIDs: Set<UUID> = [
+        SampleProfileID.leo, SampleProfileID.sara, SampleProfileID.kevin, SampleProfileID.nora,
+    ]
+
     /// Lightweight sample data for previews that only need posts and profiles.
     static func sampleBoard(currentUserID: UUID? = nil) -> BoardStore {
-        BoardStore(
+        let store = BoardStore(
             posts: Post.samples,
             profiles: Profile.samples,
             currentUserID: currentUserID
         )
+        store.followedUserIDs = sampleFollowedUserIDs
+        return store
     }
 
     /// Active week plus archived history — for previews and UI development.
@@ -54,14 +63,14 @@ extension BoardStore {
         }
 
         let allWeeks = archivedWeeks + [activeWeek]
-        let currentPosts = Array(Post.samples.prefix(4)).map {
+        let currentPosts = Array(Post.samples.prefix(12)).map {
             $0.assigning(boardWeekId: activeWeek.id, isReadOnly: false)
         }
-        let archivedPosts = Array(Post.samples.suffix(3)).map {
+        let archivedPosts = Array(Post.samples.suffix(6)).map {
             $0.assigning(boardWeekId: archivedWeeks[0].id, isReadOnly: true)
         }
 
-        return BoardStore(
+        let store = BoardStore(
             posts: currentPosts + archivedPosts,
             profiles: Profile.samples,
             currentUserID: currentUserID,
@@ -69,5 +78,7 @@ extension BoardStore {
             boardWeeks: allWeeks,
             currentBoard: mainBoard
         )
+        store.followedUserIDs = sampleFollowedUserIDs
+        return store
     }
 }

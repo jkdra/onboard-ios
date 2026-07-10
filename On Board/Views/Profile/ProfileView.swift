@@ -300,10 +300,22 @@ struct ProfileView: View {
             .task {
                 guard popScore == nil, !isLoadingPopScore else { return }
                 isLoadingPopScore = true
-                do {
-                    popScore = try await store.boardService?.fetchUserReactionCounts(for: profile.id)
-                } catch {
-                    // Failed silently for now
+                if let boardService = store.boardService {
+                    do {
+                        popScore = try await boardService.fetchUserReactionCounts(for: profile.id)
+                    } catch {
+                        // Failed silently for now
+                    }
+                } else {
+                    // Offline/mock mode has no live service to aggregate reactions
+                    // server-side, so approximate it from the posts already in memory.
+                    popScore = store.posts
+                        .filter { $0.authorId == profile.id }
+                        .reduce(into: [Reaction: Int]()) { counts, post in
+                            for (reaction, count) in post.reactionCounts {
+                                counts[reaction, default: 0] += count
+                            }
+                        }
                 }
                 isLoadingPopScore = false
             }

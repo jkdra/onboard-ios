@@ -25,7 +25,7 @@ extension Comment {
     static let hydroflaskComments: [Comment] = [
         .authored(by: "danielr", body: "check lost and found at turnkey, they had like 6 last week"),
         .authored(by: "saraa", body: "if its blue with a sticker that says 'i miss my mom' that's mine sorry", replies: [
-            .authored(by: "aishap", body: "lmao no its black. solidarity tho")
+            .authored(by: "zainabr", body: "lmao no its black. solidarity tho")
         ]),
         Comment(author: "ej", body: "rip bro hope u find it")
     ]
@@ -65,7 +65,7 @@ extension Comment {
     ]
 
     static let wifiComments: [Comment] = [
-        .authored(by: "aishap", body: "its not just you, the whole north campus is down rn"),
+        .authored(by: "laylah", body: "its not just you, the whole north campus is down rn"),
         Comment(author: "ella", body: "ive been trying to ssh into student.cs for an hour. send help", replies: [
             .authored(by: "jordank", body: "we are all suffering together")
         ])
@@ -84,5 +84,65 @@ extension Comment {
         .authored(by: "leokp", body: "i found one by the vending machines last week. blue, broken handle. yours?", replies: [
             .authored(by: "quinnm", body: "mine was black but ill take it at this point")
         ])
+    ]
+
+    static let gta6Comments: [Comment] = [
+        .authored(by: "kevinz", body: "bro its literally still 2 years away and i am already emotionally invested"),
+        .authored(by: "benw", body: "the fact it costs more than my tuition per credit and im still buying it", replies: [
+            .authored(by: "noraf", body: "we are not the same but also yes i will be there day one")
+        ]),
+        Comment(author: "anon", body: "rockstar could delay it to 2030 and people would still preorder")
+    ]
+
+    static let transferComments: [Comment] = [
+        .authored(by: "maya.c", body: "welcome!! the second cafeteria in slc is actually the good one dont sleep on it"),
+        .authored(by: "zainabr", body: "printing credits reset every term, go to the it help desk they can top you up"),
+        Comment(author: "anon", body: "ngl took me a full semester to find the quiet floor in the library too, ur ahead of schedule")
+    ]
+
+    static let bizMixerComments: [Comment] = [
+        .authored(by: "leokp", body: "the boba alone is worth the small talk"),
+        .authored(by: "priyas", body: "is this the one with the raffle for airpods or am i thinking of a different one", replies: [
+            .authored(by: "kevinz", body: "different event but also yes there will be a raffle")
+        ]),
+        Comment(author: "sam.t", body: "do i need to bring a resume or is this chill")
+    ]
+
+    static let dishesComments: [Comment] = [
+        .authored(by: "marcus.l", body: "the oat milk incident has entered the chat, we should start a support group"),
+        .authored(by: "benw", body: "put a sticky note on it that says 'day 47'. shame is a powerful motivator", replies: [
+            .authored(by: "tylerb", body: "i am absolutely doing this tonight")
+        ]),
+        Comment(author: "anon", body: "this is why i live alone and talk to no one")
+    ]
+
+    static let libraryThoughtsComments: [Comment] = [
+        .authored(by: "saraa", body: "the 2am library energy is unmatched, its like a different planet"),
+        .authored(by: "danielr", body: "i had a full life realization at the dc printers once, we've all been there", replies: [
+            .authored(by: "zainabr", body: "the printers really do double as a confessional")
+        ]),
+        Comment(author: "anon", body: "sending love, also maybe go to sleep")
+    ]
+
+    static let hackathonComments: [Comment] = [
+        .authored(by: "kevinz", body: "signed up with zero coding experience last year and somehow we placed top 3, do it"),
+        .authored(by: "jordank", body: "is the food actually good or is it just pizza the whole 24 hours", replies: [
+            .authored(by: "laylah", body: "we upgraded the food this year i promise, theres a taco truck at hour 12")
+        ]),
+        Comment(author: "anon", body: "signing up purely for the taco truck ngl")
+    ]
+
+    static let gratefulComments: [Comment] = [
+        .authored(by: "priyas", body: "this is such a nice post, needed this today"),
+        .authored(by: "rileyc", body: "the little moments really do carry the whole semester"),
+        Comment(author: "anon", body: "ok this made my day a little better thank u")
+    ]
+
+    static let missedConnectionComments: [Comment] = [
+        .authored(by: "maya.c", body: "this is either the most romantic or most unhinged post ive seen on here and i respect it"),
+        .authored(by: "noraf", body: "camus in a tim hortons is such specific main character energy", replies: [
+            .authored(by: "leokp", body: "i thought so too in the moment, still thinking about it now")
+        ]),
+        Comment(author: "anon", body: "if this is about who i think it is, she comes in every monday at 2, good luck man")
     ]
 }
