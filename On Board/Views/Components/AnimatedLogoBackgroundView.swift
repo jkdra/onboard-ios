@@ -15,97 +15,69 @@ struct AnimatedLogoBackgroundView: View {
     var speed: Double = 15
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.displayScale) private var displayScale
-
-    // The staggered grid repeats every `stepX` horizontally and every `2 * stepY`
-    // vertically (odd rows are offset by half a step). So a single tile of that
-    // size, containing the two logos needed to complete one repeat, is enough to
-    // reproduce the whole infinite pattern via a hardware-tiled fill — replacing
-    // what used to be ~200-300 individual `draw()` calls per frame with one.
-    @State private var tile: Image?
 
     private var stepX: Double { Double(logoSize + spacing) }
     private var stepY: Double { Double(logoSize + spacing) }
 
     var body: some View {
-        // 30fps is plenty for a slow diagonal drift — halves the recurring
-        // per-frame cost with no perceptible difference at this speed.
+        // 30fps is plenty for a slow diagonal drift
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || !isActive)) { tl in
             Canvas { ctx, size in
-                guard let tile else { return }
-
+                let image = ctx.resolve(Image("OBLogo").renderingMode(.template))
+                
                 let t = tl.date.timeIntervalSinceReferenceDate
-
+                
                 // Animate diagonally
-                let xOffset = reduceMotion ? 0 : -(t * speed).truncatingRemainder(dividingBy: stepX)
+                let xOffset = reduceMotion ? 0 : -(t * speed).truncatingRemainder(dividingBy: stepX * 2)
                 let yOffset = reduceMotion ? 0 : -(t * speed).truncatingRemainder(dividingBy: stepY * 2)
-
-                drawTiledPattern(context: ctx, size: size, tile: tile, xOffset: xOffset, yOffset: yOffset)
+                
+                drawLogos(context: ctx, size: size, image: image, xOffset: xOffset, yOffset: yOffset)
             }
             .ignoresSafeArea()
             .allowsHitTesting(false)
         }
         .opacity(isActive ? 1 : 0)
         .animation(.easeIn(duration: 0.5), value: isActive)
-        .task(id: TileKey(color: color, opacity: opacity, logoSize: logoSize, spacing: spacing, scale: displayScale)) {
-            let key = TileKey(color: color, opacity: opacity, logoSize: logoSize, spacing: spacing, scale: displayScale)
-            tile = await Self.renderTile(key: key, stepX: stepX, stepY: stepY)
-        }
     }
 
-    private func drawTiledPattern(context: GraphicsContext, size: CGSize, tile: Image, xOffset: Double, yOffset: Double) {
-        // Expand the fill area to account for rotation, same as the old per-tile draw.
+    private func drawLogos(context: GraphicsContext, size: CGSize, image: GraphicsContext.ResolvedImage, xOffset: Double, yOffset: Double) {
+        // Expand the drawing area to account for rotation
         let diagonal = Double(hypot(size.width, size.height))
         let drawingSize = diagonal * 1.5
-
+        
+        let countX = Int(drawingSize / stepX) + 4
+        let countY = Int(drawingSize / stepY) + 4
+        
         let cx = Double(size.width) / 2
         let cy = Double(size.height) / 2
 
-        var patternCtx = context
-        patternCtx.transform = patternCtx.transform
-            .concatenating(CGAffineTransform(rotationAngle: CGFloat(angle.radians)))
+        let transform = CGAffineTransform(rotationAngle: CGFloat(angle.radians))
             .concatenating(CGAffineTransform(translationX: cx, y: cy))
-
-        let rect = CGRect(x: -drawingSize / 2, y: -drawingSize / 2, width: drawingSize, height: drawingSize)
-        patternCtx.fill(
-            Path(rect),
-            with: .tiledImage(tile, origin: CGPoint(x: xOffset, y: yOffset))
-        )
-    }
-
-    private struct TileKey: Equatable {
-        let color: Color
-        let opacity: Double
-        let logoSize: CGFloat
-        let spacing: CGFloat
-        let scale: CGFloat
-    }
-
-    @MainActor
-    private static func renderTile(key: TileKey, stepX: Double, stepY: Double) async -> Image? {
-        let content = ZStack(alignment: .topLeading) {
-            logo(key: key).offset(x: 0, y: 0)
-            logo(key: key).offset(x: key.logoSize + key.spacing / 2, y: stepY)
+        
+        let originX = -drawingSize / 2 + xOffset
+        let originY = -drawingSize / 2 + yOffset
+        
+        var imageCtx = context
+        imageCtx.transform = imageCtx.transform.concatenating(transform)
+        imageCtx.addFilter(.colorMultiply(color))
+        imageCtx.opacity = opacity
+        
+        for i in 0..<countX {
+            for j in 0..<countY {
+                // Stagger rows
+                let offsetX = originX + Double(i) * stepX + (j % 2 != 0 ? stepX / 2 : 0)
+                let offsetY = originY + Double(j) * stepY
+                
+                let rect = CGRect(
+                    x: offsetX,
+                    y: offsetY,
+                    width: Double(logoSize),
+                    height: Double(logoSize)
+                )
+                
+                imageCtx.draw(image, in: rect)
+            }
         }
-        .frame(width: stepX, height: stepY * 2, alignment: .topLeading)
-
-        let renderer = ImageRenderer(content: content)
-        renderer.scale = key.scale
-        renderer.isOpaque = false
-        guard let cgImage = renderer.cgImage else { return nil }
-
-        return Image(decorative: cgImage, scale: key.scale)
-    }
-
-    @ViewBuilder
-    private static func logo(key: TileKey) -> some View {
-        Image("OBLogo")
-            .renderingMode(.template)
-            .resizable()
-            .scaledToFit()
-            .frame(width: key.logoSize, height: key.logoSize)
-            .foregroundStyle(key.color)
-            .opacity(key.opacity)
     }
 }
 

@@ -12,7 +12,7 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
-    @AppStorage("profanityFilterEnabled") private var profanityFilterEnabled: Bool = true
+    @AppStorage("profanityEnabled") private var profanityEnabled: Bool = false
     @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.7
     @Environment(\.dismiss) private var dismiss
 
@@ -56,7 +56,7 @@ struct SettingsView: View {
                     }
                     .tint(.primary)
                     
-                    Toggle(isOn: $profanityFilterEnabled) {
+                    Toggle(isOn: $profanityEnabled) {
                         HStack(spacing: 6) {
                             Text("Profanity").fontStyle(.body)
                             Button {

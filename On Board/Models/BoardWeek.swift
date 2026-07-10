@@ -20,6 +20,8 @@ struct BoardWeek: Identifiable, Hashable, Codable {
     let endsAt: Date
     let status: Status
     let archivedAt: Date?
+    let promptClean: String?
+    let promptProfane: String?
 
     var isReadOnly: Bool { status == .archived }
 
@@ -29,7 +31,9 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         startsAt: Date,
         endsAt: Date,
         status: Status,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        promptClean: String? = nil,
+        promptProfane: String? = nil
     ) {
         self.id = id
         self.boardId = boardId
@@ -37,6 +41,8 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         self.endsAt = endsAt
         self.status = status
         self.archivedAt = archivedAt
+        self.promptClean = promptClean
+        self.promptProfane = promptProfane
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -46,6 +52,8 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         case endsAt
         case status
         case archivedAt
+        case promptClean
+        case promptProfane
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -56,5 +64,7 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         endsAt = try container.decode(Date.self, forKey: .endsAt)
         status = try container.decode(Status.self, forKey: .status)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
+        promptClean = try container.decodeIfPresent(String.self, forKey: .promptClean)
+        promptProfane = try container.decodeIfPresent(String.self, forKey: .promptProfane)
     }
 }

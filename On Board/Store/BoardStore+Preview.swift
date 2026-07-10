@@ -43,34 +43,38 @@ extension BoardStore {
             boardId: mainBoard.id,
             startsAt: weekStart,
             endsAt: nextWeekStart,
-            status: .active
+            status: .active,
+            promptClean: "What's the best album you've listened to this week?",
+            promptProfane: "What's the most badass album you've listened to this week?"
         )
 
         let archivedWeeks: [BoardWeek] = [
-            (-10, -3, SampleBoardWeekID.archived),
-            (-17, -10, UUID(uuidString: "B0000000-0000-4000-8000-000000000003")!),
-            (-24, -17, UUID(uuidString: "B0000000-0000-4000-8000-000000000004")!),
-            (-31, -24, UUID(uuidString: "B0000000-0000-4000-8000-000000000005")!),
-        ].map { offset, end, id in
+            (-10, -3, SampleBoardWeekID.archived, "Who is the most overhated celebrity and why?", "Who is the most overhated fucking celebrity?"),
+            (-17, -10, UUID(uuidString: "B0000000-0000-4000-8000-000000000003")!, "What's a hill you will absolutely die on?", "What's a stupid hill you will absolutely die on?"),
+            (-24, -17, UUID(uuidString: "B0000000-0000-4000-8000-000000000004")!, "What was your favorite childhood game?", "What was your favorite childhood game?"),
+            (-31, -24, UUID(uuidString: "B0000000-0000-4000-8000-000000000005")!, "What is the worst food combination you've tried?", "What's the most disgusting shit you've ever eaten?"),
+        ].map { offset, end, id, clean, profane in
             BoardWeek(
                 id: id,
                 boardId: mainBoard.id,
                 startsAt: now.addingTimeInterval(86_400 * Double(offset)),
                 endsAt: now.addingTimeInterval(86_400 * Double(end)),
                 status: .archived,
-                archivedAt: now.addingTimeInterval(86_400 * Double(end))
+                archivedAt: now.addingTimeInterval(86_400 * Double(end)),
+                promptClean: clean,
+                promptProfane: profane
             )
         }
 
         let allWeeks = archivedWeeks + [activeWeek]
-        let currentPosts = Array(Post.samples.prefix(12)).map {
+        let currentPosts = Array(Post.samples.prefix(8)).map {
             $0.assigning(boardWeekId: activeWeek.id, isReadOnly: false)
         }
-        // Spread the remaining posts across every archived week (2/2/1/1) instead of
+        // Spread the remaining posts across every archived week (6/2/1/1) instead of
         // dumping them all into the most recent one — otherwise the Archive list shows
         // three empty weeks, which looks broken rather than just quiet.
-        let remainingPosts = Array(Post.samples.suffix(6))
-        let archivedGroupSizes = [2, 2, 1, 1]
+        let remainingPosts = Array(Post.samples.suffix(10))
+        let archivedGroupSizes = [6, 2, 1, 1]
         var archivedPosts: [Post] = []
         var cursor = 0
         for (week, size) in zip(archivedWeeks, archivedGroupSizes) {

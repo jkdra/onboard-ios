@@ -39,7 +39,7 @@ struct AccountManagementSettingsView: View {
                 Button {
                     Task { await auth.signOut() }
                 } label: {
-                    SettingsRowLabel(title: "Sign Out", systemImage: "rectangle.portrait.and.arrow.right.fill")
+                    SettingsRowLabel(title: "Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
                 .tint(.primary)
             } header: {
@@ -54,15 +54,15 @@ struct AccountManagementSettingsView: View {
                     HStack {
                         SettingsRowLabel(title: "Disable Account", systemImage: "person.crop.circle.fill.badge.xmark", tint: .red)
                         Spacer()
-                        if isDisabling {
-                            ProgressView()
-                        }
+                        if isDisabling { ProgressView() }
                     }
                 }
                 .disabled(isDisabling)
 
+                
                 NavigationLink(destination: DeleteAccountView()) {
                     SettingsRowLabel(title: "Delete Account", systemImage: "trash.fill", tint: .red)
+                        .foregroundStyle(.red)
                 }
             } header: {
                 Text("Danger Zone")

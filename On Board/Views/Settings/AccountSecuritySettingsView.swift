@@ -317,7 +317,7 @@ struct AccountSecuritySettingsView: View {
         } label: {
             HStack(spacing: 12) {
                 SettingsIconBadge(systemImage: AuthProvider.apple.systemImage)
-                Text("Link Sign in with Apple")
+                Text("Apple")
                     .fontStyle(.body)
                 Spacer()
                 if isLinkingApple {
@@ -338,7 +338,7 @@ struct AccountSecuritySettingsView: View {
         } label: {
             HStack(spacing: 12) {
                 GoogleIconBadge()
-                Text("Link Google")
+                Text("Google")
                     .fontStyle(.body)
                 Spacer()
                 if isLinkingGoogle {
