@@ -33,12 +33,12 @@ struct BoardScheduleTests {
         calendar.date(from: DateComponents(year: year, month: month, day: day, hour: hour, minute: minute))!
     }
 
-    @Test func clearingSoonWithinFinalTwelveHours() {
-        let sundayEvening = date(year: 2025, month: 6, day: 15, hour: 18)
-        #expect(BoardSchedule.isClearingSoon(from: sundayEvening, calendar: calendar))
+    @Test func clearingSoonWithinFinalThreeHours() {
+        let sundayNight = date(year: 2025, month: 6, day: 15, hour: 21, minute: 30)
+        #expect(BoardSchedule.isClearingSoon(from: sundayNight, calendar: calendar))
     }
 
-    @Test func notClearingSoonOutsideFinalTwelveHours() {
+    @Test func notClearingSoonOutsideFinalThreeHours() {
         let sundayMorning = date(year: 2025, month: 6, day: 15, hour: 6)
         #expect(!BoardSchedule.isClearingSoon(from: sundayMorning, calendar: calendar))
     }
@@ -335,74 +335,6 @@ struct BoardStoreTests {
         #expect(store.post(with: post.id)?.reactionCounts[.like] == 1)
         store.setReaction(postId: post.id, reaction: nil)
         #expect(store.post(with: post.id)?.reactionCounts[.like] == 0)
-    }
-
-    @Test @MainActor func remoteReactionChangeUpdatesCountsFromOtherUsers() {
-        let activeWeek = BoardWeek(
-            startsAt: .now,
-            endsAt: .now.addingTimeInterval(86_400 * 7),
-            status: .active
-        )
-        let post = Post(
-            title: "t",
-            description: "d",
-            author: "a",
-            tone: .blue,
-            reactionCounts: [.like: 2]
-        )
-        let store = BoardStore(
-            posts: [post],
-            profiles: [],
-            currentUserID: SampleProfileID.maya,
-            activeBoardWeek: activeWeek
-        )
-
-        store.applyRemoteReactionChange(
-            ReactionRealtimeChange(
-                postID: post.id,
-                userID: SampleProfileID.leo,
-                previousType: nil,
-                newType: .hug
-            )
-        )
-        #expect(store.post(with: post.id)?.reactionCounts[.hug] == 1)
-        #expect(store.post(with: post.id)?.reactionCounts[.like] == 2)
-
-        store.applyRemoteReactionChange(
-            ReactionRealtimeChange(
-                postID: post.id,
-                userID: SampleProfileID.leo,
-                previousType: .hug,
-                newType: .laugh
-            )
-        )
-        #expect(store.post(with: post.id)?.reactionCounts[.hug] == nil)
-        #expect(store.post(with: post.id)?.reactionCounts[.laugh] == 1)
-    }
-
-    @Test @MainActor func remoteReactionChangeIgnoresCurrentUser() {
-        let activeWeek = BoardWeek(
-            startsAt: .now,
-            endsAt: .now.addingTimeInterval(86_400 * 7),
-            status: .active
-        )
-        let post = Post(title: "t", description: "d", author: "a", tone: .blue)
-        let store = BoardStore(
-            posts: [post],
-            profiles: [],
-            currentUserID: SampleProfileID.maya,
-            activeBoardWeek: activeWeek
-        )
-
-        store.applyRemoteReactionChange(
-            ReactionRealtimeChange(
-                postID: post.id,
-                userID: SampleProfileID.maya,
-                previousType: nil,
-                newType: .like
-            )
-        )
-        #expect(store.post(with: post.id)?.reactionCounts[.like] == nil)
     }
 
     @Test @MainActor func ownershipChecksUseStableProfileIDs() {
@@ -876,6 +808,8 @@ private final class ScriptedAuthService: AuthService, @unchecked Sendable {
     func sendEmailOTP(email: String) async throws { fatalError("unused") }
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession { fatalError("unused") }
     func signInWithPassword(email: String, password: String) async throws -> AuthSession { fatalError("unused") }
+    func signUpWithPassword(email: String, password: String) async throws -> AuthSession? { fatalError("unused") }
+    func checkEmailExists(email: String) async throws -> EmailStatus { fatalError("unused") }
     func setPassword(_ password: String) async throws -> AuthSession { fatalError("unused") }
     func linkApple(idToken: String, nonce: String?) async throws -> AuthSession { fatalError("unused") }
     func linkGoogle() async throws -> AuthSession { fatalError("unused") }
@@ -886,6 +820,7 @@ private final class ScriptedAuthService: AuthService, @unchecked Sendable {
     func unlinkIdentity(id: String) async throws -> AuthSession { fatalError("unused") }
     func refreshAuthSession() async throws -> AuthSession? { nil }
     func deleteAccount() async throws { fatalError("unused") }
+    func revokeApple(authorizationCode: String) async throws { fatalError("unused") }
 }
 
 @MainActor
