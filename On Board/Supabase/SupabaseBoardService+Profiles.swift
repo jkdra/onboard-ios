@@ -115,10 +115,12 @@ extension SupabaseBoardService {
         // stale relative to the server (e.g. followedUserIDs hasn't finished its
         // refresh yet, or the same follow happened from another device) — the
         // desired end state ("I follow them") already holds, so this should no-op
-        // rather than surface an error.
+        // rather than surface an error. ignoreDuplicates is required, not optional
+        // decoration: without it this emits ON CONFLICT DO UPDATE, and `follows`
+        // (by design) has no UPDATE policy, so that path is rejected by RLS.
         try await client
             .from("follows")
-            .upsert(Payload(followingId: id), onConflict: "follower_id,following_id")
+            .upsert(Payload(followingId: id), onConflict: "follower_id,following_id", ignoreDuplicates: true)
             .execute()
     }
     

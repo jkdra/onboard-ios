@@ -43,10 +43,13 @@ extension SupabaseBoardService {
         guard let userID = try? await client.auth.session.user.id else {
             throw BoardServiceError.notAuthenticated
         }
+        // ignoreDuplicates is required, not optional: without it this upserts via
+        // ON CONFLICT DO UPDATE, and `blocks` (by design) has no UPDATE policy, so
+        // re-blocking an already-blocked user would be rejected by RLS.
         try await mapAuthErrors {
             _ = try await client
                 .from("blocks")
-                .upsert(Row(blockerId: userID, blockedId: blockedID), onConflict: "blocker_id,blocked_id")
+                .upsert(Row(blockerId: userID, blockedId: blockedID), onConflict: "blocker_id,blocked_id", ignoreDuplicates: true)
                 .execute()
         }
     }
