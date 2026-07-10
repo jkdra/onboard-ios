@@ -39,7 +39,10 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
 
         let loadedPosts = try await weekPosts
         let profile = try await currentProfile
-        let profiles = mergeProfiles(current: profile, posts: loadedPosts.posts)
+
+        let otherAuthorIDs = Array(Set(loadedPosts.posts.compactMap { $0.authorId == profile.id ? nil : $0.authorId }))
+        let fetchedProfiles = (try? await fetchProfiles(ids: otherAuthorIDs)) ?? []
+        let profiles = mergeProfiles(current: profile, fetched: fetchedProfiles, posts: loadedPosts.posts)
 
         return BoardSnapshot(
             week: week,
@@ -80,19 +83,27 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
         }
     }
 
-    func mergeProfiles(current: Profile, posts: [Post]) -> [Profile] {
+    /// `fetched` covers the common case (a real profile row exists). Posts whose
+    /// author has no matching row — an account deleted after posting — fall back
+    /// to a stub built from the post's denormalized author handle, same as before.
+    func mergeProfiles(current: Profile, fetched: [Profile], posts: [Post]) -> [Profile] {
+        var byID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
         var seen = Set([current.id])
         var merged = [current]
 
         for post in posts {
             guard let authorId = post.authorId, seen.insert(authorId).inserted else { continue }
-            merged.append(
-                Profile(
-                    id: authorId,
-                    handle: post.author,
-                    displayName: post.author
+            if let profile = byID.removeValue(forKey: authorId) {
+                merged.append(profile)
+            } else {
+                merged.append(
+                    Profile(
+                        id: authorId,
+                        handle: post.author,
+                        displayName: post.author
+                    )
                 )
-            )
+            }
         }
 
         return merged

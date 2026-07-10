@@ -68,13 +68,6 @@ extension PostDetailView {
                         } label: {
                             Label("Report Post", systemImage: "flag")
                         }
-                        if let authorID = livePost.authorId {
-                            Button(role: .destructive) {
-                                blockCandidate = BlockCandidate(userID: authorID, handle: authorProfile.handle)
-                            } label: {
-                                Label("Block @\(authorProfile.handle)", systemImage: "hand.raised")
-                            }
-                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis").fontWeight(.semibold)

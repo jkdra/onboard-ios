@@ -239,7 +239,7 @@ struct CommentView: View {
                                     Button(role: .destructive) {
                                         onBlockAuthor?(comment)
                                     } label: {
-                                        Label("Block @\(comment.author)", systemImage: "hand.raised")
+                                        Label("Block", systemImage: "hand.raised")
                                     }
                                 }
                             }

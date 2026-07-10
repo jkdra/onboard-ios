@@ -249,7 +249,7 @@ struct ProfileView: View {
                                             handle: displayedProfile.handle
                                         )
                                     } label: {
-                                        Label("Block @\(displayedProfile.handle)", systemImage: "hand.raised")
+                                        Label("Block", systemImage: "hand.raised")
                                     }
                                 }
                             } label: {
