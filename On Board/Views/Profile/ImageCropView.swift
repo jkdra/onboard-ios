@@ -181,7 +181,7 @@ struct ImageCropView: View {
                         } label: {
                             Label("Confirm", systemImage: "checkmark").toolbarActionLabel()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.boardPrimary)
                     }
                 }
             }

@@ -33,10 +33,14 @@ struct SignInView: View {
     @State private var phoneNumber = ""
     @State private var emailAddress = ""
     @State private var password = ""
+    @State private var confirmPassword = ""
     @State private var usePassword = false
     @State private var otpCode = ""
     @State private var otpSent = false
     @State private var isSendingOTP = false
+    @State private var emailStatus: EmailStatus? = nil
+    @State private var showAccountDetectedToast = false
+    @State private var requiresEmailVerification = false
     @State var alertError: PresentableAlertError?
     @State private var submittedDestination = ""
     @State private var resendCooldown = OTPCooldown()
@@ -87,14 +91,16 @@ struct SignInView: View {
             
             if !otpSent && !usePassword {
                 VStack(spacing: 16) {
-                    Button(credentialMode == .phone ? "Use Email Instead" : "Use Phone Instead") {
+                    Button(credentialMode == .phone ? "Use Email" : "Use Phone") {
                         withAnimation(.snappy(duration: 0.3)) {
                             credentialMode = credentialMode == .phone ? .email : .phone
                         }
                     }
                     .buttonStyle(.boardSecondary)
                     .disabled(isSendingOTP)
-                    .transition(.opacity)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 18)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                     
                     socialSection
                 }
@@ -141,8 +147,9 @@ struct SignInView: View {
             }
         }
         .background {
-            AnimatedLogoBackgroundView(opacity: 0.05)
+            AnimatedLogoBackgroundView(opacity: 0.07)
         }
+        .toast(isPresented: $showAccountDetectedToast, message: "Account Found!", icon: "person.crop.circle.fill.badge.checkmark")
     }
 
 
@@ -163,33 +170,64 @@ struct SignInView: View {
     @ViewBuilder
     private var credentialBlock: some View {
         if usePassword {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 8) {
-                    Image(systemName: "envelope.fill")
-                        .foregroundStyle(.secondary)
-                        .font(.subheadline)
-                    Text(emailAddress)
-                        .fontStyle(.footnote)
+            if requiresEmailVerification {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "envelope.fill")
+                            .foregroundStyle(.secondary)
+                            .fontStyle(.subheadline)
+                        Text(emailAddress)
+                            .fontStyle(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("Check your email for a verification link to continue.")
+                        .fontStyle(.body)
                         .foregroundStyle(.secondary)
                 }
-
-                SecureField("Password", text: $password)
-                    .textFieldStyle(.board)
-                    .textContentType(.password)
-                    .submitLabel(.go)
-                    .onSubmit {
-                        Task { await signInWithPassword() }
+                .transition(.opacity)
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "envelope.fill")
+                            .foregroundStyle(.secondary)
+                            .fontStyle(.subheadline)
+                        Text(emailAddress)
+                            .fontStyle(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    .disabled(isSigningInCredential)
-                    .accessibilityLabel("Password")
+
+                    SecureField("Password", text: $password)
+                        .textFieldStyle(.board)
+                        .textContentType(emailStatus?.exists == false ? .newPassword : .password)
+                        .submitLabel(emailStatus?.exists == false ? .next : .go)
+                        .onSubmit {
+                            if emailStatus?.exists != false {
+                                Task { await signInWithPassword() }
+                            }
+                        }
+                        .disabled(isSigningInCredential)
+                        .accessibilityLabel("Password")
+                    
+                    if emailStatus?.exists == false {
+                        SecureField("Confirm Password", text: $confirmPassword)
+                            .textFieldStyle(.board)
+                            .textContentType(.newPassword)
+                            .submitLabel(.go)
+                            .onSubmit {
+                                Task { await signUpWithPassword() }
+                            }
+                            .disabled(isSigningInCredential)
+                            .accessibilityLabel("Confirm Password")
+                    }
+                }
+                .transition(.opacity)
             }
-            .transition(.opacity)
         } else if otpSent {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(.green)
-                        .font(.subheadline)
+                        .fontStyle(.subheadline)
                     Text(otpSentMessage)
                         .fontStyle(.footnote)
                         .foregroundStyle(.secondary)
@@ -217,7 +255,7 @@ struct SignInView: View {
             Group {
                 if credentialMode == .phone {
                     VStack(alignment: .leading, spacing: 6) {
-                        TextField("+1 555 555 0100", text: $phoneNumber)
+                        TextField("+1 (555) 555-0100", text: $phoneNumber)
                             .textFieldStyle(.board)
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
@@ -247,35 +285,65 @@ struct SignInView: View {
     @ViewBuilder
     private var primaryButton: some View {
         if usePassword {
-            VStack(spacing: 10) {
-                Button {
-                    Task { await signInWithPassword() }
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "key.fill")
-                        Text("Sign In")
-                            .fontStyle(.headline)
-                        Spacer()
-                        if isSigningInCredential || isResolving(.email) {
-                            ProgressView().tint(Color(.systemBackground))
+            if requiresEmailVerification {
+                VStack(spacing: 10) {
+                    Button("Back to Sign In") {
+                        withAnimation(.snappy(duration: 0.3)) { resetOTPSession() }
+                    }
+                    .buttonStyle(.boardSecondary)
+                }
+                .transition(.opacity)
+            } else {
+                VStack(spacing: 10) {
+                    if emailStatus?.exists == false {
+                        Button {
+                            Task { await signUpWithPassword() }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "person.badge.plus")
+                                Text("Sign Up")
+                                    .fontStyle(.headline)
+                                Spacer()
+                                if isSigningInCredential || isResolving(.email) {
+                                    ProgressView().tint(Color(.systemBackground))
+                                }
+                            }
+                        }
+                        .buttonStyle(.boardPrimary)
+                        .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty || password != confirmPassword)
+                        .accessibilityLabel("Sign up with password")
+                    } else {
+                        Button {
+                            Task { await signInWithPassword() }
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "key.fill")
+                                Text("Sign In")
+                                    .fontStyle(.headline)
+                                Spacer()
+                                if isSigningInCredential || isResolving(.email) {
+                                    ProgressView().tint(Color(.systemBackground))
+                                }
+                            }
+                        }
+                        .buttonStyle(.boardPrimary)
+                        .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty)
+                        .accessibilityLabel("Sign in with password")
+                    }
+
+                    Button("Use a one-time code instead") {
+                        withAnimation(.snappy(duration: 0.3)) {
+                            usePassword = false
+                            password = ""
+                            confirmPassword = ""
                         }
                     }
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+                    .disabled(isSigningInCredential)
                 }
-                .buttonStyle(.boardPrimary)
-                .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty)
-                .accessibilityLabel("Sign in with password")
-
-                Button("Use a one-time code instead") {
-                    withAnimation(.snappy(duration: 0.3)) {
-                        usePassword = false
-                        password = ""
-                    }
-                }
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-                .disabled(isSigningInCredential)
+                .transition(.opacity)
             }
-            .transition(.opacity)
         } else if otpSent {
             VStack(spacing: 10) {
                 Button {
@@ -298,13 +366,17 @@ struct SignInView: View {
                 .accessibilityLabel("Verify code")
                 
                 if credentialMode == .email {
-                    Button("Have a password? Sign in with it") {
-                        withAnimation(.snappy(duration: 0.3)) { usePassword = true }
+                    let exists = emailStatus?.exists == true
+                    let hasPassword = emailStatus?.hasPassword == true
+                    if !exists || hasPassword {
+                        Button(exists ? "Have a password? Sign in with it" : "Want to use a password? Sign up with it") {
+                            withAnimation(.snappy(duration: 0.3)) { usePassword = true }
+                        }
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 4)
+                        .disabled(isVerifyingOTP)
                     }
-                    .fontStyle(.footnote)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 4)
-                    .disabled(isVerifyingOTP)
                 }
             }
             .transition(.opacity)
@@ -313,17 +385,12 @@ struct SignInView: View {
                 Button {
                     Task { await sendOTP(isResend: false) }
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: credentialMode == .phone
-                              ? AuthProvider.phone.systemImage
-                              : AuthProvider.email.systemImage)
-                        Text(credentialMode == .phone ? "Continue with Phone" : "Continue with Email")
-                            .fontStyle(.headline)
-                        Spacer()
-                        if isSendingOTP || isSigningInCredential {
-                            ProgressView().tint(Color(.systemBackground))
-                        }
-                    }
+                    LoadingButtonLabel(
+                        "Continue",
+                        systemImage: "arrow.forward",
+                        isLoading: isSendingOTP || isSigningInCredential,
+                        isActive: !normalizedCredentialValue.isEmpty
+                    )
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(isSendingOTP || isSigningInCredential || normalizedCredentialValue.isEmpty)
@@ -338,10 +405,35 @@ struct SignInView: View {
         otpSent = false
         otpCode = ""
         password = ""
+        confirmPassword = ""
         usePassword = false
         submittedDestination = ""
         isVerifyingOTP = false
+        emailStatus = nil
+        showAccountDetectedToast = false
+        requiresEmailVerification = false
         resendCooldown.reset()
+    }
+
+    private func signUpWithPassword() async {
+        if usesLiveBackend, !network.isConnected {
+            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
+            return
+        }
+        guard !normalizedCredentialValue.isEmpty, !password.isEmpty, password == confirmPassword else { return }
+
+        do {
+            let email = try resolvedDestination()
+            resolvingProvider = .email
+            let session = try await auth.signUpWithPassword(email: email, password: password)
+            if session == nil {
+                withAnimation(.snappy(duration: 0.3)) {
+                    requiresEmailVerification = true
+                }
+            }
+        } catch {
+            presentAlert(PresentableAlertError.from(error))
+        }
     }
 
     private func signInWithPassword() async {
@@ -430,10 +522,16 @@ struct SignInView: View {
             case .phone:
                 try await auth.sendPhoneOTP(phone: destination)
             case .email:
+                if !isResend {
+                    emailStatus = try await auth.checkEmailExists(email: destination)
+                }
                 try await auth.sendEmailOTP(email: destination)
             }
             submittedDestination = destination
             withAnimation(.snappy(duration: 0.35)) {
+                if !isResend && emailStatus?.exists == true {
+                    showAccountDetectedToast = true
+                }
                 otpSent = true
             }
             if !isResend { otpCode = "" }

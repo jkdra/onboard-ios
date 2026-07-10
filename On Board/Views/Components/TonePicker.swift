@@ -48,20 +48,10 @@ struct TonePicker: View {
         Menu {
             Picker("Tone", selection: $selection) {
                 if includeRandom {
-                    Label {
-                        Text("Any Color!")
-                    } icon: {
-                        Image(systemName: "sparkles")
-                    }
-                    .tag(PostTone?.none)
+                    Text("Any Color!").tag(PostTone?.none)
                 }
                 ForEach(PostTone.allCases) { tone in
-                    Label {
-                        Text(tone.displayName)
-                    } icon: {
-                        Image(systemName: "circle.fill")
-                    }
-                    .tag(Optional(tone))
+                    Text(tone.displayName).tag(Optional(tone))
                 }
             }
         } label: {
@@ -80,7 +70,8 @@ struct TonePicker: View {
                 .fontStyle(.subheadline)
                 .fontWeight(.heavy)
             Image(systemName: "chevron.down")
-                .font(.caption2.weight(.bold))
+                .fontStyle(.caption2)
+                .fontWeight(.bold)
                 .opacity(0.55)
         }
         .foregroundStyle(.primary)

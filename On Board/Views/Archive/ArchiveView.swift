@@ -33,7 +33,7 @@ struct ArchiveView: View {
                     ArchiveView()
                 case .archivedWeek(let week):
                     ArchivedWeekView(week: week)
-                case .post(let postID):
+                case .post(let postID), .postFromProfile(let postID, _):
                     if let post = BoardStore.previewBoard().post(with: postID) {
                         PostDetailView(post: post)
                     }

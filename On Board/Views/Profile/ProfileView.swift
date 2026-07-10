@@ -91,6 +91,9 @@ struct ProfileView: View {
                                     .lineLimit(1)
                                     .fontStyle(.title)
                                     .fontWeight(.heavy)
+                                    .keyboardType(.namePhonePad)
+                                    .textContentType(.name)
+                                    .textInputAutocapitalization(.words)
                                     .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
                                 if draftDisplayName.count >= Int(Double(displayNameLimit) * 0.8) {
                                     Text("\(draftDisplayName.count)/\(displayNameLimit)")
@@ -102,6 +105,10 @@ struct ProfileView: View {
                                     .lineLimit(1)
                                     .fontStyle(.subheadline)
                                     .foregroundStyle(.secondary)
+                                    .keyboardType(.asciiCapable)
+                                    .textContentType(.username)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
                                     .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
                             }
                         }
@@ -119,6 +126,7 @@ struct ProfileView: View {
                         TextField("Bio", text: $draftBio, axis: .vertical)
                             .fontStyle(.body)
                             .foregroundStyle(.primary)
+                            .keyboardType(.twitter)
                             .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
                         if draftBio.count >= Int(Double(bioLimit) * 0.8) {
                             Text("\(draftBio.count)/\(bioLimit)")
@@ -161,11 +169,8 @@ struct ProfileView: View {
                                     isFollowing ? "Following" : "Follow",
                                     systemImage: isFollowing ? "person.fill.checkmark" : "person.badge.plus"
                                 )
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(isFollowing ? .secondary : .primary)
+                            .buttonStyle(isFollowing ? .boardSecondary : .boardPrimary)
                             .padding(.top, 8)
                             .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
                         }
@@ -173,6 +178,10 @@ struct ProfileView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .safeAreaPadding()
+                
+                if !editMode {
+                    userPostsSection
+                }
             }
             .scrollDismissesKeyboard(.interactively)
             .background {
@@ -206,7 +215,7 @@ struct ProfileView: View {
                         Button { saveProfile() } label: {
                             Label("Save", systemImage: "checkmark").toolbarActionLabel()
                         }
-                        .buttonStyle(.borderedProminent)
+                        .buttonStyle(.boardPrimary)
                         .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
                     }
                 } else {
@@ -393,6 +402,38 @@ struct ProfileView: View {
         withAnimation(.smooth(duration: 0.3)) { editMode = false }
     }
 
+    // MARK: - Posts Section
+
+    private var userPostsSection: some View {
+        let userPosts = store.feedItems.filter { item in
+            if case .post(let id, _) = item, let post = store.feedPost(id: id) {
+                return post.authorId == profile.id
+            }
+            return false
+        }
+        
+        return Group {
+            if !userPosts.isEmpty {
+                VStack(alignment: .leading, spacing: 16) {
+                    Divider()
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                    
+                    Text("This Week's Posts")
+                        .fontStyle(.headline)
+                        .padding(.horizontal)
+                    
+                    BoardFeedView(
+                        items: userPosts,
+                        cardNamespace: profileNamespace,
+                        originatingProfileID: profile.id
+                    )
+                }
+                .padding(.top, 8)
+            }
+        }
+    }
+
     // MARK: - Moderation
 
     private func blockUser(_ candidate: BlockCandidate) async {
@@ -401,6 +442,9 @@ struct ProfileView: View {
         do {
             try await store.block(userID: candidate.userID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            if presentation == .sheet {
+                dismiss()
+            }
         } catch {
             alertError = store.presentableModerationError(error)
         }
@@ -502,7 +546,8 @@ struct PopScoreView: View {
                         HStack(spacing: 4) {
                             Text(reaction.emoji)
                             Text("\(Int(round(Double(count) / Double(total) * 100)))%")
-                                .font(.caption2.weight(.medium))
+                                .fontStyle(.caption2)
+                                .fontWeight(.medium)
                                 .foregroundStyle(.secondary)
                         }
                     }

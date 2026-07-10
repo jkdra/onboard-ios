@@ -24,6 +24,7 @@ struct NewCommentComposer: View {
         HStack(alignment: .top, spacing: 10) {
             TextField("Add a comment…", text: $draft, axis: .vertical)
                 .fontStyle(.subheadline)
+                .keyboardType(.twitter)
                 .focused(isFocused)
                 .padding(.top, 6)
                 .disabled(isPosting)
@@ -41,7 +42,7 @@ struct NewCommentComposer: View {
                         .frame(width: 28, height: 28)
                 } else {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title)
+                        .fontStyle(.title)
                         .foregroundStyle(trimmedEmpty ? Color.secondary.opacity(0.4) : tone.color)
                 }
             }

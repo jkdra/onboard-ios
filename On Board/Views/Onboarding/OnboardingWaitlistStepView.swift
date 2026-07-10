@@ -174,7 +174,7 @@ struct OnboardingWaitlistStepView: View {
                     Label(notificationStatus == .notDetermined ? "Notify me" : "Enable notifications", systemImage: "bell.badge.fill")
                         .padding(.horizontal, 8)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.boardPrimary)
                 .tint(.primary)
             }
         }

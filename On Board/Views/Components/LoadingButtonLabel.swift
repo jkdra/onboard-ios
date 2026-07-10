@@ -19,35 +19,53 @@ struct LoadingButtonLabel: View {
     private let title: LocalizedStringKey
     private let systemImage: String?
     private let isLoading: Bool
+    private let isActive: Bool
     private let spinnerTint: Color
 
     init(
         _ title: LocalizedStringKey,
         systemImage: String? = nil,
         isLoading: Bool,
+        isActive: Bool = true,
         spinnerTint: Color = Color(uiColor: .systemBackground)
     ) {
         self.title = title
         self.systemImage = systemImage
         self.isLoading = isLoading
+        self.isActive = isActive
         self.spinnerTint = spinnerTint
+    }
+
+    private var isRightAligned: Bool {
+        systemImage == "arrow.forward"
     }
 
     var body: some View {
         HStack(spacing: 8) {
-            if isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(spinnerTint)
-                    .transition(.opacity)
+            if !isRightAligned {
+                iconOrSpinner
             }
-
-            if let systemImage {
-                Label(title, systemImage: systemImage)
-            } else {
-                Text(title)
+            
+            Text(title)
+            
+            if isRightAligned {
+                iconOrSpinner
             }
         }
-        .animation(.snappy(duration: 0.2), value: isLoading)
+        .animation(.snappy(duration: 0.3), value: isLoading)
+        .animation(.snappy(duration: 0.3), value: isActive)
+    }
+
+    @ViewBuilder
+    private var iconOrSpinner: some View {
+        if isLoading {
+            ProgressView()
+                .controlSize(.small)
+                .tint(spinnerTint)
+                .transition(.scale.combined(with: .opacity))
+        } else if isActive, let systemImage {
+            Image(systemName: systemImage)
+                .transition(.scale.combined(with: .opacity))
+        }
     }
 }

@@ -18,7 +18,7 @@ struct ContentView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    @State private var navigationPath = NavigationPath()
+    @State private var navigationPath: [BoardRoute] = []
     @State private var showNewPost = false
     @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
@@ -38,7 +38,7 @@ struct ContentView: View {
                     if horizontalSizeClass == .compact {
                         ToolbarItem(placement: .topBarLeading) {
                             Button {
-                                navigationPath = NavigationPath()
+                                navigationPath = []
                                 dismiss()
                             } label: {
                                 Image(systemName: "list.bullet")
@@ -61,6 +61,37 @@ struct ContentView: View {
         .onChange(of: store.isLoading) { _, loading in
             if !loading { openPendingPostIfReady() }
         }
+        .onChange(of: store.blockedUserIDs) { _, _ in
+            sanitizeNavigationPath()
+        }
+    }
+    
+    private func sanitizeNavigationPath() {
+        var validPath = navigationPath
+        while let last = validPath.last {
+            var shouldPop = false
+            switch last {
+            case .post(let postID), .postFromProfile(let postID, _):
+                if store.post(with: postID) == nil {
+                    shouldPop = true
+                }
+            case .profile(let profile):
+                if store.isBlocked(userID: profile.id) {
+                    shouldPop = true
+                }
+            default:
+                break
+            }
+            
+            if shouldPop {
+                validPath.removeLast()
+            } else {
+                break
+            }
+        }
+        if validPath != navigationPath {
+            navigationPath = validPath
+        }
     }
 
     /// Navigates to the post a tapped notification pointed at, once it's
@@ -73,7 +104,7 @@ struct ContentView: View {
             showNewPost = false
             // Replace the path so the post opens even if the user was deep
             // in the Archive stack.
-            navigationPath = NavigationPath([BoardRoute.post(postID)])
+            navigationPath = [.post(postID)]
         } else if !store.isLoading, store.loadError == nil, store.activeBoardWeek != nil {
             // Feed is loaded but the post is gone (weekly reset, deleted, or wrong board) —
             // drop the stale route instead of retrying forever and alert the user.
@@ -184,6 +215,13 @@ struct ContentView: View {
                     .environment(store)
                     .navigationTransition(.zoom(sourceID: postID, in: cardNamespace))
             }
+        case .postFromProfile(let postID, let profileID):
+            if let post = store.post(with: postID) {
+                PostDetailView(post: post)
+                    .environment(store)
+                    .environment(\.originatingProfileID, profileID)
+                    .navigationTransition(.zoom(sourceID: postID, in: cardNamespace))
+            }
         case .profile(let profile):
             ProfileView(profile: profile, presentation: .navigation)
         }
@@ -191,7 +229,7 @@ struct ContentView: View {
 
     private func triggerBoardReset() async {
         showNewPost = false
-        if !navigationPath.isEmpty { navigationPath.removeLast(navigationPath.count) }
+        if !navigationPath.isEmpty { navigationPath.removeAll() }
         try? await Task.sleep(for: .milliseconds(400))
         boardIsResetting = true
         let postCount = store.feedItems.filter { if case .post = $0 { return true }; return false }.count
@@ -221,7 +259,7 @@ struct ContentView: View {
                     
                     if let errorMsg = store.loadError {
                         Text(errorMsg)
-                            .font(.caption)
+                            .fontStyle(.caption)
                             .foregroundStyle(.red)
                             .multilineTextAlignment(.center)
                     } else {

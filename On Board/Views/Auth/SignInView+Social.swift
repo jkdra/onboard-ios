@@ -21,9 +21,16 @@ extension SignInView {
                 .fontStyle(.footnote)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 12) {
-                appleSignInButton
-                googleSignInButton
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    appleSignInButton
+                    googleSignInButton
+                }
+                
+                VStack(spacing: 12) {
+                    appleSignInButton
+                    googleSignInButton
+                }
             }
         }
         .opacity(appeared ? 1 : 0)

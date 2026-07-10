@@ -80,6 +80,17 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         return session
     }
 
+    func checkEmailExists(email: String) async throws -> EmailStatus {
+        try await Task.sleep(for: .milliseconds(350))
+        let exists = email.lowercased() == "test@example.com"
+        return EmailStatus(exists: exists, hasPassword: exists)
+    }
+
+    func signUpWithPassword(email: String, password: String) async throws -> AuthSession? {
+        try await Task.sleep(for: .milliseconds(350))
+        return nil // Mock requiring email verification
+    }
+
     func signInWithPassword(email: String, password: String) async throws -> AuthSession {
         _ = password
         try await Task.sleep(for: .milliseconds(350))

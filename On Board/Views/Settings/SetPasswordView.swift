@@ -81,7 +81,7 @@ struct SetPasswordView: View {
                         )
                         .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.boardPrimary)
                     .tint(.primary)
                     .disabled(!isValid || isSaving)
                     .listRowBackground(Color.clear)

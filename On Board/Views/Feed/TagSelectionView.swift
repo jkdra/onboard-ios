@@ -72,6 +72,8 @@ struct TagSelectionView: View {
                 }
             }
             .searchable(text: $query, prompt: "Search or create tags...")
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             .onChange(of: query) { _, newQuery in
                 Task {
                     guard let service = store.boardService else { return }
@@ -82,7 +84,7 @@ struct TagSelectionView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") { dismiss() }
+                    Button { dismiss() } label: { Label("Done", systemImage: "checkmark") }
                 }
             }
         }
@@ -95,4 +97,8 @@ struct TagSelectionView: View {
             searchResults = []
         }
     }
+}
+
+#Preview {
+    TagSelectionView(selectedTags: .constant(["test_one", "test_2"]))
 }

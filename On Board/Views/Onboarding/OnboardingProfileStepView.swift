@@ -54,6 +54,9 @@ struct OnboardingProfileStepView: View {
                     TextField("Display name", text: $displayName, axis: .vertical)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...2)
+                        .keyboardType(.namePhonePad)
+                        .textContentType(.name)
+                        .textInputAutocapitalization(.words)
                         .focused($focus, equals: .displayName)
                     if displayName.count >= Int(Double(displayNameLimit) * 0.8) {
                         Text("\(displayName.count)/\(displayNameLimit)")
@@ -67,6 +70,7 @@ struct OnboardingProfileStepView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                     TextField("A short bio", text: $bio, axis: .vertical)
                         .lineLimit(2...5)
+                        .keyboardType(.twitter)
                         .focused($focus, equals: .bio)
                         .fontStyle(.body)
                     if bio.count >= Int(Double(bioLimit) * 0.8) {
@@ -173,7 +177,7 @@ struct OnboardingProfileStepView: View {
                         )
                     }
                 } label: {
-                    LoadingButtonLabel("Continue", systemImage: "arrow.right", isLoading: onboarding.isSubmitting)
+                    LoadingButtonLabel("Continue", systemImage: "arrow.forward", isLoading: onboarding.isSubmitting, isActive: canContinue)
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(!canContinue)

@@ -12,6 +12,7 @@ struct PostDetailView: View {
     @Environment(BoardStore.self) var store
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var scheme
+    @Environment(\.originatingProfileID) var originatingProfileID
     @Namespace var postNamespace
 
     // Post editing
@@ -120,9 +121,12 @@ struct PostDetailView: View {
                     
                     TextField("Title", text: $draftTitle, axis: .vertical)
                         .fontStyle(.largeTitle)
+                        .keyboardType(.default)
+                        .textInputAutocapitalization(.sentences)
                         .matchedGeometryEffect(id: "postTitle", in: postNamespace, anchor: .leading)
                     TextField("Description", text: $draftDescription, axis: .vertical)
                         .fontStyle(.body)
+                        .keyboardType(.twitter)
                         .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
                         
                     editTagsSection

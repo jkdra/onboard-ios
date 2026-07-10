@@ -60,7 +60,7 @@ struct OnboardingSchoolEmailStepView: View {
                     Button {
                         Task { await verifyCode() }
                     } label: {
-                        LoadingButtonLabel("Verify email", systemImage: "checkmark.seal.fill", isLoading: onboarding.isSubmitting)
+                        LoadingButtonLabel("Verify email", systemImage: "checkmark.seal.fill", isLoading: onboarding.isSubmitting, isActive: !otpCode.isEmpty)
                     }
                     .buttonStyle(.boardPrimary)
                     .disabled(onboarding.isSubmitting || otpCode.isEmpty)
@@ -98,7 +98,7 @@ struct OnboardingSchoolEmailStepView: View {
                     Button {
                         Task { await sendCode() }
                     } label: {
-                        LoadingButtonLabel("Send verification code", systemImage: "envelope.fill", isLoading: onboarding.isSubmitting)
+                        LoadingButtonLabel("Send verification code", systemImage: "envelope.fill", isLoading: onboarding.isSubmitting, isActive: canSendCode)
                     }
                     .buttonStyle(.boardPrimary)
                     .disabled(!canSendCode)

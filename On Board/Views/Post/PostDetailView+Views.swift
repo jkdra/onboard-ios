@@ -29,7 +29,7 @@ extension PostDetailView {
                 Button { saveEdits() } label: {
                     Label("Save", systemImage: "checkmark").toolbarActionLabel()
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.boardPrimary)
                 .tint(draftTone.color)
             }
             ToolbarItem(placement: .bottomBar) { Spacer() }
@@ -97,30 +97,28 @@ extension PostDetailView {
 
     @ViewBuilder
     var postContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            authorRow
+            restOfPostContent
+        }
+    }
+    
+    @ViewBuilder
+    private var authorRow: some View {
         HStack(spacing: 10) {
-            NavigationLink(value: BoardRoute.profile(authorProfile)) {
-                HStack(spacing: 10) {
-                    AvatarView(profile: authorProfile, size: .small)
-                    VStack(alignment: .leading, spacing: 1) {
-                        if authorProfile.displayName.isEmpty {
-                            Text("@\(authorProfile.handle)")
-                                .fontStyle(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                        } else {
-                            Text(authorProfile.displayName)
-                                .fontStyle(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundStyle(.primary)
-                            Text("@\(authorProfile.handle)")
-                                .fontStyle(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
+            if originatingProfileID == authorProfile.id {
+                Button {
+                    dismiss()
+                } label: {
+                    authorLabel
                 }
-                .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
+                .buttonStyle(.plain)
+            } else {
+                NavigationLink(value: BoardRoute.profile(authorProfile)) {
+                    authorLabel
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             Spacer(minLength: 8)
 
@@ -128,7 +126,34 @@ extension PostDetailView {
                 .fontStyle(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+    
+    @ViewBuilder
+    private var authorLabel: some View {
+        HStack(spacing: 10) {
+            AvatarView(profile: authorProfile, size: .small)
+            VStack(alignment: .leading, spacing: 1) {
+                if authorProfile.displayName.isEmpty {
+                    Text("@\(authorProfile.handle)")
+                        .fontStyle(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                } else {
+                    Text(authorProfile.displayName)
+                        .fontStyle(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                    Text("@\(authorProfile.handle)")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
+    }
 
+    @ViewBuilder
+    private var restOfPostContent: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(livePost.title)
                 .fontStyle(.largeTitle)
@@ -323,7 +348,8 @@ extension PostDetailView {
                     withAnimation(.smooth(duration: 0.25)) { removeEditImage() }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.title2.weight(.medium))
+                        .fontStyle(.title2)
+                        .fontWeight(.medium)
                         .foregroundStyle(.white, Color.black.opacity(0.55))
                         .shadow(color: .black.opacity(0.25), radius: 4)
                 }
@@ -335,8 +361,7 @@ extension PostDetailView {
             .overlay(alignment: .bottomTrailing) {
                 PhotosPicker(selection: $selectedEditPhotoItem, matching: .images) {
                     Label("Change", systemImage: "camera.fill")
-                        .font(.caption)
-                        .fontWeight(.medium)
+                        .font(.caption.weight(.medium))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 7)
                         .background(.thinMaterial, in: Capsule())

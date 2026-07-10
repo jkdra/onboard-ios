@@ -181,7 +181,7 @@ struct AccountSecuritySettingsView: View {
     private func phoneMethodRow(session: AuthSession) -> some View {
         signInMethodRow(
             provider: .phone,
-            detail: session.phone,
+            detail: session.hasLinked(.phone) ? session.phone : nil,
             isLinked: session.hasLinked(.phone),
             linkAction: { linkSheet = .phone(.link) },
             changeAction: { linkSheet = .phone(.change) }
@@ -191,7 +191,7 @@ struct AccountSecuritySettingsView: View {
     private func emailMethodRow(session: AuthSession) -> some View {
         signInMethodRow(
             provider: .email,
-            detail: session.email,
+            detail: session.hasLinked(.email) ? session.email : nil,
             isLinked: session.hasLinked(.email),
             linkAction: { linkSheet = .email(.link) },
             changeAction: { linkSheet = .email(.change) }
@@ -295,7 +295,7 @@ struct AccountSecuritySettingsView: View {
                     HStack(spacing: 4) {
                         Text("Linked")
                         Image(systemName: "chevron.up.chevron.down")
-                            .font(.caption2)
+                            .fontStyle(.caption2)
                     }
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)

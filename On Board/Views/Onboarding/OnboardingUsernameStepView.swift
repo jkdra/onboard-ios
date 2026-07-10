@@ -51,6 +51,7 @@ struct OnboardingUsernameStepView: View {
                             .textInputAutocapitalization(.never)
                             .autocorrectionDisabled()
                             .textContentType(.username)
+                            .keyboardType(.asciiCapable)
                             .onChange(of: handle) { _, _ in
                                 scheduleAvailabilityCheck()
                             }
@@ -69,7 +70,7 @@ struct OnboardingUsernameStepView: View {
                 Button {
                     Task { await onboarding.submitUsername(trimmedHandle) }
                 } label: {
-                    LoadingButtonLabel("Continue", systemImage: "arrow.right", isLoading: onboarding.isSubmitting)
+                    LoadingButtonLabel("Continue", systemImage: "arrow.forward", isLoading: onboarding.isSubmitting, isActive: canContinue)
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(!canContinue)

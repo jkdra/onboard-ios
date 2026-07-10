@@ -54,7 +54,7 @@ struct NewPostView: View {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.badge.exclamationmark.fill")
                                 .foregroundStyle(.red)
-                            Text(bannerText + " — posting is closed")
+                            Text("\(bannerText) — posting is closed")
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.primary)
                         }
@@ -68,11 +68,13 @@ struct NewPostView: View {
                     TextField("Title", text: $title, axis: .vertical)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...3)
-                        .textInputAutocapitalization(.never)
+                        .keyboardType(.default)
+                        .textInputAutocapitalization(.sentences)
                         .focused($focus, equals: .title)
 
                     TextField("what's on your mind?", text: $content, axis: .vertical)
                         .lineLimit(4...12)
+                        .keyboardType(.twitter)
                         .focused($focus, equals: .content)
                         .fontStyle(.body)
                         
@@ -130,16 +132,14 @@ struct NewPostView: View {
                             Label("Post", systemImage: "paperplane.fill").toolbarActionLabel()
                         }
                     }
-                    .tint(previewTone?.color ?? .gray)
-                    .buttonStyle(.borderedProminent)
+                    .tint(previewTone?.color ?? Color(uiColor: .label))
+                    .buttonStyle(.boardPrimary)
                     .disabled(!canSubmit)
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }
-                ToolbarItem(placement: .bottomBar) { Spacer() }
                 ToolbarItem(placement: .bottomBar) {
                     TonePicker(selection: $selectedTone, showBackground: false)
                 }
-                ToolbarItem(placement: .bottomBar) { Spacer() }
             }
             .keyboardDoneToolbar()
             .onAppear {

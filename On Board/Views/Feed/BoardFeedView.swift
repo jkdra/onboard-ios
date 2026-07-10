@@ -15,6 +15,7 @@ struct BoardFeedView: View {
     var cardNamespace: Namespace.ID
     var onNewPost: (() -> Void)?
     var isResetting: Bool = false
+    var originatingProfileID: UUID? = nil
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -159,7 +160,7 @@ struct BoardFeedView: View {
     private func feedItemView(for item: FeedItem, cardRotation: Double = 0, isLeadingColumn: Bool = false) -> some View {
         switch item {
         case .post(let postID, _):
-            NavigationLink(value: BoardRoute.post(postID)) {
+            NavigationLink(value: originatingProfileID != nil ? BoardRoute.postFromProfile(postID: postID, profileID: originatingProfileID!) : BoardRoute.post(postID)) {
                 FeedGridCard(postID: postID, cardNamespace: cardNamespace, cardRotation: cardRotation, isLeadingColumn: isLeadingColumn, columnWidth: columnWidth)
             }
             .buttonStyle(.plain)

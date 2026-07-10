@@ -27,7 +27,7 @@ struct OfflineGateView: View {
                     .fontWeight(.semibold)
                     .accessibilityLabel("No internet connection")
 
-                Text("We'll get you back on board (heh) as soon as the internet comes back.")
+                Text("We'll get you back on board as soon as the internet comes back.")
                     .fontStyle(.body)
                     .foregroundStyle(.white.opacity(0.85))
             }

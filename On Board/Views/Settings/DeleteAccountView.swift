@@ -51,7 +51,7 @@ struct DeleteAccountView: View {
                 .frame(maxWidth: .infinity)
                 .padding()
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.boardPrimary)
             .tint(.red)
             .disabled(isDeleting)
             .padding(.horizontal, 24)

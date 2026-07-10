@@ -113,7 +113,8 @@ struct SettingsHapticsPreview: View {
             .overlay(alignment: .topTrailing) {
                 if typeSize.isAccessibilitySize {
                     Image(systemName: "accessibility")
-                        .font(.footnote.weight(.semibold))
+                        .fontStyle(.footnote)
+                        .fontWeight(.semibold)
                         .foregroundStyle(Color(uiColor: .systemBackground))
                         .padding(4)
                         .background(.primary, in: .circle)

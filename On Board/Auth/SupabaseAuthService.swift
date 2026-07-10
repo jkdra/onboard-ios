@@ -89,6 +89,47 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         return try await requireRefreshedSession()
     }
 
+    func checkEmailExists(email: String) async throws -> EmailStatus {
+        let client = try requireClient()
+        struct CheckEmailRequest: Encodable {
+            let p_email: String
+        }
+        
+        // Fetch raw AnyJSON first to debug what Supabase is actually returning
+        let rawJSON: AnyJSON = try await client.rpc(
+            "check_email_exists",
+            params: CheckEmailRequest(p_email: email)
+        ).execute().value
+        
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+        
+        do {
+            let data = try encoder.encode(rawJSON)
+            let status = try decoder.decode(EmailStatus.self, from: data)
+            return status
+        } catch {
+            print("❌ DECODING FAILED! Raw JSON received from Supabase: \(rawJSON)")
+            print("❌ DECODING ERROR: \(error)")
+            throw error
+        }
+    }
+
+    func signUpWithPassword(email: String, password: String) async throws -> AuthSession? {
+        let client = try requireClient()
+        do {
+            let response = try await client.auth.signUp(email: email, password: password)
+            if let session = response.session {
+                let identities = try await client.auth.userIdentities()
+                return Self.mapSession(session, identities: identities)
+            } else {
+                return nil
+            }
+        } catch {
+            throw Self.mapPasswordError(error)
+        }
+    }
+
     func signInWithPassword(email: String, password: String) async throws -> AuthSession {
         let client = try requireClient()
         do {

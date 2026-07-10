@@ -5,6 +5,16 @@
 
 import Foundation
 
+struct EmailStatus: Codable, Sendable {
+    let exists: Bool
+    let hasPassword: Bool
+    
+    enum CodingKeys: String, CodingKey {
+        case exists
+        case hasPassword = "has_password"
+    }
+}
+
 protocol AuthService: Sendable {
     func signIn(with provider: AuthProvider) async throws -> AuthSession
     func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession
@@ -13,6 +23,8 @@ protocol AuthService: Sendable {
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession
     func sendEmailOTP(email: String) async throws
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession
+    func checkEmailExists(email: String) async throws -> EmailStatus
+    func signUpWithPassword(email: String, password: String) async throws -> AuthSession?
     func signInWithPassword(email: String, password: String) async throws -> AuthSession
     /// Sets (or changes) the password on the signed-in account.
     func setPassword(_ password: String) async throws -> AuthSession

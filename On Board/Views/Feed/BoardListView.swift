@@ -115,17 +115,18 @@ struct BoardListView: View {
             if isJoined {
                 if horizontalSizeClass == .compact {
                     Image(systemName: "chevron.right")
-                        .font(.footnote.weight(.semibold))
+                        .fontStyle(.footnote)
+                        .fontWeight(.semibold)
                         .foregroundStyle(.tertiary)
                 } else {
                     Image(systemName: "checkmark.circle.fill")
                         .foregroundStyle(Color.primary)
-                        .font(.body)
+                        .fontStyle(.body)
                 }
             } else if let members {
                 HStack(spacing: 4) {
                      Image(systemName: "person.3.fill")
-                        .font(.caption2)
+                        .fontStyle(.caption2)
                     Text(members)
                         .fontStyle(.caption)
                 }

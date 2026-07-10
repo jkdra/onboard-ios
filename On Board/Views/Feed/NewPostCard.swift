@@ -29,7 +29,7 @@ struct NewPostCard: View {
                         .fill(.secondary.opacity(0.18))
                         .frame(width: 84, height: 84)
                     Image(systemName: "plus")
-                        .font(.title)
+                        .fontStyle(.title)
                         .foregroundStyle(.secondary)
                 }
             }

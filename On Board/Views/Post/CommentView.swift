@@ -98,6 +98,7 @@ struct CommentView: View {
         HStack(alignment: .top, spacing: 8) {
             TextField("Write a reply…", text: $replyDraft, axis: .vertical)
                 .fontStyle(.callout)
+                .keyboardType(.twitter)
                 .focused($isReplyFocused)
 
             VStack(spacing: 4) {
@@ -108,7 +109,7 @@ struct CommentView: View {
                         ProgressView().scaleEffect(0.8)
                     } else {
                         Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
+                            .fontStyle(.title2)
                             .foregroundStyle(
                                 replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                     ? Color.secondary.opacity(0.4)
@@ -122,7 +123,7 @@ struct CommentView: View {
 
                 Button { onCancelReply?() } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
+                        .fontStyle(.title3)
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
@@ -187,6 +188,7 @@ struct CommentView: View {
                     if isBeingEdited {
                         TextField("Comment", text: $draftCommentBody, axis: .vertical)
                             .fontStyle(.callout)
+                            .keyboardType(.twitter)
                             .foregroundStyle(.primary)
                             .textFieldStyle(.plain)
                             .lineLimit(1...8)

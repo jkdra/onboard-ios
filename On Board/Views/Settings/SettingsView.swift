@@ -173,7 +173,8 @@ struct SettingsView: View {
                 // Signals this row shows external (web) content, even though
                 // it opens in-app rather than handing off to Safari.
                 Image(systemName: "arrow.up.right")
-                    .font(.footnote.weight(.semibold))
+                    .fontStyle(.footnote)
+                    .fontWeight(.semibold)
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }

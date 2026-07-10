@@ -118,6 +118,26 @@ final class AuthStore {
         }
     }
 
+    func signUpWithPassword(email: String, password: String) async throws -> AuthSession? {
+        state = .signingIn(.email)
+        do {
+            let session = try await service.signUpWithPassword(email: email, password: password)
+            if let session {
+                state = .signedIn(session)
+            } else {
+                state = .signedOut
+            }
+            return session
+        } catch {
+            state = .failed(error.localizedDescription)
+            throw error
+        }
+    }
+
+    func checkEmailExists(email: String) async throws -> EmailStatus {
+        return try await service.checkEmailExists(email: email)
+    }
+
     /// Sets or changes the account password. Throws so the settings sheet can
     /// present the failure inline without disturbing the signed-in state.
     func setPassword(_ password: String) async throws {

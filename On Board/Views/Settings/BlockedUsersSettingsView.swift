@@ -43,7 +43,7 @@ struct BlockedUsersSettingsView: View {
                         Button("Unblock") {
                             Task { await unblock(profile) }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.boardSecondary)
                         .tint(.primary)
                     }
                 }

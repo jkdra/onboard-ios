@@ -56,6 +56,8 @@ struct ReportContentSheet: View {
                 Section {
                     TextField("Anything else we should know?", text: $details, axis: .vertical)
                         .fontStyle(.body)
+                        .keyboardType(.default)
+                        .textInputAutocapitalization(.sentences)
                         .lineLimit(3...6)
                     if details.count >= Int(Double(detailsLimit) * 0.8) {
                         Text("\(details.count)/\(detailsLimit)")
@@ -75,7 +77,7 @@ struct ReportContentSheet: View {
                         LoadingButtonLabel("Submit Report", systemImage: "flag.fill", isLoading: isSubmitting)
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.boardPrimary)
                     .tint(.primary)
                     .disabled(reason == nil || isSubmitting || details.count > detailsLimit)
                     .listRowBackground(Color.clear)

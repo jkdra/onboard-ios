@@ -37,5 +37,6 @@ enum BoardRoute: Hashable {
     case archive
     case archivedWeek(BoardWeek)
     case post(Post.ID)
+    case postFromProfile(postID: Post.ID, profileID: UUID)
     case profile(Profile)
 }

@@ -34,7 +34,7 @@ struct NotificationSettingsView: View {
                                 UIApplication.shared.open(url)
                             }
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.boardSecondary)
                         .tint(.primary)
                     }
                     .padding(.vertical, 4)
