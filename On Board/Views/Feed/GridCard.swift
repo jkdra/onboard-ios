@@ -11,6 +11,11 @@ struct GridCard: View {
     var currentUser: Profile?
     var authorProfile: Profile
     var cardNamespace: Namespace.ID? = nil
+    /// Zoom-transition source id. This is the *route* the card navigates to, not the
+    /// bare post id: the feed and a pushed ProfileView show the same posts at the same
+    /// time, so keying on `post.id` would register two sources for one id in the shared
+    /// namespace. `.post` vs `.postFromProfile` keeps them distinct.
+    var transitionID: BoardRoute? = nil
     var cardRotation: Double = 0
     var rotationIntensity: Double = 0.6
     var isLeadingColumn: Bool = false
@@ -42,8 +47,32 @@ struct GridCard: View {
 
     // MARK: - Body
 
+    /// Slack added around the card purely so the zoom-transition source's frame
+    /// contains everything the card *draws*:
+    ///
+    /// * the reaction sticker overhangs the card by 13pt (`Corner.overhangX/Y`) via an
+    ///   `.overlay` + `.offset`, and neither expands a view's frame, so it fell outside
+    ///   the source rect and got clipped mid-transition;
+    /// * `cardRotation` tilts the card, pushing its corners a couple of points past the
+    ///   axis-aligned layout frame.
+    ///
+    /// The matching `.padding(-transitionSourceInset)` below restores the original
+    /// layout footprint, so masonry spacing is untouched.
+    private static let transitionSourceInset: CGFloat = 16
+
     var body: some View {
         cardView
+            // Rotation must be applied *beneath* matchedTransitionSource. When the
+            // source sits inside an ancestor's rotationEffect (it used to live in
+            // BoardFeedView.masonryCell), its screen-space geometry is a rotated quad
+            // that the zoom transition can't represent — during an *interactive* pop,
+            // which re-resolves source geometry every frame, that mismatch shows up as
+            // the card collapsing to a tiny rect before snapping back. A button pop
+            // resolves the geometry once and mostly hides it.
+            .rotationEffect(.degrees(cardRotation))
+            .padding(Self.transitionSourceInset)
+            .matchedTransitionSource(id: transitionID, in: cardNamespace)
+            .padding(-Self.transitionSourceInset)
             .contentShape(.rect)
     }
 
@@ -53,7 +82,6 @@ struct GridCard: View {
             imageBundle
         } else {
             textCard
-                .matchedTransitionSource(id: post.id, in: cardNamespace)
                 .overlay(alignment: stickerCorner.alignment) { stickerPill }
         }
     }
@@ -134,7 +162,6 @@ struct GridCard: View {
                 .overlay(alignment: stickerCorner.alignment) { stickerPill }
                 .zIndex(1)
         }
-        .matchedTransitionSource(id: post.id, in: cardNamespace)
     }
 
     private var imageCounterRotation: Double {
@@ -352,6 +379,7 @@ private struct ReactionDisplayEntry: Equatable {
 struct FeedGridCard: View {
     let postID: UUID
     var cardNamespace: Namespace.ID? = nil
+    var transitionID: BoardRoute? = nil
     var cardRotation: Double = 0
     var isLeadingColumn: Bool = false
     var columnWidth: CGFloat = 0
@@ -366,6 +394,7 @@ struct FeedGridCard: View {
                 currentUser: store.currentUser,
                 authorProfile: store.profile(forAuthor: proxy.post.author),
                 cardNamespace: cardNamespace,
+                transitionID: transitionID,
                 cardRotation: cardRotation,
                 rotationIntensity: rotationIntensity,
                 isLeadingColumn: isLeadingColumn,

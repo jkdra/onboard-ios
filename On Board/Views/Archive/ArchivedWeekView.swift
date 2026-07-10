@@ -10,7 +10,6 @@ struct ArchivedWeekView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.colorScheme) private var scheme
-    @Namespace private var cardNamespace
 
     private let weekFormatter: Date.FormatStyle = .dateTime
         .month(.abbreviated)
@@ -23,10 +22,7 @@ struct ArchivedWeekView: View {
 
     var body: some View {
         ScrollView {
-            BoardFeedView(
-                items: store.feedItems(for: week),
-                cardNamespace: cardNamespace
-            )
+            BoardFeedView(items: store.feedItems(for: week))
         }
         .background {
             LinearGradient(

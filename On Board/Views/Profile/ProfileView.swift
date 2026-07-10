@@ -453,9 +453,12 @@ struct ProfileView: View {
                         .fontStyle(.headline)
                         .padding(.horizontal)
                     
+                    // No cardNamespace override: it comes from the environment so the
+                    // cards register in ContentView's namespace, which is the one
+                    // routeDestination's .zoom reads. profileNamespace stays scoped to
+                    // this screen's matchedGeometryEffect / avatar zoom.
                     BoardFeedView(
                         items: userPosts,
-                        cardNamespace: profileNamespace,
                         originatingProfileID: profile.id
                     )
                 }

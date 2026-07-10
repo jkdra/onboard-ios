@@ -12,11 +12,14 @@ import SwiftUI
 
 struct BoardFeedView: View {
     let items: [FeedItem]
-    var cardNamespace: Namespace.ID
     var onNewPost: (() -> Void)?
     var isResetting: Bool = false
     var originatingProfileID: UUID? = nil
 
+    // Read from the environment rather than taken as a parameter: the zoom
+    // destination lives in ContentView, so every card must register its source in
+    // ContentView's namespace. See EnvironmentValues.cardNamespace.
+    @Environment(\.cardNamespace) private var cardNamespace
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -97,8 +100,12 @@ struct BoardFeedView: View {
     private func masonryCell(item: FeedItem, animationIndex: Int, isLeadingColumn: Bool) -> some View {
         let rot = useRotation ? rotation(for: item) * rotationIntensity : 0
         let flyX: CGFloat = isLeadingColumn ? -320 : 320
+        // No .rotationEffect here. A post card's zoom-transition source lives inside
+        // GridCard, and a source nested under an ancestor rotation resolves to a
+        // rotated quad — which wrecks the interactive (swipe) back transition. GridCard
+        // now applies `cardRotation` itself, beneath its own source. Non-post cards,
+        // which have no transition source, are rotated in feedItemView instead.
         feedItemView(for: item, cardRotation: rot, isLeadingColumn: isLeadingColumn)
-            .rotationEffect(.degrees(rot))
             // Entrance animation
             .opacity(appeared ? 1 : 0)
             .scaleEffect(appeared ? 1 : 0.94)
@@ -160,17 +167,24 @@ struct BoardFeedView: View {
     private func feedItemView(for item: FeedItem, cardRotation: Double = 0, isLeadingColumn: Bool = false) -> some View {
         switch item {
         case .post(let postID, _):
-            NavigationLink(value: originatingProfileID != nil ? BoardRoute.postFromProfile(postID: postID, profileID: originatingProfileID!) : BoardRoute.post(postID)) {
-                FeedGridCard(postID: postID, cardNamespace: cardNamespace, cardRotation: cardRotation, isLeadingColumn: isLeadingColumn, columnWidth: columnWidth)
+            // The route is both the link value and the zoom source id, so the source
+            // a destination looks up is always the exact card that pushed it.
+            let route: BoardRoute = originatingProfileID.map {
+                BoardRoute.postFromProfile(postID: postID, profileID: $0)
+            } ?? .post(postID)
+            NavigationLink(value: route) {
+                FeedGridCard(postID: postID, cardNamespace: cardNamespace, transitionID: route, cardRotation: cardRotation, isLeadingColumn: isLeadingColumn, columnWidth: columnWidth)
             }
             .buttonStyle(.plain)
         case .countdown(let week, let isArchived):
             CountdownCard(week: week, isArchived: isArchived, columnWidth: columnWidth)
+                .rotationEffect(.degrees(cardRotation))
         case .newPost:
             if let onNewPost {
                 Button(action: onNewPost) { NewPostCard(columnWidth: columnWidth) }
                     .buttonStyle(.plain)
                     .accessibilityLabel("New post")
+                    .rotationEffect(.degrees(cardRotation))
             }
         }
     }

@@ -51,6 +51,10 @@ struct ContentView: View {
                 .boardErrorHandling(alertError: $alertError, suppressWhenBoardMissing: true)
                 .presentableErrorAlert(error: $alertError)
         }
+        // Applied outside the NavigationStack so pushed destinations (ProfileView,
+        // ArchivedWeekView) inherit it too. Every BoardFeedView beneath this point
+        // registers its zoom sources in the namespace routeDestination zooms from.
+        .environment(\.cardNamespace, cardNamespace)
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
@@ -122,7 +126,6 @@ struct ContentView: View {
             ScrollView {
                 BoardFeedView(
                     items: feedItems,
-                    cardNamespace: cardNamespace,
                     onNewPost: { showNewPost = true },
                     isResetting: boardIsResetting
                 )
@@ -209,18 +212,21 @@ struct ContentView: View {
             ArchiveView()
         case .archivedWeek(let week):
             ArchivedWeekView(week: week)
+        // sourceID is the route itself, matching the id the pushing card registered.
+        // Keying on the bare postID would be ambiguous while a ProfileView showing the
+        // same post sits on the stack above the feed.
         case .post(let postID):
             if let post = store.post(with: postID) {
                 PostDetailView(post: post)
                     .environment(store)
-                    .navigationTransition(.zoom(sourceID: postID, in: cardNamespace))
+                    .navigationTransition(.zoom(sourceID: route, in: cardNamespace))
             }
         case .postFromProfile(let postID, let profileID):
             if let post = store.post(with: postID) {
                 PostDetailView(post: post)
                     .environment(store)
                     .environment(\.originatingProfileID, profileID)
-                    .navigationTransition(.zoom(sourceID: postID, in: cardNamespace))
+                    .navigationTransition(.zoom(sourceID: route, in: cardNamespace))
             }
         case .profile(let profile):
             ProfileView(profile: profile, presentation: .navigation)
