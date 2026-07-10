@@ -145,7 +145,28 @@ extension SupabaseBoardService {
             .select("following_id")
             .execute()
             .value
-            
+
         return Set(rows.map(\.followingId))
+    }
+
+    /// Direct existence check for a single profile — RLS already scopes `follows`
+    /// reads to rows where you're the follower, so this just asks "does a row for
+    /// this following_id exist," with no dependency on followedUserIDs having been
+    /// refreshed or being fresh.
+    func isFollowing(userID: UUID) async throws -> Bool {
+        struct Row: Decodable {
+            let followingId: UUID
+            enum CodingKeys: String, CodingKey {
+                case followingId = "following_id"
+            }
+        }
+        let rows: [Row] = try await client
+            .from("follows")
+            .select("following_id")
+            .eq("following_id", value: userID.uuidString)
+            .limit(1)
+            .execute()
+            .value
+        return !rows.isEmpty
     }
 }

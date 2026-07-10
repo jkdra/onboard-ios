@@ -258,6 +258,7 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func followUser(id: UUID) async throws {}
     func unfollowUser(id: UUID) async throws {}
     func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
+    func isFollowing(userID: UUID) async throws -> Bool { false }
     func searchTags(query: String) async throws -> [On_Board.Tag] { [] }
 }
 
@@ -898,6 +899,7 @@ struct BoardSwitchRaceTests {
         func unfollowUser(id: UUID) async throws { fatalError("unused") }
         // refresh() fetches followed IDs after every snapshot — must not trap.
         func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
+    func isFollowing(userID: UUID) async throws -> Bool { false }
         func searchTags(query: String) async throws -> [On_Board.Tag] { fatalError("unused") }
     }
 

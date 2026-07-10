@@ -106,6 +106,7 @@ protocol BoardService: Sendable {
     func followUser(id: UUID) async throws
     func unfollowUser(id: UUID) async throws
     func fetchFollowedUserIDs() async throws -> Set<UUID>
+    func isFollowing(userID: UUID) async throws -> Bool
     
     func searchTags(query: String) async throws -> [Tag]
 }

@@ -297,14 +297,23 @@ struct ProfileView: View {
                         .navigationTransition(.zoom(sourceID: "avatarImage", in: profileNamespace))
                 }
             }
-            .task {
-                // followedUserIDs comes from the board-wide refresh cycle, which may
-                // not have run yet (or may be stale) by the time this specific profile
-                // is opened. Re-check against the server on appear so the Follow /
-                // Following button always reflects real state, not a cache that
-                // happens to be behind.
-                guard !canEdit, let currentUserID = store.currentUserID else { return }
-                await store.refreshFollowedUsers(for: currentUserID)
+            .task(id: profile.id) {
+                // Ask directly whether a follows row exists for this one profile,
+                // rather than depending on followedUserIDs from the board-wide
+                // refresh cycle (which may not have run yet — e.g. right after a
+                // cold launch — or may just be stale). A single targeted query is
+                // the actual source of truth here.
+                guard !canEdit, let boardService = store.boardService else { return }
+                do {
+                    if try await boardService.isFollowing(userID: profile.id) {
+                        store.followedUserIDs.insert(profile.id)
+                    } else {
+                        store.followedUserIDs.remove(profile.id)
+                    }
+                } catch {
+                    // Leave whatever's cached — a failed check shouldn't flip a
+                    // correct "Following" state to "Follow".
+                }
             }
             .task {
                 guard popScore == nil, !isLoadingPopScore else { return }
