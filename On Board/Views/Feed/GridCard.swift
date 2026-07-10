@@ -187,18 +187,7 @@ struct GridCard: View {
                 .truncationMode(.tail)
                 
             if !post.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(post.tags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
+                tagsRow
             }
             Spacer(minLength: 0)
             ViewThatFits(in: .horizontal) {
@@ -216,6 +205,47 @@ struct GridCard: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // Tags are unbounded (a post can carry several), but the card is a fixed-width
+    // masonry column with no room to scroll. ViewThatFits tries showing all of them
+    // first, then progressively fewer with a "+N" badge standing in for the rest —
+    // it always lands on the last candidate (a single tag + overflow badge) if
+    // nothing wider fits, so there's never a case with no valid layout.
+    private var tagsRow: some View {
+        // ViewThatFits picks the first candidate that fits; it can't enumerate a
+        // dynamic ForEach as separate candidates, so these are spelled out. Showing
+        // 4 down to 1 covers every real post (samples top out around 3 tags) — if a
+        // post ever had more, several early candidates would just collapse to the
+        // same "N tags + overflow" width and get skipped over harmlessly.
+        ViewThatFits(in: .horizontal) {
+            tagsRow(showing: 4)
+            tagsRow(showing: 3)
+            tagsRow(showing: 2)
+            tagsRow(showing: 1)
+        }
+    }
+
+    private func tagsRow(showing count: Int) -> some View {
+        let shown = post.tags.prefix(count)
+        let overflow = post.tags.count - count
+        return HStack(spacing: 6) {
+            ForEach(Array(shown), id: \.self) { tagChip("#\($0)") }
+            if overflow > 0 {
+                tagChip("+\(overflow)")
+            }
+        }
+    }
+
+    private func tagChip(_ text: String) -> some View {
+        Text(text)
+            .fontStyle(.caption2)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.1))
+            .clipShape(Capsule())
     }
 
     // Feed cards show a timestamp instead of the author — anonymous at a glance. The
