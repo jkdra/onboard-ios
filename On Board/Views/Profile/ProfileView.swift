@@ -298,6 +298,15 @@ struct ProfileView: View {
                 }
             }
             .task {
+                // followedUserIDs comes from the board-wide refresh cycle, which may
+                // not have run yet (or may be stale) by the time this specific profile
+                // is opened. Re-check against the server on appear so the Follow /
+                // Following button always reflects real state, not a cache that
+                // happens to be behind.
+                guard !canEdit, let currentUserID = store.currentUserID else { return }
+                await store.refreshFollowedUsers(for: currentUserID)
+            }
+            .task {
                 guard popScore == nil, !isLoadingPopScore else { return }
                 isLoadingPopScore = true
                 if let boardService = store.boardService {
