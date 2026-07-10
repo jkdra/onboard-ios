@@ -948,3 +948,75 @@ struct NotificationSettingsTests {
         #expect(settings.pushNewPosts == true)
     }
 }
+
+/// `follows` rows round-trip through `BoardJSON`, whose `.convertFromSnakeCase`
+/// strategy camel-cases incoming keys before matching them. A `CodingKeys` entry
+/// spelling out `"following_id"` therefore breaks decoding while leaving encoding
+/// intact — follows write to the DB but never read back, so the Follow button
+/// never flips to "Following". These pin both directions.
+@MainActor
+struct FollowRowCodingTests {
+    @Test func decodesSnakeCaseFollowingIDFromPostgREST() throws {
+        let id = UUID()
+        let json = #"[{"following_id":"\#(id.uuidString)"}]"#.data(using: .utf8)!
+
+        let rows = try BoardJSON.decoder.decode([SupabaseBoardService.FollowRow].self, from: json)
+
+        #expect(rows.count == 1)
+        #expect(rows.first?.followingId == id)
+    }
+
+    @Test func encodesFollowingIDAsSnakeCaseForPostgREST() throws {
+        let id = UUID()
+
+        let data = try BoardJSON.encoder.encode(SupabaseBoardService.FollowRow(followingId: id))
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object.keys.contains("following_id"))
+        #expect(object["following_id"] as? String == id.uuidString)
+    }
+}
+
+/// `fetch_tags_for_week` returns `(post_id, tag_name)`. Same `.convertFromSnakeCase`
+/// trap as `FollowRow` — and the only caller swallows the throw with `try?`, so a
+/// regression here makes every post's tags silently disappear rather than erroring.
+@MainActor
+struct TagRowCodingTests {
+    @Test func decodesSnakeCaseTagRowFromPostgREST() throws {
+        let postID = UUID()
+        let json = #"[{"post_id":"\#(postID.uuidString)","tag_name":"testing"}]"#.data(using: .utf8)!
+
+        let rows = try BoardJSON.decoder.decode([SupabaseBoardService.TagRow].self, from: json)
+
+        #expect(rows.count == 1)
+        #expect(rows.first?.postId == postID)
+        #expect(rows.first?.tagName == "testing")
+    }
+}
+
+/// The `user_settings` upsert body must carry *every* stored column. `pushFollowedPosts`
+/// was absent, so toggling "People You Follow" appeared to work and then reverted.
+@MainActor
+struct NotificationSettingsPayloadTests {
+    @Test func encodesEveryStoredColumnAsSnakeCase() throws {
+        let userID = UUID()
+        let settings = NotificationSettings(
+            pushReactions: true,
+            pushComments: false,
+            pushNewPosts: true,
+            pushFollowedPosts: false
+        )
+
+        let data = try BoardJSON.encoder.encode(
+            SupabaseBoardService.NotificationSettingsPayload(userID: userID, settings: settings)
+        )
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["user_id"] as? String == userID.uuidString)
+        #expect(object["push_reactions"] as? Bool == true)
+        #expect(object["push_comments"] as? Bool == false)
+        #expect(object["push_new_posts"] as? Bool == true)
+        // The regression: this key used to be missing entirely.
+        #expect(object["push_followed_posts"] as? Bool == false)
+    }
+}

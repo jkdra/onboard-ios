@@ -7,6 +7,18 @@ import Foundation
 import Supabase
 
 extension SupabaseBoardService {
+    /// One row of `fetch_tags_for_week` — `(post_id, tag_name)`.
+    ///
+    /// No `CodingKeys`, for the same reason as `FollowRow`: `BoardJSON.decoder`
+    /// applies `.convertFromSnakeCase`, so it camel-cases `post_id`/`tag_name`
+    /// *before* matching. Declaring the snake_case spelling in a `CodingKey`
+    /// throws `keyNotFound` — and because the only caller swallows that with
+    /// `try?`, tags silently vanish instead of surfacing an error.
+    struct TagRow: Decodable, Sendable {
+        let postId: UUID
+        let tagName: String
+    }
+
     func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts {
         async let rows: [RemotePostRow] = client
             .rpc("fetch_posts_for_week", params: ["p_week_id": weekID])
@@ -18,14 +30,6 @@ extension SupabaseBoardService {
             .execute()
             .value
 
-        struct TagRow: Decodable, Sendable {
-            let postId: UUID
-            let tagName: String
-            enum CodingKeys: String, CodingKey {
-                case postId = "post_id"
-                case tagName = "tag_name"
-            }
-        }
         async let tagRows: [TagRow] = client
             .rpc("fetch_tags_for_week", params: ["p_week_id": weekID])
             .execute()

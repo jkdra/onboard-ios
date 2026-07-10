@@ -41,29 +41,54 @@ struct NotificationSettingsView: View {
                 }
             }
             
-            Section {
-                if isLoading {
+            if let loadError {
+                Section {
+                    Label(loadError, systemImage: "exclamationmark.triangle.fill")
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.red)
+                }
+            }
+
+            if isLoading {
+                Section {
                     HStack {
                         Spacer()
                         ProgressView()
                         Spacer()
                     }
-                } else {
-                    Toggle("Reactions", isOn: $settings.pushReactions)
-                        .fontStyle(.body)
-                    Toggle("Comments", isOn: $settings.pushComments)
-                        .fontStyle(.body)
-                    Toggle("New Posts Digest", isOn: $settings.pushNewPosts)
-                        .fontStyle(.body)
-                    Toggle("New Posts from Followed Profiles", isOn: $settings.pushFollowedPosts)
-                        .fontStyle(.body)
                 }
-            } header: {
-                Text("Push Notifications")
-                    .fontStyle(.subheadline)
-            } footer: {
-                Text("Choose which notifications you want to receive.")
-                    .fontStyle(.footnote)
+                .listRowBackground(Color.clear)
+            } else {
+                Section {
+                    settingsToggle("Reactions", isOn: $settings.pushReactions)
+                    settingsToggle("Comments", isOn: $settings.pushComments)
+                } header: {
+                    Text("Your Posts")
+                        .fontStyle(.subheadline)
+                } footer: {
+                    Text("When someone reacts to or comments on something you posted.")
+                        .fontStyle(.footnote)
+                }
+
+                Section {
+                    settingsToggle("New Posts Digest", isOn: $settings.pushNewPosts)
+                } header: {
+                    Text("Board Activity")
+                        .fontStyle(.subheadline)
+                } footer: {
+                    Text("A periodic summary of new posts on your board.")
+                        .fontStyle(.footnote)
+                }
+
+                Section {
+                    settingsToggle("New Posts", isOn: $settings.pushFollowedPosts)
+                } header: {
+                    Text("People You Follow")
+                        .fontStyle(.subheadline)
+                } footer: {
+                    Text("A push as soon as someone you follow posts.")
+                        .fontStyle(.footnote)
+                }
             }
         }
         .navigationTitle("Notifications")
@@ -88,6 +113,17 @@ struct NotificationSettingsView: View {
                 Task { await checkStatus() }
             }
         }
+    }
+
+    /// Matches the toggle idiom in `SettingsView`: the label carries `.fontStyle(.body)`
+    /// (not the Toggle itself) and the switch is tinted `.primary`. Without the tint
+    /// these rendered in the default accent green, which is why they looked subtly
+    /// different from the toggles on the main Settings screen.
+    private func settingsToggle(_ title: String, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Text(title).fontStyle(.body)
+        }
+        .tint(.primary)
     }
 
     private func checkStatus() async {

@@ -60,29 +60,31 @@ extension SupabaseBoardService {
         }
     }
 
-    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {
-        struct Payload: Encodable {
-            let userId: UUID
-            let pushReactions: Bool
-            let pushComments: Bool
-            let pushNewPosts: Bool
+    /// Upsert body for `user_settings`.
+    ///
+    /// No `CodingKeys` — `BoardJSON.encoder` handles camel → snake. Every stored
+    /// column must appear here: `pushFollowedPosts` was previously missing, so the
+    /// "People You Follow" toggle silently never persisted.
+    struct NotificationSettingsPayload: Encodable {
+        let userId: UUID
+        let pushReactions: Bool
+        let pushComments: Bool
+        let pushNewPosts: Bool
+        let pushFollowedPosts: Bool
 
-            enum CodingKeys: String, CodingKey {
-                case userId = "user_id"
-                case pushReactions = "push_reactions"
-                case pushComments = "push_comments"
-                case pushNewPosts = "push_new_posts"
-            }
+        init(userID: UUID, settings: NotificationSettings) {
+            self.userId = userID
+            self.pushReactions = settings.pushReactions
+            self.pushComments = settings.pushComments
+            self.pushNewPosts = settings.pushNewPosts
+            self.pushFollowedPosts = settings.pushFollowedPosts
         }
-        let payload = Payload(
-            userId: userID,
-            pushReactions: settings.pushReactions,
-            pushComments: settings.pushComments,
-            pushNewPosts: settings.pushNewPosts
-        )
+    }
+
+    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {
         try await client
             .from("user_settings")
-            .upsert(payload)
+            .upsert(NotificationSettingsPayload(userID: userID, settings: settings))
             .execute()
     }
     
@@ -103,13 +105,21 @@ extension SupabaseBoardService {
         return counts
     }
     
+    /// A single `follows` row, in both directions.
+    ///
+    /// Deliberately has **no** `CodingKeys`. The shared codecs (`BoardJSON`) apply
+    /// `.convertToSnakeCase` / `.convertFromSnakeCase`, so `followingId` already
+    /// maps to `following_id` on the wire. Spelling the snake_case name out in a
+    /// `CodingKey` silently breaks *decoding*: the strategy camel-cases the
+    /// incoming `following_id` to `followingId` first, then fails to find a
+    /// CodingKey with that string and throws `keyNotFound`. Encoding still works,
+    /// so follows would write to the DB but never read back — which is exactly the
+    /// bug this type was extracted to prevent recurring.
+    struct FollowRow: Codable, Sendable {
+        let followingId: UUID
+    }
+
     func followUser(id: UUID) async throws {
-        struct Payload: Encodable {
-            let followingId: UUID
-            enum CodingKeys: String, CodingKey {
-                case followingId = "following_id"
-            }
-        }
         // upsert, not insert: `follows` has a (follower_id, following_id) primary
         // key, so a plain insert throws a unique-violation whenever local state is
         // stale relative to the server (e.g. followedUserIDs hasn't finished its
@@ -120,7 +130,7 @@ extension SupabaseBoardService {
         // (by design) has no UPDATE policy, so that path is rejected by RLS.
         try await client
             .from("follows")
-            .upsert(Payload(followingId: id), onConflict: "follower_id,following_id", ignoreDuplicates: true)
+            .upsert(FollowRow(followingId: id), onConflict: "follower_id,following_id", ignoreDuplicates: true)
             .execute()
     }
     
@@ -133,14 +143,7 @@ extension SupabaseBoardService {
     }
     
     func fetchFollowedUserIDs() async throws -> Set<UUID> {
-        struct Row: Decodable {
-            let followingId: UUID
-            enum CodingKeys: String, CodingKey {
-                case followingId = "following_id"
-            }
-        }
-        
-        let rows: [Row] = try await client
+        let rows: [FollowRow] = try await client
             .from("follows")
             .select("following_id")
             .execute()
@@ -154,13 +157,7 @@ extension SupabaseBoardService {
     /// this following_id exist," with no dependency on followedUserIDs having been
     /// refreshed or being fresh.
     func isFollowing(userID: UUID) async throws -> Bool {
-        struct Row: Decodable {
-            let followingId: UUID
-            enum CodingKeys: String, CodingKey {
-                case followingId = "following_id"
-            }
-        }
-        let rows: [Row] = try await client
+        let rows: [FollowRow] = try await client
             .from("follows")
             .select("following_id")
             .eq("following_id", value: userID.uuidString)

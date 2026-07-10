@@ -33,22 +33,28 @@ extension BoardStore {
         }
     }
     
+    // `refreshFollowedUsers` replaces `followedUserIDs` wholesale, so a board
+    // refresh whose fetch began before this write committed can land afterwards
+    // and clobber the optimistic change. Re-asserting the confirmed state after
+    // the await settles it regardless of which request finishes last.
     func followUser(id: UUID) async {
         guard let boardService else { return }
         followedUserIDs.insert(id)
         do {
             try await boardService.followUser(id: id)
+            followedUserIDs.insert(id)
         } catch {
             followedUserIDs.remove(id)
             loadError = Self.mapLoadError(error)
         }
     }
-    
+
     func unfollowUser(id: UUID) async {
         guard let boardService else { return }
         followedUserIDs.remove(id)
         do {
             try await boardService.unfollowUser(id: id)
+            followedUserIDs.remove(id)
         } catch {
             followedUserIDs.insert(id)
             loadError = Self.mapLoadError(error)
