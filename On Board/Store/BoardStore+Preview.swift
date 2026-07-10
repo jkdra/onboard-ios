@@ -66,8 +66,18 @@ extension BoardStore {
         let currentPosts = Array(Post.samples.prefix(12)).map {
             $0.assigning(boardWeekId: activeWeek.id, isReadOnly: false)
         }
-        let archivedPosts = Array(Post.samples.suffix(6)).map {
-            $0.assigning(boardWeekId: archivedWeeks[0].id, isReadOnly: true)
+        // Spread the remaining posts across every archived week (2/2/1/1) instead of
+        // dumping them all into the most recent one — otherwise the Archive list shows
+        // three empty weeks, which looks broken rather than just quiet.
+        let remainingPosts = Array(Post.samples.suffix(6))
+        let archivedGroupSizes = [2, 2, 1, 1]
+        var archivedPosts: [Post] = []
+        var cursor = 0
+        for (week, size) in zip(archivedWeeks, archivedGroupSizes) {
+            for post in remainingPosts[cursor..<min(cursor + size, remainingPosts.count)] {
+                archivedPosts.append(post.assigning(boardWeekId: week.id, isReadOnly: true))
+            }
+            cursor += size
         }
 
         let store = BoardStore(
