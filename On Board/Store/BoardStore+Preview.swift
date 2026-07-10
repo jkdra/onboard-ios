@@ -43,7 +43,9 @@ extension BoardStore {
             boardId: mainBoard.id,
             startsAt: weekStart,
             endsAt: nextWeekStart,
-            status: .active
+            status: .active,
+            promptClean: "What's the best album you've listened to this week?",
+            promptProfane: "What's the most badass album you've listened to this week?"
         )
 
         let archivedWeeks: [BoardWeek] = [

@@ -9,6 +9,15 @@ extension Post {
     static let samples: [Post] = [
         sample(
             author: "maya.c",
+            tone: .green,
+            title: "brat by charli xcx is literally album of the year",
+            description: "i cant stop listening. it's been on repeat for 4 days straight and my roommate is begging me to stop playing 360 but i refuse",
+            reactionCounts: [.like: 89, .laugh: 12],
+            comments: Comment.cs241MidtermComments, // Reusing comments for simplicity
+            tags: ["music", "charlixcx"]
+        ),
+        sample(
+            author: "maya.c",
             tone: .orange,
             title: "anyone else fail the cs241 midterm",
             description: "felt like none of that was even in the lectures. avg was 47 according to my TA so maybe the curve carries us. tell me im not alone in this",
@@ -18,7 +27,7 @@ extension Post {
         ),
         sample(
             author: "leokp",
-            tone: .green,
+            tone: .blue,
             title: "selling math239 textbook $40 obo",
             description: "barely used. two pages of highlighter and one (1) coffee ring. dm me, can meet outside dc library",
             reactionCounts: [.like: 15],
@@ -27,7 +36,7 @@ extension Post {
         ),
         sample(
             author: "laylah",
-            tone: .teal,
+            tone: .pink,
             title: "lost: black hydroflask, dc basement",
             description: "covered in stickers, one says 'do not crash'. left it on a table monday around 2am while i was crying over assembly. pls help i need water to live",
             reactionCounts: [.like: 9, .hug: 19],

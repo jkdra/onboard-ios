@@ -65,6 +65,8 @@ struct NewPostView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
+                    WeeklyPromptBanner()
+
                     TextField("Title", text: $title, axis: .vertical)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...3)

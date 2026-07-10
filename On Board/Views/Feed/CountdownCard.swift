@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct CountdownCard: View {
     let week: BoardWeek?
@@ -12,6 +13,19 @@ struct CountdownCard: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
+    @AppStorage("profanityEnabled") private var profanityEnabled = false
+    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @State private var triggerShake = 0
+
+    private var currentPromptText: String? {
+        let activeWeek = week ?? store.activeBoardWeek
+        if profanityEnabled, let profane = activeWeek?.promptProfane, !profane.trimmed.isEmpty {
+            return profane
+        } else if let clean = activeWeek?.promptClean, !clean.trimmed.isEmpty {
+            return clean
+        }
+        return nil
+    }
 
     private var cardHeight: CGFloat {
         if typeSize.isAccessibilitySize { return 300 }
@@ -24,23 +38,40 @@ struct CountdownCard: View {
         .day()
 
     var body: some View {
-        if isArchived {
-            archivedNotice
-        } else {
-            // Tick once a minute for most of the week; only drop to a 1s cadence
-            // inside the final 3 hours, where the seconds counter is actually shown.
-            // Avoids an all-week per-second view rebuild (battery/CPU) for a display
-            // that otherwise only changes each minute.
-            TimelineView(.periodic(from: .now, by: 60)) { minuteContext in
-                let weekEnd = week?.endsAt ?? store.activeBoardWeek?.endsAt
-                let remaining = BoardSchedule.timeRemaining(weekEnd: weekEnd, from: minuteContext.date)
-                if remaining.totalSeconds <= 10800 {
-                    TimelineView(.periodic(from: .now, by: 1)) { secondContext in
-                        activeCountdown(now: secondContext.date)
+        Group {
+            if isArchived {
+                archivedNotice
+            } else {
+                // Tick once a minute for most of the week; only drop to a 1s cadence
+                // inside the final 3 hours, where the seconds counter is actually shown.
+                // Avoids an all-week per-second view rebuild (battery/CPU) for a display
+                // that otherwise only changes each minute.
+                TimelineView(.periodic(from: .now, by: 60)) { minuteContext in
+                    let weekEnd = week?.endsAt ?? store.activeBoardWeek?.endsAt
+                    let remaining = BoardSchedule.timeRemaining(weekEnd: weekEnd, from: minuteContext.date)
+                    if remaining.totalSeconds <= 10800 {
+                        TimelineView(.periodic(from: .now, by: 1)) { secondContext in
+                            activeCountdown(now: secondContext.date)
+                        }
+                    } else {
+                        activeCountdown(now: minuteContext.date)
                     }
-                } else {
-                    activeCountdown(now: minuteContext.date)
                 }
+            }
+        }
+        .keyframeAnimator(initialValue: Double(0), trigger: triggerShake) { content, wobble in
+            content.rotationEffect(.degrees(wobble))
+        } keyframes: { _ in
+            CubicKeyframe(2.5, duration: 0.04)
+            CubicKeyframe(-2.5, duration: 0.05)
+            CubicKeyframe(1.5, duration: 0.05)
+            CubicKeyframe(-1.5, duration: 0.05)
+            CubicKeyframe(0, duration: 0.05)
+        }
+        .onTapGesture {
+            triggerShake += 1
+            if hapticsEnabled {
+                UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             }
         }
     }
@@ -70,16 +101,30 @@ struct CountdownCard: View {
         .background(cardBackground())
     }
 
-    private func countdownConfig(remaining: TimeInterval) -> (title: String, bodyText: String, showRed: Bool) {
+    private func countdownConfig(remaining: TimeInterval) -> (bodyText: String, caption: String, showRed: Bool, isPrompt: Bool) {
         let is12Hours = remaining <= 43200
         let is3Hours = remaining <= 10800
         
+        let caption: String
+        let showRed: Bool
         if is3Hours {
-            return ("Clears soon!", "The board's about to clear! Last chance to react and comment!", true)
+            caption = "Clears soon"
+            showRed = true
         } else if is12Hours {
-            return ("Clears tonight!", "The board clears tonight. Get your final posts in before the reset.", false)
+            caption = "Clears tonight"
+            showRed = false
         } else {
-            return ("Clears Monday", "The board resets every monday at midnight.", false)
+            caption = "Clears Monday"
+            showRed = false
+        }
+        
+        if let prompt = currentPromptText {
+            return (prompt, caption, showRed, true)
+        } else {
+            let defaultText = is3Hours ? "The board's about to clear! Last chance to react and comment!" 
+                            : is12Hours ? "The board clears tonight. Get your final posts in before the reset." 
+                            : "The board resets every monday at midnight."
+            return (defaultText, caption, showRed, false)
         }
     }
 
@@ -90,30 +135,46 @@ struct CountdownCard: View {
         let is3Hours = remaining.totalSeconds <= 10800
         let config = countdownConfig(remaining: remaining.totalSeconds)
 
-        VStack(alignment: .leading, spacing: 8) {
-            Text(config.title)
-                .fontStyle(.title3)
-                .fontWeight(.heavy)
-                .foregroundStyle(.primary)
-            Text(config.bodyText)
-                .fontStyle(.callout)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 0)
-            HStack(alignment: .bottom, spacing: 10) {
-                if !is3Hours {
-                    counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
-                }
-                counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
-                counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
-                if is3Hours {
-                    counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+        ZStack(alignment: .bottomTrailing) {
+            Image("OBLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .opacity(0.12)
+                .offset(x: 8, y: 12)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(config.bodyText)
+                    .fontStyle(.callout)
+                    .fontWeight(config.isPrompt ? .medium : .regular)
+                    .foregroundStyle(.primary) // Higher opacity
+                
+                Spacer(minLength: 0)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(config.caption.uppercased())
+                        .fontStyle(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundStyle(config.showRed ? .red : .secondary)
+                    
+                    HStack(alignment: .bottom, spacing: 10) {
+                        if !is3Hours {
+                            counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
+                        }
+                        counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
+                        counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
+                        if is3Hours {
+                            counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+                        }
+                    }
                 }
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: cardHeight)
         .background(cardBackground(showRed: config.showRed))
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func counterColumn(value: Int, label: String, showRed: Bool) -> some View {
