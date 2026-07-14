@@ -30,6 +30,33 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return !reserved.contains(normalized.lowercased())
     }
 
+    func completeBirthday(birthday: Date, showBirthday: Bool) async throws -> OnboardingStep {
+        try await Task.sleep(for: .milliseconds(180))
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
+            throw OnboardingError.notAuthenticated
+        }
+
+        let minAgeDate = Calendar.current.date(byAdding: .year, value: -16, to: Date())!
+        if birthday > minAgeDate {
+            throw OnboardingError.unknown("You must be at least 16 years old to use On Board.")
+        }
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone.current
+        let dateString = formatter.string(from: birthday)
+
+        var status = loadStatus(for: userID)
+        status = status.updating(
+            birthday: dateString,
+            showBirthday: showBirthday,
+            onboardingStep: .username
+        )
+        save(status, for: userID)
+        return .username
+    }
+
     func completeUsername(_ handle: String) async throws -> OnboardingStep {
         try await Task.sleep(for: .milliseconds(180))
         guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
@@ -129,9 +156,15 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             displayName: status.displayName,
             bio: status.bio,
             avatarUrl: status.avatarUrl,
+            birthday: status.birthday,
+            showBirthday: status.showBirthday,
             onboardingStep: .waitlist,
             onboardingCompletedAt: status.onboardingCompletedAt,
-            waitlistJoinedAt: status.waitlistJoinedAt,
+            // Verifying your .edu is what puts you on the waitlist — mirrors the live
+            // complete_school_email_verification_v2 RPC, which inserts the waitlist
+            // row here. So waitlistJoinedAt is set at verify time, not on a separate
+            // "join" tap (there no longer is one — the waitlist screen just confirms).
+            waitlistJoinedAt: status.waitlistJoinedAt ?? .now,
             verifiedSchoolEmail: normalized,
             pendingSchoolEmail: nil,
             schoolName: match.schoolName,
@@ -148,14 +181,19 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
 
+        // Joining the waitlist does not complete onboarding — only real admission
+        // (setting boardId) does. Mirrors the live join_waitlist() RPC, which used
+        // to mark onboarding_step 'complete' on a bare join and relied entirely on
+        // the client's effectiveOnboardingStep fallback to keep the user parked
+        // here; that fallback being the only thing standing between "joined" and
+        // "treated as fully onboarded" was the bug.
         var status = loadStatus(for: userID)
         status = status.updating(
-            onboardingStep: .complete,
-            onboardingCompletedAt: status.onboardingCompletedAt ?? .now,
+            onboardingStep: .waitlist,
             waitlistJoinedAt: status.waitlistJoinedAt ?? .now
         )
         save(status, for: userID)
-        return .complete
+        return .waitlist
     }
 
     private func loadStatus(for userID: UUID) -> OnboardingStatus {
@@ -197,6 +235,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
                 displayName: profile.displayName,
                 bio: profile.bio,
                 avatarUrl: profile.avatarUrl,
+                birthday: profile.birthday,
+                showBirthday: profile.showBirthday,
                 onboardingStep: .complete,
                 onboardingCompletedAt: profile.joinedAt,
                 waitlistJoinedAt: profile.joinedAt,
@@ -214,7 +254,9 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             displayName: "",
             bio: nil,
             avatarUrl: nil,
-            onboardingStep: .username,
+            birthday: nil,
+            showBirthday: nil,
+            onboardingStep: .birthday,
             onboardingCompletedAt: nil,
             waitlistJoinedAt: nil,
             verifiedSchoolEmail: nil,
@@ -240,6 +282,8 @@ private extension OnboardingStatus {
         displayName: String? = nil,
         bio: String?? = nil,
         avatarUrl: String?? = nil,
+        birthday: String?? = nil,
+        showBirthday: Bool?? = nil,
         onboardingStep: OnboardingStep? = nil,
         onboardingCompletedAt: Date?? = nil,
         waitlistJoinedAt: Date?? = nil,
@@ -255,6 +299,8 @@ private extension OnboardingStatus {
             displayName: displayName ?? self.displayName,
             bio: bio ?? self.bio,
             avatarUrl: avatarUrl ?? self.avatarUrl,
+            birthday: birthday ?? self.birthday,
+            showBirthday: showBirthday ?? self.showBirthday,
             onboardingStep: onboardingStep ?? self.onboardingStep,
             onboardingCompletedAt: onboardingCompletedAt ?? self.onboardingCompletedAt,
             waitlistJoinedAt: waitlistJoinedAt ?? self.waitlistJoinedAt,

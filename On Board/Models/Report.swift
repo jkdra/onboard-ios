@@ -78,8 +78,8 @@ enum ReportTarget: Identifiable {
     var summary: String {
         switch self {
         case .post(let post): "Post: “\(post.title)”"
-        case .comment(let comment, _): "Comment by @\(comment.author)"
-        case .profile(let profile): "Profile: @\(profile.handle)"
+        case .comment(let comment, _): "Comment by \(comment.author)"
+        case .profile(let profile): "Profile: \(profile.handle)"
         }
     }
 }

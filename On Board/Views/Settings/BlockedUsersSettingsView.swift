@@ -28,16 +28,9 @@ struct BlockedUsersSettingsView: View {
             } else {
                 ForEach(profiles) { profile in
                     HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(profile.displayNameOrHandle)
-                                .fontStyle(.headline)
-                            if !profile.displayName.isEmpty {
-                                Text("@\(profile.handle)")
-                                    .fontStyle(.subheadline)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        
+                        Text(profile.handle)
+                            .fontStyle(.headline)
+
                         Spacer()
                         
                         Button("Unblock") {

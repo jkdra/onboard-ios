@@ -114,32 +114,21 @@ extension PostDetailView {
             }
 
             Spacer(minLength: 8)
-
-            Text(livePost.createdAt.boardRelativeAge)
-                .fontStyle(.caption)
-                .foregroundStyle(.secondary)
         }
     }
-    
+
     @ViewBuilder
     private var authorLabel: some View {
         HStack(spacing: 10) {
             AvatarView(profile: authorProfile, size: .small)
             VStack(alignment: .leading, spacing: 1) {
-                if authorProfile.displayName.isEmpty {
-                    Text("@\(authorProfile.handle)")
-                        .fontStyle(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                } else {
-                    Text(authorProfile.displayName)
-                        .fontStyle(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.primary)
-                    Text("@\(authorProfile.handle)")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                Text(authorProfile.handle)
+                    .fontStyle(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.primary)
+                Text(livePost.createdAt.boardRelativeAge)
+                    .fontStyle(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)

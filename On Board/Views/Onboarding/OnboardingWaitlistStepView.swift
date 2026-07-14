@@ -13,13 +13,9 @@ struct OnboardingWaitlistStepView: View {
     @State private var appeared = false
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
 
-    private var hasJoined: Bool {
-        onboarding.status?.waitlistJoinedAt != nil
-    }
-
     var body: some View {
         VStack(spacing: 0) {
-            OnboardingProgressBar(step: 4)
+            OnboardingProgressBar(step: 6, totalSteps: 6)
 
             Spacer()
 
@@ -47,17 +43,16 @@ struct OnboardingWaitlistStepView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .navigationBarBackButtonHidden(true)
         .onAppear {
-            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) {
-                appeared = true
-            }
+            withAnimation(.spring(duration: 0.6, bounce: 0.2).delay(0.05)) { appeared = true }
         }
-        .task(id: hasJoined) {
-            // Poll while parked on the waitlist so admin approval flips the app
-            // to the board without requiring a relaunch. RootView swaps this
-            // view out when status turns complete, cancelling the task.
-            guard hasJoined else { return }
+        .task {
+            // Reaching this screen means the user has verified their .edu and is
+            // already on the waitlist — poll so admin approval flips the app to the
+            // board while they're watching, without a relaunch. RootView swaps this
+            // view out when status turns complete, cancelling the task. 20s keeps the
+            // wait-and-watch latency low; refresh() coalesces, so it stays cheap.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(45))
+                try? await Task.sleep(for: .seconds(20))
                 guard !Task.isCancelled else { break }
                 await onboarding.refresh()
             }
@@ -80,46 +75,49 @@ struct OnboardingWaitlistStepView: View {
     // MARK: - Header icon
 
     private var iconHeader: some View {
-        Group {
-            if hasJoined {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 60, weight: .bold))
-                    .foregroundStyle(.green)
-            } else {
-                BrandLogo(size: 72)
-            }
-        }
-        .animation(.spring(duration: 0.4, bounce: 0.3), value: hasJoined)
+        Image(systemName: "checkmark.circle.fill")
+            .font(.system(size: 60, weight: .bold))
     }
 
     // MARK: - Text
 
     private var textBlock: some View {
         VStack(spacing: 10) {
-            Text(hasJoined ? "You're on the list!" : "You're almost On Board!")
+            Text("You're almost On Board!")
                 .fontStyle(.largeTitle)
                 .fontWeight(.heavy)
                 .multilineTextAlignment(.center)
 
-            Text(
-                hasJoined
-                    ? "We'll send you a notification when your spot opens up. Keep an eye out."
-                    : "On Board is rolling out periodically. Join the waitlist and we'll let you know when you're in."
-            )
-            .fontStyle(.body)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
-            .padding(.horizontal, 8)
+            Text("We'll let you know when your spot opens up. Stay tuned!")
+                .fontStyle(.body)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 8)
         }
     }
 
     // MARK: - Info chips
 
+    /// The signing-up account, adapted from onboarding status into the `Profile`
+    /// shape `AvatarView` consumes (so the waitlist avatar renders identically to
+    /// everywhere else the user's picture appears).
+    private var signupProfile: Profile? {
+        guard let status = onboarding.status else { return nil }
+        return Profile(
+            id: status.id,
+            handle: status.handle,
+            displayName: status.displayName,
+            bio: status.bio,
+            avatarUrl: status.avatarUrl
+        )
+    }
+
     @ViewBuilder
     private var infoChips: some View {
         VStack(spacing: 8) {
             if let schoolName = onboarding.status?.schoolName {
-                Text(schoolName)
+                
+                Label(schoolName, systemImage: "building.columns.fill")
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 14)
@@ -127,12 +125,16 @@ struct OnboardingWaitlistStepView: View {
                     .background(Capsule(style: .continuous).fill(.thinMaterial))
             }
 
-            if let handle = onboarding.status?.handle {
-                Text("@\(handle)")
-                    .fontStyle(.headline)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(Capsule(style: .continuous).fill(.thinMaterial))
+            if let profile = signupProfile {
+                HStack(spacing: 8) {
+                    AvatarView(profile: profile, size: .small)
+                    Text(profile.handle)
+                        .fontStyle(.headline)
+                }
+                .padding(.leading, 6)
+                .padding(.trailing, 16)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(.thinMaterial))
             }
         }
     }
@@ -141,20 +143,17 @@ struct OnboardingWaitlistStepView: View {
 
     @ViewBuilder
     private var actionArea: some View {
-        if !hasJoined {
-            Button {
-                Task { await onboarding.joinWaitlist() }
-            } label: {
-                LoadingButtonLabel("Join the waitlist", systemImage: "bell.badge.fill", isLoading: onboarding.isSubmitting)
-            }
-            .buttonStyle(.boardPrimary)
-            .disabled(onboarding.isSubmitting)
+        if notificationStatus == .authorized || notificationStatus == .provisional {
+            Label("Thanks for enabling notifications!", systemImage: "checkmark.circle.fill")
+                .fontStyle(.subheadline)
+                .foregroundStyle(.secondary)
         } else {
-            if notificationStatus == .authorized || notificationStatus == .provisional {
-                Label("We'll let you know as soon as you're On Board!", systemImage: "checkmark.circle.fill")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
+            VStack(spacing: 12) {
+                Label("Notifications aren't enabled! Turn on notifications so you don't miss the moment your spot opens up!", systemImage: "exclamationmark.triangle.fill")
+                    .fontStyle(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal)
+
                 Button {
                     if notificationStatus == .notDetermined {
                         Task {
@@ -171,8 +170,10 @@ struct OnboardingWaitlistStepView: View {
                         }
                     }
                 } label: {
-                    Label(notificationStatus == .notDetermined ? "Notify me" : "Enable notifications", systemImage: "bell.badge.fill")
-                        .padding(.horizontal, 8)
+                    Label(
+                        notificationStatus == .notDetermined ? "Enable Notifications" : "Open Settings",
+                        systemImage: "bell.badge.fill"
+                    )
                 }
                 .buttonStyle(.boardPrimary)
                 .tint(.primary)

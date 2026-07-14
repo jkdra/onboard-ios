@@ -21,10 +21,12 @@ struct Profile: Identifiable, Hashable, Codable {
     let displayName: String
     let bio: String?
     let avatarUrl: String?
+    let birthday: String?
+    let showBirthday: Bool
     let joinedAt: Date
 
     enum CodingKeys: CodingKey {
-        case id, handle, displayName, bio, avatarUrl, joinedAt, createdAt
+        case id, handle, displayName, bio, avatarUrl, joinedAt, createdAt, birthday, showBirthday
     }
 
     nonisolated init(
@@ -33,6 +35,8 @@ struct Profile: Identifiable, Hashable, Codable {
         displayName: String,
         bio: String? = nil,
         avatarUrl: String? = nil,
+        birthday: String? = nil,
+        showBirthday: Bool = false,
         joinedAt: Date = .now
     ) {
         self.id = id
@@ -40,6 +44,8 @@ struct Profile: Identifiable, Hashable, Codable {
         self.displayName = displayName
         self.bio = bio
         self.avatarUrl = avatarUrl
+        self.birthday = birthday
+        self.showBirthday = showBirthday
         self.joinedAt = joinedAt
     }
 
@@ -57,8 +63,10 @@ struct Profile: Identifiable, Hashable, Codable {
         
         bio = try container.decodeIfPresent(String.self, forKey: .bio)
         
-        // Map avatar_emoji to avatarUrl
         avatarUrl = try container.decodeIfPresent(String.self, forKey: .avatarUrl)
+        
+        birthday = try container.decodeIfPresent(String.self, forKey: .birthday)
+        showBirthday = try container.decodeIfPresent(Bool.self, forKey: .showBirthday) ?? false
         
         // The profiles table stores this as created_at (decoded as createdAt
         // by the snake-case strategy) — joinedAt is only in local fixtures.
@@ -74,6 +82,8 @@ struct Profile: Identifiable, Hashable, Codable {
         try container.encode(displayName, forKey: .displayName)
         try container.encodeIfPresent(bio, forKey: .bio)
         try container.encodeIfPresent(avatarUrl, forKey: .avatarUrl)
+        try container.encodeIfPresent(birthday, forKey: .birthday)
+        try container.encode(showBirthday, forKey: .showBirthday)
         try container.encode(joinedAt, forKey: .joinedAt)
     }
 

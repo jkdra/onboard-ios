@@ -15,9 +15,11 @@ extension Profile {
             displayName: "Maya Chen",
             bio: "second year CS. perpetually one assignment behind.",
             avatarUrl: "https://randomuser.me/api/portraits/women/44.jpg",
+            birthday: "2003-05-14",
+            showBirthday: false,
             joinedAt: Date(timeIntervalSince1970: 1_725_148_800)
         ),
-        Profile(id: SampleProfileID.leo,    handle: "leokp",    displayName: "Leo Park",       bio: "design + caffeine.",                                    avatarUrl: "https://randomuser.me/api/portraits/men/4.jpg"),
+        Profile(id: SampleProfileID.leo,    handle: "leokp",    displayName: "Leo Park",       bio: "design + caffeine.",                                    avatarUrl: "https://randomuser.me/api/portraits/men/4.jpg", birthday: "2002-11-02", showBirthday: false),
         Profile(id: SampleProfileID.layla,  handle: "laylah",   displayName: "Layla Haddad",   bio: "mech eng. building things that occasionally don't catch fire.", avatarUrl: "https://randomuser.me/api/portraits/women/40.jpg"),
         Profile(id: SampleProfileID.daniel, handle: "danielr",  displayName: "Daniel Reyes",   bio: "ranks tims locations by line speed.",                   avatarUrl: "https://randomuser.me/api/portraits/men/7.jpg"),
         Profile(id: SampleProfileID.priya,  handle: "priyas",   displayName: "Priya Singh",    bio: "always down for a study group.",                        avatarUrl: "https://randomuser.me/api/portraits/women/88.jpg"),

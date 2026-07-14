@@ -33,9 +33,9 @@ struct OnboardingUsernameStepView: View {
 
     var body: some View {
         ScrollView {
+            OnboardingProgressBar(step: 2, totalSteps: 6)
+                .safeAreaPadding(.horizontal)
             VStack(alignment: .leading, spacing: 20) {
-                OnboardingProgressBar(step: 1)
-                    .padding(.bottom, 8)
 
                 Text("This is how people will find you on the board.")
                     .fontStyle(.subheadline)

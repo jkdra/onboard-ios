@@ -7,8 +7,8 @@ import SwiftUI
 
 struct ArchiveCalendarView: View {
     let weeks: [BoardWeek]
-    @Environment(BoardStore.self) private var store
 
+    @Environment(BoardStore.self) private var store
     @State private var searchText = ""
 
     private var archivedWeeks: [BoardWeek] {
@@ -45,13 +45,21 @@ struct ArchiveCalendarView: View {
                                 Text(rowLabel(for: week))
                                     .fontStyle(.body)
                                 Spacer()
-                                let count = store.posts(for: week).count
-                                Label("\(count)", systemImage: "doc.text")
+                                Label("\(week.postCount)", systemImage: "doc.text")
                                     .fontStyle(.footnote)
                                     .foregroundStyle(.secondary)
                                     .labelStyle(.titleAndIcon)
                             }
+                            .allowsHitTesting(false)
                         }
+                        .buttonStyle(.plain)
+                        // Start the fetch the instant the row is tapped rather than
+                        // waiting for ArchivedWeekView's .task (which only fires after
+                        // the push/zoom transition has already begun) — by the time the
+                        // transition finishes, posts are often already in flight or done.
+                        .simultaneousGesture(TapGesture().onEnded {
+                            Task { await store.loadArchivedWeek(week, for: store.currentUserID) }
+                        })
                     }
                 } header: {
                     Text(section.title)

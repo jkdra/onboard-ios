@@ -10,7 +10,9 @@ extension BoardStore {
         displayName: String,
         handle: String,
         bio: String?,
-        avatarUrl: String? = nil
+        avatarUrl: String? = nil,
+        birthday: String? = nil,
+        showBirthday: Bool? = nil
     ) async {
         guard let currentUserID else { return }
 
@@ -25,7 +27,9 @@ extension BoardStore {
                 displayName: displayName,
                 handle: handle,
                 bio: bio,
-                avatarUrl: avatarUrl
+                avatarUrl: avatarUrl,
+                birthday: birthday,
+                showBirthday: showBirthday
             )
             upsertProfile(updated)
         } catch {
@@ -33,6 +37,20 @@ extension BoardStore {
         }
     }
     
+    func checkHandleAvailable(_ handle: String) async -> HandleCheckResult {
+        guard let boardService else { return .networkError }
+
+        do {
+            let isAvailable = try await boardService.checkHandleAvailable(handle)
+            return isAvailable ? .available : .taken
+        } catch {
+            if NetworkErrorClassifier.isConnectivityFailure(error) {
+                return .networkError
+            }
+            return .taken
+        }
+    }
+
     // `refreshFollowedUsers` replaces `followedUserIDs` wholesale, so a board
     // refresh whose fetch began before this write committed can land afterwards
     // and clobber the optimistic change. Re-asserting the confirmed state after

@@ -162,19 +162,12 @@ struct CommentView: View {
             VStack(alignment: .leading, spacing: 5) {
                 VStack(alignment: .leading, spacing: 5) {
                     HStack(alignment: .firstTextBaseline) {
-                        Text(authorProfile.displayName.isEmpty ? "@\(authorProfile.handle)" : authorProfile.displayName)
+                        Text(authorProfile.handle)
                             .fontStyle(.caption)
-                            .fontWeight(.bold)
+                            .fontWeight(.heavy)
                             .foregroundStyle(.primary)
                             .lineLimit(1)
                             .truncationMode(.tail)
-                        if !authorProfile.displayName.isEmpty {
-                            Text("@\(authorProfile.handle)")
-                                .fontStyle(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.tail)
-                        }
 
                         Text("· \(comment.createdAt.boardRelativeAge)")
                             .fontStyle(.caption)

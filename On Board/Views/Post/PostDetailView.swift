@@ -213,7 +213,7 @@ struct PostDetailView: View {
             TagSelectionView(selectedTags: $draftTags)
         }
         .confirmationDialog(
-            "Block @\(blockCandidate?.handle ?? "")?",
+            "Block \(blockCandidate?.handle ?? "")?",
             isPresented: Binding(
                 get: { blockCandidate != nil },
                 set: { if !$0 { blockCandidate = nil } }
@@ -221,7 +221,7 @@ struct PostDetailView: View {
             titleVisibility: .visible,
             presenting: blockCandidate
         ) { candidate in
-            Button("Block @\(candidate.handle)", role: .destructive) {
+            Button("Block \(candidate.handle)", role: .destructive) {
                 Task { await blockUser(candidate) }
             }
             Button("Cancel", role: .cancel) {}
@@ -246,6 +246,7 @@ struct PostDetailView: View {
         }
         .navigationBarTitleDisplayMode(.inline)
         .navigationBackDisabled(editMode)
+        .interactiveDismissDisabled(editMode)
         .toolbar { toolbarContent }
         .keyboardDoneToolbar()
         .fullScreenCover(isPresented: $showImageViewer) {

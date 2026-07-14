@@ -33,9 +33,9 @@ struct OnboardingSchoolEmailStepView: View {
 
     var body: some View {
         ScrollView {
+            OnboardingProgressBar(step: 5, totalSteps: 6)
+                .safeAreaPadding(.horizontal)
             VStack(alignment: .leading, spacing: 20) {
-                OnboardingProgressBar(step: 3)
-                    .padding(.bottom, 8)
 
                 Text("Use your .edu email to join your campus board.")
                     .fontStyle(.subheadline)

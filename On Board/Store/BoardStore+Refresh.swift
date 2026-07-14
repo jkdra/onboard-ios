@@ -111,11 +111,19 @@ extension BoardStore {
             return
         }
 
+        // A row-tap prefetch (ArchiveCalendarView) and ArchivedWeekView's own
+        // .task both call this for the same week — only one should actually hit
+        // the network.
+        guard !inFlightArchiveWeekIDs.contains(week.id) else { return }
+        inFlightArchiveWeekIDs.insert(week.id)
+        defer { inFlightArchiveWeekIDs.remove(week.id) }
+
         do {
             let loaded = try await boardService.fetchPosts(forWeek: week.id, userID: userID)
             mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
             cachedArchiveWeekIDs.append(week.id)
             evictOldArchiveWeeksIfNeeded()
+            await loadMissingPostAuthorProfiles(in: loaded.posts)
         } catch {
             loadError = Self.mapLoadError(error)
         }
@@ -151,6 +159,7 @@ extension BoardStore {
                 posts.removeAll { staleIDs.contains($0.id) }
             }
             mergeWeekPosts(loaded.posts, reactions: loaded.userReactions)
+            await loadMissingPostAuthorProfiles(in: loaded.posts)
         } catch {
             // Keep stale cache on network error
         }
@@ -166,9 +175,55 @@ extension BoardStore {
             for (commentID, vote) in thread.userVotes {
                 userCommentVotes[commentID] = vote
             }
+            await loadMissingCommentAuthorProfiles(in: thread.comments)
         } catch {
             loadError = Self.mapLoadError(error)
         }
+    }
+
+    /// `fetch_comments_for_post` only denormalizes each commenter's handle onto
+    /// the row, not their avatar/bio — the same gap `mergeProfiles` already
+    /// closed for post authors. A commenter who hasn't also authored a post in
+    /// the currently-loaded week has no entry in `profiles`, so `profile(forAuthor:)`
+    /// falls back to a stub with no avatar. Batch-fetch and merge in whatever's
+    /// still missing after the comment tree loads.
+    private func loadMissingCommentAuthorProfiles(in comments: [Comment]) async {
+        guard let boardService else { return }
+        let authorIDs = Set(comments.flatMap(commentAuthorIDs))
+        let missingIDs = authorIDs.filter { profile(id: $0) == nil }
+        guard !missingIDs.isEmpty else { return }
+
+        guard let fetched = try? await boardService.fetchProfiles(ids: Array(missingIDs)) else { return }
+        for profile in fetched {
+            upsertProfile(profile)
+        }
+    }
+
+    /// Archived-week posts arrive with only the author's handle denormalized on
+    /// the row (`fetch_posts_for_week` doesn't join `profiles`), so an author who
+    /// didn't also post in the currently-loaded active week has no entry in
+    /// `profiles`. Without this backfill, `profile(forAuthor:)` fabricates a stub
+    /// with a *random* `UUID()` — which then gets used as a real follow target and
+    /// trips the `follows_following_id_fkey` constraint (and shows no avatar).
+    /// Mirrors `loadMissingCommentAuthorProfiles`.
+    private func loadMissingPostAuthorProfiles(in posts: [Post]) async {
+        guard let boardService else { return }
+        let missingIDs = Set(posts.compactMap(\.authorId)).filter { profile(id: $0) == nil }
+        guard !missingIDs.isEmpty else { return }
+
+        guard let fetched = try? await boardService.fetchProfiles(ids: Array(missingIDs)) else { return }
+        for profile in fetched {
+            upsertProfile(profile)
+        }
+    }
+
+    private func commentAuthorIDs(from comment: Comment) -> [UUID] {
+        var ids = [UUID]()
+        if let authorId = comment.authorId { ids.append(authorId) }
+        for reply in comment.replies {
+            ids.append(contentsOf: commentAuthorIDs(from: reply))
+        }
+        return ids
     }
 
     // MARK: - Notification Settings

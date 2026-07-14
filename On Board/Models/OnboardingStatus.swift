@@ -11,6 +11,8 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
     let displayName: String
     let bio: String?
     let avatarUrl: String?
+    let birthday: String?
+    let showBirthday: Bool?
     let onboardingStep: OnboardingStep
     let onboardingCompletedAt: Date?
     let waitlistJoinedAt: Date?
@@ -27,6 +29,10 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
     /// for users that never actually finished onboarding (e.g. a fresh OIDC sign-in
     /// where the profile trigger short-circuits to `complete`).
     var effectiveOnboardingStep: OnboardingStep {
+        if birthday == nil {
+            return .birthday
+        }
+
         guard onboardingStep == .complete else { return onboardingStep }
 
         if HandleRules.isProvisional(handle) {

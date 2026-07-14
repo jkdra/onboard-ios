@@ -16,6 +16,7 @@ struct ArchiveView: View {
                     systemImage: "archivebox",
                     description: Text("Past weeks will show up here after the weekly reset.")
                 )
+                .fontStyle(.title2)
             } else {
                 ArchiveCalendarView(weeks: store.currentBoardWeeks)
             }

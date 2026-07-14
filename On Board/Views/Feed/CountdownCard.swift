@@ -39,9 +39,8 @@ struct CountdownCard: View {
 
     var body: some View {
         Group {
-            if isArchived {
-                archivedNotice
-            } else {
+            if isArchived { archivedNotice }
+            else {
                 // Tick once a minute for most of the week; only drop to a 1s cadence
                 // inside the final 3 hours, where the seconds counter is actually shown.
                 // Avoids an all-week per-second view rebuild (battery/CPU) for a display
@@ -53,9 +52,7 @@ struct CountdownCard: View {
                         TimelineView(.periodic(from: .now, by: 1)) { secondContext in
                             activeCountdown(now: secondContext.date)
                         }
-                    } else {
-                        activeCountdown(now: minuteContext.date)
-                    }
+                    } else { activeCountdown(now: minuteContext.date) }
                 }
             }
         }
@@ -68,6 +65,8 @@ struct CountdownCard: View {
             CubicKeyframe(-1.5, duration: 0.05)
             CubicKeyframe(0, duration: 0.05)
         }
+        .frame(maxWidth: .infinity)
+        .contentShape(.rect)
         .onTapGesture {
             triggerShake += 1
             if hapticsEnabled {
@@ -77,7 +76,7 @@ struct CountdownCard: View {
     }
 
     private var archivedNotice: some View {
-        let text = currentPromptText ?? "This week's posts are read-only. See what people had to say at the time."
+        let text = currentPromptText ?? "There was no pompt that week! Let's see what people shared..."
         
         return ZStack(alignment: .bottomTrailing) {
             Image("OBLogo")
@@ -121,16 +120,16 @@ struct CountdownCard: View {
     }
 
     private func countdownConfig(remaining: TimeInterval) -> (bodyText: String, caption: String, showRed: Bool, isPrompt: Bool) {
-        let is12Hours = remaining <= 43200
+        let is24Hours = remaining <= 86400
         let is3Hours = remaining <= 10800
         
         let caption: String
         let showRed: Bool
         if is3Hours {
-            caption = "Clears soon"
+            caption = "Clears soon!"
             showRed = true
-        } else if is12Hours {
-            caption = "Clears tonight"
+        } else if is24Hours {
+            caption = "Clears tonight!"
             showRed = false
         } else {
             caption = "Clears Monday"
@@ -140,9 +139,7 @@ struct CountdownCard: View {
         if let prompt = currentPromptText {
             return (prompt, caption, showRed, true)
         } else {
-            let defaultText = is3Hours ? "The board's about to clear! Last chance to react and comment!" 
-                            : is12Hours ? "The board clears tonight. Get your final posts in before the reset." 
-                            : "The board resets every monday at midnight."
+            let defaultText = "No prompt this week! Get creative!"
             return (defaultText, caption, showRed, false)
         }
     }

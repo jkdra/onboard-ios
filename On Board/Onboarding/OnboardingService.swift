@@ -61,6 +61,7 @@ enum SchoolLookupResult: Equatable, Sendable {
 
 protocol OnboardingService: Sendable {
     func fetchStatus() async throws -> OnboardingStatus
+    func completeBirthday(birthday: Date, showBirthday: Bool) async throws -> OnboardingStep
     func checkHandleAvailable(_ handle: String) async throws -> Bool
     func completeUsername(_ handle: String) async throws -> OnboardingStep
     func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep

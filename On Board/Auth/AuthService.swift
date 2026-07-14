@@ -8,10 +8,35 @@ import Foundation
 struct EmailStatus: Codable, Sendable {
     let exists: Bool
     let hasPassword: Bool
-    
-    enum CodingKeys: String, CodingKey {
+
+    init(exists: Bool, hasPassword: Bool) {
+        self.exists = exists
+        self.hasPassword = hasPassword
+    }
+
+    // No snake_case raw values: the Supabase client decoder applies
+    // `.convertFromSnakeCase`, which already maps `has_password` → `hasPassword`.
+    // Spelling `has_password` in a CodingKey re-introduces the `keyNotFound`
+    // landmine (see CLAUDE.md) — decoding would look for a key the strategy has
+    // already camel-cased away.
+    enum CodingKeys: CodingKey {
         case exists
-        case hasPassword = "has_password"
+        case hasPassword
+    }
+
+    // `nonisolated` so the Supabase client can decode this off the main actor
+    // (the module defaults conformances to MainActor isolation) — same pattern
+    // as `Profile`.
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        exists = try container.decode(Bool.self, forKey: .exists)
+        hasPassword = try container.decode(Bool.self, forKey: .hasPassword)
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(exists, forKey: .exists)
+        try container.encode(hasPassword, forKey: .hasPassword)
     }
 }
 

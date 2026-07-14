@@ -124,7 +124,7 @@ struct DeleteAccountView: View {
         .navigationTitle("Danger Zone")
         .navigationBarTitleDisplayMode(.inline)
         .alert("Confirm Deletion", isPresented: $showUsernameConfirmation) {
-            TextField("@\(handle)", text: $typedHandle)
+            TextField(handle, text: $typedHandle)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
             Button("Confirm", role: .destructive) {
@@ -135,7 +135,7 @@ struct DeleteAccountView: View {
                 typedHandle = ""
             }
         } message: {
-            Text("Type your username, @\(handle), to confirm.")
+            Text("Type your username, \(handle), to confirm.")
         }
         .alert("Last chance", isPresented: $showFinalWarning) {
             Button("Delete Account", role: .destructive) {

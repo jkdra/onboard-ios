@@ -36,33 +36,29 @@ struct AccountSecuritySettingsView: View {
             traditionalMethodsSection
             thirdPartySection
 
-            Section {
-                securityPlaceholder(
-                    title: "Passkeys",
-                    subtitle: "Sign in without a password",
-                    systemImage: "person.badge.key.fill"
-                )
-                securityPlaceholder(
-                    title: "Two-factor authentication",
-                    subtitle: "Extra protection for your account",
-                    systemImage: "lock.shield.fill"
-                )
-            } header: {
-                Text("Security")
-                    .fontStyle(.subheadline)
-            } footer: {
-                Text("Additional security options are coming soon.")
-                    .fontStyle(.footnote)
-            }
+//            Section {
+//                securityPlaceholder(
+//                    title: "Passkeys",
+//                    subtitle: "Sign in without a password",
+//                    systemImage: "person.badge.key.fill"
+//                )
+//                securityPlaceholder(
+//                    title: "Two-factor authentication",
+//                    subtitle: "Extra protection for your account",
+//                    systemImage: "lock.shield.fill"
+//                )
+//            } header: {
+//                Text("Security")
+//                    .fontStyle(.subheadline)
+//            } footer: {
+//                Text("Additional security options are coming soon.")
+//                    .fontStyle(.footnote)
+//            }
         }
         .navigationTitle("Security")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await refreshMethods()
-        }
-        .refreshable {
-            await refreshMethods()
-        }
+        .task { await refreshMethods() }
+        .refreshable { await refreshMethods() }
         .sheet(isPresented: $showPasswordSheet) {
             SetPasswordView {
                 Task { await refreshMethods() }

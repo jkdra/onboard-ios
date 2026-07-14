@@ -226,7 +226,6 @@ struct SignInView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
                         .fontStyle(.subheadline)
                     Text(otpSentMessage)
                         .fontStyle(.footnote)

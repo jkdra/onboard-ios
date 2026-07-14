@@ -26,6 +26,40 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         return status
     }
 
+    func completeBirthday(birthday: Date, showBirthday: Bool) async throws -> OnboardingStep {
+        let client = try requireClient()
+        
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        // We want to extract the selected YYYY-MM-DD exactly as the user chose it on their device,
+        // without time zone conversions shifting the day. The DatePicker uses the user's local timezone.
+        formatter.timeZone = TimeZone.current
+        let dateString = formatter.string(from: birthday)
+        
+        struct Params: Encodable {
+            let pBirthday: String
+            let pShowBirthday: Bool
+        }
+        
+        do {
+            let step: OnboardingStep = try await client
+                .rpc(
+                    "complete_onboarding_birthday",
+                    params: Params(pBirthday: dateString, pShowBirthday: showBirthday)
+                )
+                .execute()
+                .value
+            return step
+        } catch {
+            if let postgrestError = error as? PostgrestError,
+               postgrestError.message.contains("16 years old") {
+                throw OnboardingError.unknown("You must be at least 16 years old to use On Board.")
+            }
+            throw error
+        }
+    }
+
     func checkHandleAvailable(_ handle: String) async throws -> Bool {
         let normalized = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard HandleRules.isValid(normalized) else { return false }

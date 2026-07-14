@@ -87,8 +87,11 @@ protocol BoardService: Sendable {
         displayName: String,
         handle: String,
         bio: String?,
-        avatarUrl: String?
+        avatarUrl: String?,
+        birthday: String?,
+        showBirthday: Bool?
     ) async throws -> Profile
+    func checkHandleAvailable(_ handle: String) async throws -> Bool
     func reportContent(
         targetType: ReportTargetType,
         targetID: UUID,

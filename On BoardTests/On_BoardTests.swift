@@ -246,7 +246,8 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func updateComment(id: UUID, body: String) async throws {}
     func deleteComment(id: UUID) async throws {}
     func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {}
-    func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { throw BoardServiceError.notConfigured }
+    func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?, birthday: String?, showBirthday: Bool?) async throws -> Profile { throw BoardServiceError.notConfigured }
+    func checkHandleAvailable(_ handle: String) async throws -> Bool { true }
     func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws {}
     func blockUser(blockedID: UUID) async throws {}
     func unblockUser(blockedID: UUID) async throws {}
@@ -541,7 +542,7 @@ struct HandleRulesTests {
 
 @MainActor
 struct MockOnboardingServiceTests {
-    @Test func phoneUserStartsAtUsername() async throws {
+    @Test func phoneUserStartsAtBirthday() async throws {
         let defaults = UserDefaults(suiteName: "MockOnboardingPhone")!
         defaults.removePersistentDomain(forName: "MockOnboardingPhone")
 
@@ -550,7 +551,7 @@ struct MockOnboardingServiceTests {
 
         let onboarding = MockOnboardingService(defaults: defaults)
         let status = try await onboarding.fetchStatus()
-        #expect(status.onboardingStep == .username)
+        #expect(status.onboardingStep == .birthday)
         #expect(status.isComplete == false)
     }
 
@@ -573,11 +574,12 @@ struct MockOnboardingServiceTests {
         _ = try await onboarding.beginSchoolEmailVerification("student@example.edu")
         _ = try await onboarding.completeSchoolEmailVerification("student@example.edu", token: "123456")
         status = try await onboarding.fetchStatus()
+        // Verifying the .edu is what places the user on the waitlist — there is no
+        // separate "join" tap. They stay parked (on the waitlist, not complete)
+        // until an admin admits them and assigns a board.
         #expect(status.onboardingStep == .waitlist)
-
-        _ = try await onboarding.joinWaitlist()
-        status = try await onboarding.fetchStatus()
-        #expect(status.isComplete)
+        #expect(status.isComplete == false)
+        #expect(status.waitlistJoinedAt != nil)
     }
 }
 
@@ -616,6 +618,8 @@ struct OnboardingStoreTests {
             displayName: "",
             bio: nil,
             avatarUrl: nil,
+            birthday: "2000-01-01",
+            showBirthday: false,
             onboardingStep: .complete,
             onboardingCompletedAt: .now,
             waitlistJoinedAt: nil,
@@ -647,6 +651,10 @@ struct OnboardingStalenessTests {
         func fetchStatus() async throws -> OnboardingStatus {
             fetchCount += 1
             return try await inner.fetchStatus()
+        }
+
+        func completeBirthday(birthday: Date, showBirthday: Bool) async throws -> OnboardingStep {
+            try await inner.completeBirthday(birthday: birthday, showBirthday: showBirthday)
         }
 
         func checkHandleAvailable(_ handle: String) async throws -> Bool {
@@ -711,13 +719,13 @@ struct OnboardingCoordinatorTargetPathTests {
     }
 
     @Test func usernameStepProducesUsernamePath() {
-        #expect(OnboardingCoordinator.targetPath(for: .username, isSignedIn: true) == [.username])
+        #expect(OnboardingCoordinator.targetPath(for: .username, isSignedIn: true) == [.birthday, .username])
     }
 
     @Test func waitlistStepProducesFullPath() {
         #expect(
             OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
-                == [.username, .profile, .schoolVerify, .waitlist]
+                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .waitlist]
         )
     }
 
@@ -885,7 +893,8 @@ struct BoardSwitchRaceTests {
         func updateComment(id: UUID, body: String) async throws { fatalError("unused") }
         func deleteComment(id: UUID) async throws { fatalError("unused") }
         func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws { fatalError("unused") }
-        func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?) async throws -> Profile { fatalError("unused") }
+        func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?, birthday: String?, showBirthday: Bool?) async throws -> Profile { fatalError("unused") }
+        func checkHandleAvailable(_ handle: String) async throws -> Bool { fatalError("unused") }
         func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws { fatalError("unused") }
         func blockUser(blockedID: UUID) async throws { fatalError("unused") }
         func unblockUser(blockedID: UUID) async throws { fatalError("unused") }

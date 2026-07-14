@@ -12,13 +12,17 @@ extension SupabaseBoardService {
         displayName: String,
         handle: String,
         bio: String?,
-        avatarUrl: String?
+        avatarUrl: String?,
+        birthday: String?,
+        showBirthday: Bool?
     ) async throws -> Profile {
         struct Params: Encodable {
             let pDisplayName: String
             let pHandle: String
             let pBio: String?
             let pAvatarUrl: String?
+            let pBirthday: String?
+            let pShowBirthday: Bool?
         }
 
         let profile: Profile = try await client
@@ -26,12 +30,24 @@ extension SupabaseBoardService {
                 pDisplayName: displayName,
                 pHandle: handle,
                 pBio: bio,
-                pAvatarUrl: avatarUrl
+                pAvatarUrl: avatarUrl,
+                pBirthday: birthday,
+                pShowBirthday: showBirthday
             ))
             .single()
             .execute()
             .value
         return profile
+    }
+
+    func checkHandleAvailable(_ handle: String) async throws -> Bool {
+        let normalized = handle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard HandleRules.isValid(normalized) else { return false }
+
+        return try await client
+            .rpc("check_handle_available", params: ["p_handle": normalized])
+            .execute()
+            .value
     }
 
     func fetchProfile(id: UUID) async throws -> Profile {

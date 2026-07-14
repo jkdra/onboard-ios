@@ -22,6 +22,10 @@ struct BoardWeek: Identifiable, Hashable, Codable {
     let archivedAt: Date?
     let promptClean: String?
     let promptProfane: String?
+    /// Total posts in this week, from the `list_board_weeks` RPC's aggregate —
+    /// not derived from `BoardStore.posts(for:)`, which is only populated for
+    /// weeks whose feed has actually been opened/fetched.
+    let postCount: Int
 
     var isReadOnly: Bool { status == .archived }
 
@@ -33,7 +37,8 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         status: Status,
         archivedAt: Date? = nil,
         promptClean: String? = nil,
-        promptProfane: String? = nil
+        promptProfane: String? = nil,
+        postCount: Int = 0
     ) {
         self.id = id
         self.boardId = boardId
@@ -43,6 +48,7 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         self.archivedAt = archivedAt
         self.promptClean = promptClean
         self.promptProfane = promptProfane
+        self.postCount = postCount
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -54,6 +60,7 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         case archivedAt
         case promptClean
         case promptProfane
+        case postCount
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -66,5 +73,6 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         promptClean = try container.decodeIfPresent(String.self, forKey: .promptClean)
         promptProfane = try container.decodeIfPresent(String.self, forKey: .promptProfane)
+        postCount = try container.decodeIfPresent(Int.self, forKey: .postCount) ?? 0
     }
 }

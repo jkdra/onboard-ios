@@ -66,7 +66,7 @@ struct RootView: View {
             guard didBootstrap, phase == .active else { return }
             network.recheck()
             guard auth.isSignedIn else { return }
-            Task { await onboarding.refreshIfOnline() }
+            Task { await onboarding.refreshOnForeground() }
         }
     }
 

@@ -76,6 +76,22 @@ final class OnboardingStore {
         await refresh(force: false)
     }
 
+    /// Foreground-refresh policy. A user still in onboarding — most importantly one
+    /// parked on the waitlist — must pick up a server-side change the instant they
+    /// bring the app forward: an admin admission assigns their board and flips them
+    /// to `complete`, and `RootView` reactively swaps in `BoardListView`. So bypass
+    /// the staleness guard until they're fully onboarded (this is also what makes
+    /// tapping the "You're On Board!" push land them straight on their board, since
+    /// the tap foregrounds the app). Fully onboarded users keep the throttled path
+    /// to avoid a status RPC on every foreground.
+    func refreshOnForeground() async {
+        if isComplete {
+            await refreshIfOnline()
+        } else {
+            await refresh(force: true)
+        }
+    }
+
     private func refresh(force: Bool) async {
         guard auth.isSignedIn, let userID = auth.session?.userId else {
             loadState = .idle
@@ -159,6 +175,15 @@ final class OnboardingStore {
                 return .networkError
             }
             return .unsupported
+        }
+    }
+
+    @discardableResult
+    func submitBirthday(birthday: Date, showBirthday: Bool) async -> Bool {
+        await performSubmit {
+            _ = try await service.completeBirthday(birthday: birthday, showBirthday: showBirthday)
+            await refresh(force: true)
+            return status?.onboardingStep != .birthday
         }
     }
 

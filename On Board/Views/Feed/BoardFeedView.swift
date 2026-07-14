@@ -40,11 +40,8 @@ struct BoardFeedView: View {
 
     var body: some View {
         LazyVStack(spacing: 0) {
-            if typeSize.isAccessibilitySize {
-                accessibleStack
-            } else {
-                masonryGrid
-            }
+            if typeSize.isAccessibilitySize { accessibleStack }
+            else { masonryGrid }
         }
         .safeAreaPadding(.bottom, 64)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in

@@ -98,6 +98,9 @@ final class BoardStore {
     static let maxConnectivityRetries = 2
     // Only BoardStore+Refresh.swift touches this (archive LRU bookkeeping).
     var cachedArchiveWeekIDs: [UUID] = []
+    // Prevents a tap-time prefetch and ArchivedWeekView's own .task from firing
+    // two redundant fetches for the same week when they race.
+    @ObservationIgnored var inFlightArchiveWeekIDs: Set<UUID> = []
 
     fileprivate struct FeedItemsCacheKey: Equatable {
         let postSignatures: [String]

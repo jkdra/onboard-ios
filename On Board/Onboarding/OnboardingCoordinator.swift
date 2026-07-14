@@ -19,6 +19,10 @@ struct OnboardingCoordinator: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(AuthStore.self) private var auth
 
+    /// Client-only completion flag for `.contentPreferences` — see that case's
+    /// doc comment on `OnboardingStep` for why this can't live on `OnboardingStatus`.
+    @AppStorage("hasCompletedProfanityStep") private var hasCompletedProfanityStep = false
+
     @State private var path: [OnboardingStep] = []
     @State private var alertError: PresentableAlertError?
     /// Set when the user just completed sign-in so the first push is animated.
@@ -31,7 +35,18 @@ struct OnboardingCoordinator: View {
     @State private var interactiveSignIn = false
 
     private var effectiveStep: OnboardingStep {
-        onboarding.status?.effectiveOnboardingStep ?? .username
+        guard let backendStep = onboarding.status?.effectiveOnboardingStep else { return .birthday }
+        // .contentPreferences has no backing DB state, so it can't come back from
+        // effectiveOnboardingStep — insert it locally once profile is behind the
+        // user and it hasn't been shown yet.
+        if !hasCompletedProfanityStep, Self.rank(backendStep) > Self.rank(.profile) {
+            return .contentPreferences
+        }
+        return backendStep
+    }
+
+    private static func rank(_ step: OnboardingStep) -> Int {
+        OnboardingStep.allCases.firstIndex(of: step) ?? 0
     }
 
     var body: some View {
@@ -39,11 +54,16 @@ struct OnboardingCoordinator: View {
             SignInView()
                 .navigationDestination(for: OnboardingStep.self) { step in
                     switch step {
+                    case .birthday:
+                        OnboardingBirthdayStepView()
+                            .navigationBarBackButtonHidden()
                     case .username:
                         OnboardingUsernameStepView()
                             .navigationBarBackButtonHidden()
                     case .profile:
                         OnboardingProfileStepView()
+                    case .contentPreferences:
+                        OnboardingContentPreferencesStepView()
                     case .schoolVerify:
                         OnboardingSchoolEmailStepView()
                     case .waitlist:
@@ -146,11 +166,13 @@ struct OnboardingCoordinator: View {
         switch step {
         // .complete means onboarding is already done — RootView swaps this whole
         // coordinator out for BoardListView, so there's no step to push to.
-        case .complete:      return []
-        case .username:      return [.username]
-        case .profile:       return [.username, .profile]
-        case .schoolVerify:  return [.username, .profile, .schoolVerify]
-        case .waitlist:      return [.username, .profile, .schoolVerify, .waitlist]
+        case .complete:            return []
+        case .birthday:            return [.birthday]
+        case .username:            return [.birthday, .username]
+        case .profile:             return [.birthday, .username, .profile]
+        case .contentPreferences:  return [.birthday, .username, .profile, .contentPreferences]
+        case .schoolVerify:        return [.birthday, .username, .profile, .contentPreferences, .schoolVerify]
+        case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .waitlist]
         }
     }
 }

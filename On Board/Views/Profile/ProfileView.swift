@@ -27,8 +27,12 @@ struct ProfileView: View {
     @State private var editMode = false
     @State private var draftDisplayName = ""
     @State private var draftHandle = ""
+    @State private var handleAvailability: HandleAvailability = .idle
+    @State private var handleCheckTask: Task<Void, Never>?
     @State private var draftBio = ""
     @State private var draftAvatarUrl: String?
+    @State private var draftBirthday: Date?
+    @State private var draftShowBirthday = false
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
     @State private var isUploadingPhoto = false
@@ -55,227 +59,41 @@ struct ProfileView: View {
         .day()
         .year()
 
+    /// Month + day only — never the year. `showBirthday` opts into displaying the
+    /// day people can wish them happy birthday, not their age.
+    private var formattedBirthday: String? {
+        guard let raw = displayedProfile.birthday else { return nil }
+        guard let date = Self.birthdayFormatter.date(from: raw) else { return nil }
+        return date.formatted(.dateTime.month(.wide).day())
+    }
+
+    private var minBirthdayAgeDate: Date {
+        Calendar.current.date(byAdding: .year, value: -16, to: Date()) ?? Date()
+    }
+
+    // yyyy-MM-dd, matching the profiles.birthday column and the onboarding step's
+    // encoding — POSIX locale so a device's regional calendar can't shift the parse.
+    private static let birthdayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        return formatter
+    }()
+
     var body: some View {
-        ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack(alignment: .center, spacing: 16) {
-                        avatar
-
-                        VStack(alignment: .leading, spacing: 3) {
-                            if !editMode {
-                                // Display name is optional. When absent, promote the
-                                // handle into the title slot instead of leaving a
-                                // blank title line above it. It keeps the "username"
-                                // id (not "displayName") so entering edit mode morphs
-                                // it smoothly into the now-secondary username field;
-                                // the empty display-name field simply fades in above
-                                // it, which reads as "you can add one" rather than a
-                                // glitchy content swap.
-                                if displayedProfile.displayName.isEmpty {
-                                    Text("@\(displayedProfile.handle)")
-                                        .fontStyle(.title)
-                                        .fontWeight(.heavy)
-                                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
-                                } else {
-                                    Text(displayedProfile.displayName)
-                                        .fontStyle(.title)
-                                        .fontWeight(.heavy)
-                                        .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
-                                    Text("@\(displayedProfile.handle)")
-                                        .fontStyle(.subheadline)
-                                        .foregroundStyle(.secondary)
-                                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
-                                }
-                            } else {
-                                TextField("Display Name", text: $draftDisplayName)
-                                    .lineLimit(1)
-                                    .fontStyle(.title)
-                                    .fontWeight(.heavy)
-                                    .keyboardType(.namePhonePad)
-                                    .textContentType(.name)
-                                    .textInputAutocapitalization(.words)
-                                    .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
-                                if draftDisplayName.count >= Int(Double(displayNameLimit) * 0.8) {
-                                    Text("\(draftDisplayName.count)/\(displayNameLimit)")
-                                        .fontStyle(.caption2)
-                                        .foregroundStyle(draftDisplayName.count > displayNameLimit ? Color.red : Color.orange)
-                                        .monospacedDigit()
-                                }
-                                TextField("username", text: $draftHandle)
-                                    .lineLimit(1)
-                                    .fontStyle(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .keyboardType(.asciiCapable)
-                                    .textContentType(.username)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    if !editMode {
-                        if let bio = displayedProfile.bio, !bio.isEmpty {
-                            Text(bio)
-                                .fontStyle(.body)
-                                .foregroundStyle(.primary)
-                                .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
-                        }
-                    } else {
-                        TextField("Bio", text: $draftBio, axis: .vertical)
-                            .fontStyle(.body)
-                            .foregroundStyle(.primary)
-                            .keyboardType(.twitter)
-                            .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
-                        if draftBio.count >= Int(Double(bioLimit) * 0.8) {
-                            Text("\(draftBio.count)/\(bioLimit)")
-                                .fontStyle(.caption2)
-                                .foregroundStyle(draftBio.count > bioLimit ? Color.red : Color.orange)
-                                .monospacedDigit()
-                        }
-                    }
-
-                    HStack(spacing: 6) {
-                        Image(systemName: "calendar")
-                        Text("joined \(displayedProfile.joinedAt.formatted(joinedFormatter).lowercased())")
-                    }
-                    .fontStyle(.footnote)
-                    .foregroundStyle(.secondary)
-                    
-                    if !editMode {
-                        if let popScore {
-                            PopScoreView(score: popScore)
-                                .padding(.top, 8)
-                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
-                        } else if isLoadingPopScore {
-                            ProgressView()
-                                .padding(.top, 8)
-                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
-                        }
-                        
-                        if !canEdit {
-                            let isFollowing = store.followedUserIDs.contains(profile.id)
-                            Button {
-                                Task {
-                                    if isFollowing {
-                                        await store.unfollowUser(id: profile.id)
-                                    } else {
-                                        await store.followUser(id: profile.id)
-                                    }
-                                }
-                            } label: {
-                                Label(
-                                    isFollowing ? "Following" : "Follow",
-                                    systemImage: isFollowing ? "person.fill.checkmark" : "person.badge.plus"
-                                )
-                            }
-                            .buttonStyle(isFollowing ? .boardSecondary : .boardPrimary)
-                            .padding(.top, 8)
-                            .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .safeAreaPadding()
-                
-                if !editMode {
-                    userPostsSection
-                }
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background {
-                AnimatedStripesView(isActive: editMode)
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if editMode {
-                    Text("Tap any element to edit.")
-                        .fontStyle(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                }
-            }
-            .navigationBackDisabled(editMode)
-            .interactiveDismissDisabled(editMode)
-            .keyboardDoneToolbar()
-            .toolbar {
-                if editMode {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button { cancelEditing() } label: {
-                            Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
-                        }
-                    }
-                    ToolbarItem(placement: .principal) {
-                        EditingIndicator()
-                            .fontStyle(.title3)
-                            .fixedSize()
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button { saveProfile() } label: {
-                            Label("Save", systemImage: "checkmark").fontWeight(.semibold)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(draftDisplayName.count > displayNameLimit || draftBio.count > bioLimit)
-                    }
-                } else {
-                    if presentation == .sheet {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
-                        }
-                    }
-                    if canEdit {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button { beginEditing() } label: { Label("Edit", systemImage: "pencil").fontWeight(.semibold) }
-                        }
-                    } else {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Menu {
-                                Button {
-                                    reportTarget = .profile(displayedProfile)
-                                } label: {
-                                    Label("Report Profile", systemImage: "flag")
-                                }
-                                if store.isBlocked(userID: displayedProfile.id) {
-                                    Button {
-                                        Task { await unblockUser() }
-                                    } label: {
-                                        Label("Unblock @\(displayedProfile.handle)", systemImage: "hand.raised.slash")
-                                    }
-                                } else {
-                                    Button(role: .destructive) {
-                                        blockCandidate = BlockCandidate(
-                                            userID: displayedProfile.id,
-                                            handle: displayedProfile.handle
-                                        )
-                                    } label: {
-                                        Label("Block", systemImage: "hand.raised")
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "ellipsis").fontWeight(.semibold)
-                            }
-                            .disabled(isUpdatingBlock)
-                        }
-                    }
-                }
-            }
+        // Presentation modifiers split off from the layout chain (`profileScroll`)
+        // so neither expression alone exceeds the Swift type-checker's budget.
+        profileScroll
             .sheet(item: $reportTarget) { target in
                 ReportContentSheet(target: target)
             }
-            .confirmationDialog(
-                "Block @\(blockCandidate?.handle ?? "")?",
-                isPresented: Binding(
-                    get: { blockCandidate != nil },
-                    set: { if !$0 { blockCandidate = nil } }
-                ),
-                titleVisibility: .visible,
-                presenting: blockCandidate
-            ) { candidate in
-                Button("Block @\(candidate.handle)", role: .destructive) {
+            .alert("Block \(blockCandidate?.handle ?? "")?", isPresented: Binding(
+                get: { blockCandidate != nil },
+                set: { if !$0 { blockCandidate = nil } }
+            ), presenting: blockCandidate) { candidate in
+                Button("Block \(candidate.handle)", role: .destructive) {
                     Task { await blockUser(candidate) }
                 }
-                Button("Cancel", role: .cancel) {}
             } message: { _ in
                 Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
             }
@@ -338,6 +156,261 @@ struct ProfileView: View {
                 isLoadingPopScore = false
             }
             .presentableErrorAlert(error: $alertError)
+    }
+
+    private var profileScroll: some View {
+        ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(alignment: .center, spacing: 16) {
+                        avatar
+                        identityHeader
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    bioSection
+
+                    HStack(spacing: 6) {
+                        Image(systemName: "calendar")
+                        Text("joined \(displayedProfile.joinedAt.formatted(joinedFormatter).lowercased())")
+                    }
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+
+                    birthdaySection
+
+                    if !editMode {
+                        if let popScore {
+                            PopScoreView(score: popScore)
+                                .padding(.top, 8)
+                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                        } else if isLoadingPopScore {
+                            ProgressView()
+                                .padding(.top, 8)
+                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                        }
+                        
+                        if !canEdit {
+                            followButton
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .safeAreaPadding()
+                
+                if !editMode {
+                    userPostsSection
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background {
+                AnimatedStripesView(isActive: editMode)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if editMode {
+                    Text("Tap any element to edit.")
+                        .fontStyle(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+            }
+            .navigationBackDisabled(editMode)
+            .interactiveDismissDisabled(editMode)
+            .keyboardDoneToolbar()
+            .toolbar { profileToolbar }
+    }
+
+    // The identity/bio/birthday blocks and the follow button are pulled out of
+    // `body` to keep that expression within the Swift type-checker's complexity
+    // budget — inline, it tipped into an "unable to type-check in reasonable time"
+    // failure once the birthday editor was added. Pure extraction, no behavior
+    // change.
+    @ToolbarContentBuilder
+    private var profileToolbar: some ToolbarContent {
+        if editMode {
+            ToolbarItem(placement: .topBarLeading) {
+                Button { cancelEditing() } label: {
+                    Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
+                }
+            }
+            ToolbarItem(placement: .principal) {
+                EditingIndicator()
+                    .fontStyle(.title3)
+                    .fixedSize()
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { saveProfile() } label: {
+                    Label("Save", systemImage: "checkmark").fontWeight(.semibold)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSaveProfile)
+            }
+        } else {
+            if presentation == .sheet {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
+                }
+            }
+            if canEdit {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { beginEditing() } label: { Label("Edit", systemImage: "pencil").fontWeight(.semibold) }
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button {
+                            reportTarget = .profile(displayedProfile)
+                        } label: {
+                            Label("Report Profile", systemImage: "flag")
+                        }
+                        if store.isBlocked(userID: displayedProfile.id) {
+                            Button {
+                                Task { await unblockUser() }
+                            } label: {
+                                Label("Unblock \(displayedProfile.handle)", systemImage: "hand.raised.slash")
+                            }
+                        } else {
+                            Button(role: .destructive) {
+                                blockCandidate = BlockCandidate(
+                                    userID: displayedProfile.id,
+                                    handle: displayedProfile.handle
+                                )
+                            } label: {
+                                Label("Block", systemImage: "hand.raised")
+                            }
+                            .tint(.red)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").fontWeight(.semibold)
+                    }
+                    .disabled(isUpdatingBlock)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var identityHeader: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if !editMode {
+                // Display name is optional. When absent, promote the handle into the
+                // title slot instead of leaving a blank title line above it. It keeps
+                // the "username" id (not "displayName") so entering edit mode morphs
+                // it smoothly into the now-secondary username field; the empty
+                // display-name field simply fades in above it, which reads as "you can
+                // add one" rather than a glitchy content swap.
+                if displayedProfile.displayName.isEmpty {
+                    Text(displayedProfile.handle)
+                        .fontStyle(.title)
+                        .fontWeight(.heavy)
+                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                } else {
+                    Text(displayedProfile.displayName)
+                        .fontStyle(.title)
+                        .fontWeight(.heavy)
+                        .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                    Text(displayedProfile.handle)
+                        .fontStyle(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                }
+            } else {
+                TextField("Display Name", text: $draftDisplayName)
+                    .lineLimit(1)
+                    .fontStyle(.title)
+                    .fontWeight(.heavy)
+                    .keyboardType(.namePhonePad)
+                    .textContentType(.name)
+                    .textInputAutocapitalization(.words)
+                    .matchedGeometryEffect(id: "displayName", in: profileNamespace, anchor: .leading)
+                if draftDisplayName.count >= Int(Double(displayNameLimit) * 0.8) {
+                    Text("\(draftDisplayName.count)/\(displayNameLimit)")
+                        .fontStyle(.caption2)
+                        .foregroundStyle(draftDisplayName.count > displayNameLimit ? Color.red : Color.orange)
+                        .monospacedDigit()
+                }
+                TextField("username", text: $draftHandle)
+                    .lineLimit(1)
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .keyboardType(.asciiCapable)
+                    .textContentType(.username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .matchedGeometryEffect(id: "username", in: profileNamespace, anchor: .leading)
+                    .onChange(of: draftHandle) { _, _ in
+                        scheduleHandleAvailabilityCheck()
+                    }
+                handleAvailabilityLabel
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var bioSection: some View {
+        if !editMode {
+            if let bio = displayedProfile.bio, !bio.isEmpty {
+                Text(bio)
+                    .fontStyle(.body)
+                    .foregroundStyle(.primary)
+                    .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
+            }
+        } else {
+            TextField("Bio", text: $draftBio, axis: .vertical)
+                .fontStyle(.body)
+                .foregroundStyle(.primary)
+                .keyboardType(.twitter)
+                .matchedGeometryEffect(id: "bio", in: profileNamespace, anchor: .leading)
+            if draftBio.count >= Int(Double(bioLimit) * 0.8) {
+                Text("\(draftBio.count)/\(bioLimit)")
+                    .fontStyle(.caption2)
+                    .foregroundStyle(draftBio.count > bioLimit ? Color.red : Color.orange)
+                    .monospacedDigit()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var birthdaySection: some View {
+        if !editMode {
+            if displayedProfile.showBirthday, let birthday = formattedBirthday {
+                HStack(spacing: 6) {
+                    Image(systemName: "birthday.cake")
+                    Text(birthday)
+                }
+                .fontStyle(.footnote)
+                .foregroundStyle(.secondary)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 10) {
+                BirthdayGraphicalPicker(date: $draftBirthday, maximumDate: minBirthdayAgeDate)
+                Toggle("Show month and day on my profile", isOn: $draftShowBirthday)
+                    .fontStyle(.body)
+                    .tint(.primary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var followButton: some View {
+        let isFollowing = store.followedUserIDs.contains(profile.id)
+        Button {
+            Task {
+                if isFollowing {
+                    await store.unfollowUser(id: profile.id)
+                } else {
+                    await store.followUser(id: profile.id)
+                }
+            }
+        } label: {
+            Label(
+                isFollowing ? "Following" : "Follow",
+                systemImage: isFollowing ? "person.fill.checkmark" : "person.badge.plus"
+            )
+        }
+        .buttonStyle(isFollowing ? .boardSecondary : .boardPrimary)
+        .padding(.top, 8)
+        .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
     }
 
     private var avatar: some View {
@@ -403,14 +476,60 @@ struct ProfileView: View {
         }
     }
 
+    private enum HandleAvailability: Equatable {
+        case idle
+        case checking
+        case available
+        case unavailable
+        case invalid
+        case offline
+    }
+
+    @ViewBuilder
+    private var handleAvailabilityLabel: some View {
+        switch handleAvailability {
+        case .idle, .available:
+            EmptyView()
+        case .checking:
+            Label("Checking availability…", systemImage: "ellipsis")
+                .fontStyle(.caption2)
+                .foregroundStyle(.secondary)
+        case .unavailable:
+            Label("Already taken", systemImage: "xmark.circle.fill")
+                .fontStyle(.caption2)
+                .foregroundStyle(.red)
+        case .invalid:
+            Label("2–32 characters: letters, numbers, . or _", systemImage: "exclamationmark.circle.fill")
+                .fontStyle(.caption2)
+                .foregroundStyle(.orange)
+        case .offline:
+            Label("Offline — connect to check availability", systemImage: "wifi.slash")
+                .fontStyle(.caption2)
+                .foregroundStyle(.orange)
+        }
+    }
+
     private func beginEditing() {
         draftDisplayName = displayedProfile.displayName
         draftHandle = displayedProfile.handle
+        // Your own current handle is always valid/available — no need to
+        // round-trip a check before the user has actually changed anything.
+        handleAvailability = .available
         draftBio = displayedProfile.bio ?? ""
         draftAvatarUrl = displayedProfile.avatarUrl
+        draftBirthday = displayedProfile.birthday.flatMap { Self.birthdayFormatter.date(from: $0) }
+        draftShowBirthday = displayedProfile.showBirthday
         selectedPhotoData = nil
         selectedPhotoItem = nil
         withAnimation(.smooth(duration: 0.3)) { editMode = true }
+    }
+
+    private var canSaveProfile: Bool {
+        draftDisplayName.count <= displayNameLimit
+            && draftBio.count <= bioLimit
+            && HandleRules.isValid(draftHandle.trimmed)
+            && handleAvailability == .available
+            && draftBirthday != nil
     }
 
     private func saveProfile() {
@@ -419,13 +538,50 @@ struct ProfileView: View {
                 displayName: draftDisplayName.trimmed,
                 handle: draftHandle.trimmed,
                 bio: draftBio.trimmed.isEmpty ? nil : draftBio.trimmed,
-                avatarUrl: draftAvatarUrl
+                avatarUrl: draftAvatarUrl,
+                birthday: draftBirthday.map { Self.birthdayFormatter.string(from: $0) },
+                showBirthday: draftShowBirthday
             )
             withAnimation(.smooth(duration: 0.3)) { editMode = false }
         }
     }
 
+    private func scheduleHandleAvailabilityCheck() {
+        handleCheckTask?.cancel()
+        let candidate = draftHandle.trimmed
+
+        if candidate == displayedProfile.handle {
+            handleAvailability = .available
+            return
+        }
+
+        guard !candidate.isEmpty else {
+            handleAvailability = .invalid
+            return
+        }
+
+        guard HandleRules.isValid(candidate) else {
+            handleAvailability = .invalid
+            return
+        }
+
+        handleAvailability = .checking
+        handleCheckTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+
+            let result = await store.checkHandleAvailable(candidate)
+            guard !Task.isCancelled, draftHandle.trimmed == candidate else { return }
+            switch result {
+            case .available: handleAvailability = .available
+            case .taken: handleAvailability = .unavailable
+            case .networkError: handleAvailability = .offline
+            }
+        }
+    }
+
     private func cancelEditing() {
+        handleCheckTask?.cancel()
         selectedPhotoData = nil
         selectedPhotoItem = nil
         draftAvatarUrl = nil
