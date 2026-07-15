@@ -18,7 +18,7 @@ struct CacheEnvelope: Codable {
 
     let schemaVersion: Int
     let cachedAt: Date
-    let boardID: UUID
+    let boardId: UUID
     let snapshot: BoardSnapshot
     let archivedWeeks: [BoardWeek]
     let popScores: [UUID: [Reaction: Int]]

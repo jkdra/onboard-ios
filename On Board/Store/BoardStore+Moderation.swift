@@ -83,6 +83,10 @@ extension BoardStore {
 
         do {
             try await boardService.blockUser(blockedID: userID)
+            // A force-quit right after blocking must not leave stale
+            // (unblocked) content cached — don't rely solely on the next
+            // natural refresh to capture this.
+            persistToDisk()
         } catch {
             blockedUserIDs = priorBlocked
             posts = priorPosts
@@ -99,6 +103,7 @@ extension BoardStore {
         blockedUserIDs.remove(userID)
         do {
             try await boardService.unblockUser(blockedID: userID)
+            persistToDisk()
         } catch {
             blockedUserIDs = priorBlocked
             throw error

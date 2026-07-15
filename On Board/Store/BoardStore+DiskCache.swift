@@ -28,7 +28,7 @@ extension BoardStore {
         guard let data = try? Data(contentsOf: Self.cacheFileURL),
               let envelope = try? BoardJSON.decoder.decode(CacheEnvelope.self, from: data),
               envelope.schemaVersion == CacheEnvelope.currentSchemaVersion,
-              envelope.boardID == boardID
+              envelope.boardId == boardID
         else {
             try? FileManager.default.removeItem(at: Self.cacheFileURL)
             return
@@ -58,7 +58,7 @@ extension BoardStore {
         let envelope = CacheEnvelope(
             schemaVersion: CacheEnvelope.currentSchemaVersion,
             cachedAt: .now,
-            boardID: activeBoardWeek.boardId,
+            boardId: activeBoardWeek.boardId,
             snapshot: snapshot,
             archivedWeeks: archivedWeeks,
             popScores: popScores,

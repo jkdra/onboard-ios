@@ -415,7 +415,7 @@ extension BoardStoreTests {
         let staleEnvelope = CacheEnvelope(
             schemaVersion: CacheEnvelope.currentSchemaVersion + 1,
             cachedAt: .now,
-            boardID: boardID,
+            boardId: boardID,
             snapshot: BoardSnapshot(week: week, posts: [], profiles: [], userReactions: [:]),
             archivedWeeks: [],
             popScores: [:],
@@ -453,6 +453,50 @@ extension BoardStoreTests {
 
         store.clearDiskCache()
         #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
+    }
+
+    @Test @MainActor func refreshHydratesFromDiskBeforeNetworkFails() async {
+        let boardID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(86_400 * 7),
+            status: .active
+        )
+        let profile = Profile.samples[0]
+        let post = Post(
+            authorId: profile.id,
+            boardWeekId: week.id,
+            title: "cached",
+            description: "d",
+            author: profile.handle
+        )
+        let writer = BoardStore(
+            posts: [post],
+            profiles: [profile],
+            activeBoardWeek: week,
+            boardWeeks: [week],
+            currentBoard: Board(id: boardID, name: "Test")
+        )
+        writer.persistToDisk()
+        defer { writer.clearDiskCache() }
+
+        let reader = BoardStore(
+            posts: [],
+            profiles: [],
+            currentUserID: UUID(),
+            currentBoard: Board(id: boardID, name: "Test"),
+            boardService: MockBoardService()
+        )
+
+        // MockBoardService.loadActiveBoard always throws .notConfigured. Without
+        // the hydrate-before-check wiring this task adds, reader.posts would stay
+        // empty since apply() only ever writes on success.
+        await reader.refresh(for: reader.currentUserID)
+
+        #expect(reader.activeBoardWeek?.boardId == boardID)
+        #expect(reader.posts.contains { $0.id == post.id })
+        #expect(reader.loadError != nil)
     }
 }
 
@@ -1110,7 +1154,7 @@ struct CacheEnvelopeCodingTests {
         let envelope = CacheEnvelope(
             schemaVersion: CacheEnvelope.currentSchemaVersion,
             cachedAt: .now,
-            boardID: boardID,
+            boardId: boardID,
             snapshot: BoardSnapshot(
                 week: week,
                 posts: [post],
@@ -1128,7 +1172,7 @@ struct CacheEnvelopeCodingTests {
         let decoded = try BoardJSON.decoder.decode(CacheEnvelope.self, from: data)
 
         #expect(decoded.schemaVersion == envelope.schemaVersion)
-        #expect(decoded.boardID == boardID)
+        #expect(decoded.boardId == boardID)
         #expect(decoded.snapshot.week.id == week.id)
         #expect(decoded.snapshot.posts.first?.id == post.id)
         #expect(decoded.popScores[profile.id]?[.like] == 3)

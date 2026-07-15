@@ -47,6 +47,11 @@ extension BoardStore {
             await inFlight.value
         }
 
+        // A warm hydration below can make hasCachedFeed true "for free," which
+        // is exactly how a relaunch skips the loading spinner without any
+        // change to the gating logic itself.
+        hydrateFromDiskIfNeeded(boardID: boardID)
+
         // Only treat the cache as warm when it belongs to the board being fetched —
         // on a board switch the old board's feed must not suppress the loading state.
         let hasCachedFeed = activeBoardWeek?.boardId == boardID && !posts.isEmpty
@@ -71,6 +76,7 @@ extension BoardStore {
                         offset: 0
                     )
                     apply(try await snapshot, incomingArchivedWeeks: try await archivedWeeks)
+                    persistToDisk()
                     await refreshAccessibleBoards(for: userID)
                     await refreshBlockedUsers(for: userID)
                     await refreshFollowedUsers(for: userID)
