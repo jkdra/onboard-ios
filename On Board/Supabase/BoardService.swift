@@ -8,7 +8,7 @@
 
 import Foundation
 
-struct BoardSnapshot: Sendable {
+struct BoardSnapshot: Sendable, Codable {
     let week: BoardWeek
     let posts: [Post]
     let profiles: [Profile]
