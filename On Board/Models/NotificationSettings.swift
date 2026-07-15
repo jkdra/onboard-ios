@@ -49,3 +49,19 @@ extension NotificationSettings: Codable {
         try container.encode(pushFollowedPosts, forKey: .pushFollowedPosts)
     }
 }
+
+extension NotificationSettings {
+    func updating(
+        pushReactions: Bool? = nil,
+        pushComments: Bool? = nil,
+        pushNewPosts: Bool? = nil,
+        pushFollowedPosts: Bool? = nil
+    ) -> NotificationSettings {
+        NotificationSettings(
+            pushReactions: pushReactions ?? self.pushReactions,
+            pushComments: pushComments ?? self.pushComments,
+            pushNewPosts: pushNewPosts ?? self.pushNewPosts,
+            pushFollowedPosts: pushFollowedPosts ?? self.pushFollowedPosts
+        )
+    }
+}

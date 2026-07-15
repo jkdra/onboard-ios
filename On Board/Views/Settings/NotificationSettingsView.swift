@@ -10,9 +10,6 @@ struct NotificationSettingsView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var settings = NotificationSettings()
-    @State private var isLoading = true
-    @State private var isSaving = false
     @State private var loadError: String?
     @State private var authorizationStatus: UNAuthorizationStatus = .notDetermined
 
@@ -24,11 +21,11 @@ struct NotificationSettingsView: View {
                         Label("Notifications Disabled", systemImage: "bell.slash.fill")
                             .fontStyle(.headline)
                             .foregroundStyle(.red)
-                        
+
                         Text("You won't receive any push notifications because they are disabled in iOS Settings. Tap below to enable them.")
                             .fontStyle(.subheadline)
                             .foregroundStyle(.secondary)
-                        
+
                         Button("Open Settings") {
                             if let url = URL(string: UIApplication.openSettingsURLString) {
                                 UIApplication.shared.open(url)
@@ -40,7 +37,7 @@ struct NotificationSettingsView: View {
                     .padding(.vertical, 4)
                 }
             }
-            
+
             if let loadError {
                 Section {
                     Label(loadError, systemImage: "exclamationmark.triangle.fill")
@@ -49,19 +46,16 @@ struct NotificationSettingsView: View {
                 }
             }
 
-            if isLoading {
+            if let settings = store.notificationSettings {
                 Section {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                }
-                .listRowBackground(Color.clear)
-            } else {
-                Section {
-                    settingsToggle("Reactions", isOn: $settings.pushReactions)
-                    settingsToggle("Comments", isOn: $settings.pushComments)
+                    settingsToggle("Reactions", isOn: Binding(
+                        get: { settings.pushReactions },
+                        set: { store.setNotificationSettings(settings.updating(pushReactions: $0)) }
+                    ))
+                    settingsToggle("Comments", isOn: Binding(
+                        get: { settings.pushComments },
+                        set: { store.setNotificationSettings(settings.updating(pushComments: $0)) }
+                    ))
                 } header: {
                     Text("Your Posts")
                         .fontStyle(.subheadline)
@@ -71,7 +65,10 @@ struct NotificationSettingsView: View {
                 }
 
                 Section {
-                    settingsToggle("New Posts Digest", isOn: $settings.pushNewPosts)
+                    settingsToggle("New Posts Digest", isOn: Binding(
+                        get: { settings.pushNewPosts },
+                        set: { store.setNotificationSettings(settings.updating(pushNewPosts: $0)) }
+                    ))
                 } header: {
                     Text("Board Activity")
                         .fontStyle(.subheadline)
@@ -81,7 +78,10 @@ struct NotificationSettingsView: View {
                 }
 
                 Section {
-                    settingsToggle("New Posts", isOn: $settings.pushFollowedPosts)
+                    settingsToggle("New Posts", isOn: Binding(
+                        get: { settings.pushFollowedPosts },
+                        set: { store.setNotificationSettings(settings.updating(pushFollowedPosts: $0)) }
+                    ))
                 } header: {
                     Text("People You Follow")
                         .fontStyle(.subheadline)
@@ -89,30 +89,44 @@ struct NotificationSettingsView: View {
                     Text("A push as soon as someone you follow posts.")
                         .fontStyle(.footnote)
                 }
+            } else {
+                Section {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                        Spacer()
+                    }
+                }
+                .listRowBackground(Color.clear)
             }
         }
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
-        .overlay {
-            if isSaving {
-                ProgressView()
-                    .padding()
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-        .onChange(of: settings) { _, newValue in
-            guard !isLoading else { return }
-            Task { await save(newValue) }
-        }
         .task {
             await checkStatus()
-            await load()
+            do {
+                try await store.loadNotificationSettingsIfNeeded()
+            } catch {
+                loadError = error.localizedDescription
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
                 Task { await checkStatus() }
             }
         }
+        .presentableErrorAlert(error: saveErrorBinding)
+    }
+
+    // Manual Binding against the environment object, matching the idiom used
+    // throughout ProfileView/PostDetailView (e.g. PostDetailView's
+    // `selectedReaction`) rather than `@Bindable`, which isn't used anywhere
+    // else in this codebase.
+    private var saveErrorBinding: Binding<PresentableAlertError?> {
+        Binding(
+            get: { store.notificationSettingsSaveError },
+            set: { store.notificationSettingsSaveError = $0 }
+        )
     }
 
     /// Matches the toggle idiom in `SettingsView`: the label carries `.fontStyle(.body)`
@@ -129,30 +143,6 @@ struct NotificationSettingsView: View {
     private func checkStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         authorizationStatus = settings.authorizationStatus
-    }
-
-    private func load() async {
-        isLoading = true
-        loadError = nil
-        do {
-            settings = try await store.fetchNotificationSettings()
-        } catch {
-            loadError = error.localizedDescription
-        }
-        isLoading = false
-    }
-
-    private func save(_ newSettings: NotificationSettings) async {
-        isSaving = true
-        do {
-            try await store.updateNotificationSettings(newSettings)
-        } catch {
-            // Revert on failure
-            if let old = try? await store.fetchNotificationSettings() {
-                settings = old
-            }
-        }
-        isSaving = false
     }
 }
 

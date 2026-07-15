@@ -258,7 +258,10 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
     func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
     func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
-    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {}
+    var updateNotificationSettingsError: Error?
+    func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {
+        if let updateNotificationSettingsError { throw updateNotificationSettingsError }
+    }
     var stubbedReactionCounts: [Reaction: Int] = [:]
     func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { stubbedReactionCounts }
     func followUser(id: UUID) async throws {}
@@ -371,6 +374,49 @@ struct BoardStoreTests {
     @Test @MainActor func mapLoadErrorTreatsZeroByteResourceAsNetworkUnavailable() {
         let error = URLError(.zeroByteResource)
         #expect(BoardStore.mapLoadError(error) == AuthError.networkUnavailable.localizedDescription)
+    }
+
+    @Test @MainActor func setNotificationSettingsRollsBackAndAlertsOnFailure() async throws {
+        let service = MockBoardService()
+        let store = BoardStore(
+            posts: [],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            boardService: service
+        )
+        store.notificationSettings = NotificationSettings(pushComments: true)
+        service.updateNotificationSettingsError = BoardServiceError.notConfigured
+
+        store.setNotificationSettings(NotificationSettings(pushComments: false))
+        #expect(store.notificationSettings?.pushComments == false)
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        #expect(store.notificationSettings?.pushComments == true)
+        #expect(store.notificationSettingsSaveError != nil)
+    }
+
+    @Test @MainActor func setNotificationSettingsStaleGuardKeepsNewerValue() async throws {
+        let service = MockBoardService()
+        let store = BoardStore(
+            posts: [],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            boardService: service
+        )
+        store.notificationSettings = NotificationSettings(pushComments: true, pushNewPosts: true)
+        service.updateNotificationSettingsError = BoardServiceError.notConfigured
+
+        // First save fails (in flight); before it resolves, a second, newer
+        // save supersedes it and succeeds.
+        store.setNotificationSettings(NotificationSettings(pushComments: false, pushNewPosts: true))
+        service.updateNotificationSettingsError = nil
+        store.setNotificationSettings(NotificationSettings(pushComments: false, pushNewPosts: false))
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        // The first save's rollback must not clobber the second (newer) value.
+        #expect(store.notificationSettings?.pushNewPosts == false)
     }
 }
 

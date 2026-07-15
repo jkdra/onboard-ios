@@ -242,13 +242,53 @@ extension BoardStore {
 
     // MARK: - Notification Settings
 
-    func fetchNotificationSettings() async throws -> NotificationSettings {
+    /// Loads settings only if not already cached (from this session or a
+    /// disk-hydrated prior one) — a warm value means no spinner is needed, so
+    /// this only throws on a true first load with no cache at all. A
+    /// revalidation is still kicked off in the background either way, per the
+    /// read-vs-write rule: it fails silently if it doesn't turn up anything new.
+    func loadNotificationSettingsIfNeeded() async throws {
         guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
-        return try await boardService.fetchNotificationSettings(for: currentUserID)
+        if notificationSettings == nil {
+            notificationSettings = try await boardService.fetchNotificationSettings(for: currentUserID)
+            persistToDisk()
+        } else {
+            Task { await revalidateNotificationSettings() }
+        }
     }
 
-    func updateNotificationSettings(_ settings: NotificationSettings) async throws {
-        guard let boardService, let currentUserID else { throw BoardServiceError.notAuthenticated }
-        try await boardService.updateNotificationSettings(settings, for: currentUserID)
+    private func revalidateNotificationSettings() async {
+        guard let boardService, let currentUserID else { return }
+        guard let fetched = try? await boardService.fetchNotificationSettings(for: currentUserID) else { return }
+        guard fetched != notificationSettings else { return }
+        notificationSettings = fetched
+        persistToDisk()
+    }
+
+    /// Optimistic save mirroring BoardStore+Reactions.swift's setReaction:
+    /// mutate immediately, one in-flight sync task that supersedes itself on
+    /// rapid toggles, and a stale-guard so a failed old request can't clobber
+    /// an even-newer local change. "Server wins" needs no extra logic beyond
+    /// this — any server-confirmed value always overwrites the optimistic guess.
+    func setNotificationSettings(_ newSettings: NotificationSettings) {
+        let previous = notificationSettings
+        guard previous != newSettings else { return }
+        notificationSettings = newSettings
+        persistToDisk()
+
+        guard let boardService, let currentUserID else { return }
+        notificationSettingsSyncTask?.cancel()
+        notificationSettingsSyncTask = Task {
+            defer { notificationSettingsSyncTask = nil }
+            do {
+                try await boardService.updateNotificationSettings(newSettings, for: currentUserID)
+            } catch {
+                if Task.isCancelled { return }
+                guard notificationSettings == newSettings else { return }
+                notificationSettings = previous
+                persistToDisk()
+                notificationSettingsSaveError = PresentableAlertError(message: Self.mapLoadError(error))
+            }
+        }
     }
 }
