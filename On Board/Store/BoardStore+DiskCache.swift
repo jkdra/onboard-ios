@@ -46,6 +46,12 @@ extension BoardStore {
     /// on the next natural refresh to capture a mutation, since a force-quit
     /// in between would leave stale content cached. A write failure only
     /// costs a future cold-launch spinner, never correctness.
+    ///
+    /// A board-less (waitlisted) user has no `activeBoardWeek`, so this is a
+    /// no-op for them — their notification settings (and everything else)
+    /// simply never persist across a relaunch. Correctness is unaffected
+    /// (falls back to a network fetch); it's only the spinner-skip speedup
+    /// that doesn't apply to this cohort.
     func persistToDisk() {
         guard let activeBoardWeek else { return }
         let activeWeekPosts = posts.filter { $0.boardWeekId == activeBoardWeek.id }
