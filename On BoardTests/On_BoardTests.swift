@@ -255,7 +255,8 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
     func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
     func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {}
-    func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { [:] }
+    var stubbedReactionCounts: [Reaction: Int] = [:]
+    func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { stubbedReactionCounts }
     func followUser(id: UUID) async throws {}
     func unfollowUser(id: UUID) async throws {}
     func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
@@ -497,6 +498,38 @@ extension BoardStoreTests {
         #expect(reader.activeBoardWeek?.boardId == boardID)
         #expect(reader.posts.contains { $0.id == post.id })
         #expect(reader.loadError != nil)
+    }
+
+    @Test @MainActor func refreshPopScorePopulatesCacheAndPersists() async {
+        let boardID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(86_400 * 7),
+            status: .active
+        )
+        let profile = Profile.samples[0]
+        let service = MockBoardService()
+        service.stubbedReactionCounts = [.like: 5, .laugh: 2]
+        let store = BoardStore(
+            posts: [],
+            profiles: [profile],
+            activeBoardWeek: week,
+            boardWeeks: [week],
+            currentBoard: Board(id: boardID, name: "Test"),
+            boardService: service
+        )
+        defer { store.clearDiskCache() }
+
+        #expect(store.popScore(for: profile.id) == nil)
+        await store.refreshPopScore(for: profile.id)
+        #expect(store.popScore(for: profile.id)?[.like] == 5)
+        #expect(store.popScore(for: profile.id)?[.laugh] == 2)
+
+        // Rehydrating a fresh store from the disk cache should see the same score.
+        let reader = BoardStore()
+        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+        #expect(reader.popScore(for: profile.id)?[.like] == 5)
     }
 }
 

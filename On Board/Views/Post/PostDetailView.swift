@@ -160,6 +160,10 @@ struct PostDetailView: View {
             await store.loadComments(for: livePost.id)
             isLoadingComments = false
         }
+        .task(id: livePost.id) {
+            guard let authorId = livePost.authorId else { return }
+            store.prefetchPopScore(for: authorId)
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !editMode {
                 PostActionBar(

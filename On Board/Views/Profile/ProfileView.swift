@@ -44,10 +44,6 @@ struct ProfileView: View {
     @State private var blockCandidate: BlockCandidate?
     @State private var isUpdatingBlock = false
 
-    // Pop Score
-    @State private var popScore: [Reaction: Int]?
-    @State private var isLoadingPopScore = false
-
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
     }
@@ -133,27 +129,8 @@ struct ProfileView: View {
                     // correct "Following" state to "Follow".
                 }
             }
-            .task {
-                guard popScore == nil, !isLoadingPopScore else { return }
-                isLoadingPopScore = true
-                if let boardService = store.boardService {
-                    do {
-                        popScore = try await boardService.fetchUserReactionCounts(for: profile.id)
-                    } catch {
-                        // Failed silently for now
-                    }
-                } else {
-                    // Offline/mock mode has no live service to aggregate reactions
-                    // server-side, so approximate it from the posts already in memory.
-                    popScore = store.posts
-                        .filter { $0.authorId == profile.id }
-                        .reduce(into: [Reaction: Int]()) { counts, post in
-                            for (reaction, count) in post.reactionCounts {
-                                counts[reaction, default: 0] += count
-                            }
-                        }
-                }
-                isLoadingPopScore = false
+            .task(id: profile.id) {
+                await store.refreshPopScore(for: profile.id)
             }
             .presentableErrorAlert(error: $alertError)
     }
@@ -179,16 +156,16 @@ struct ProfileView: View {
                     birthdaySection
 
                     if !editMode {
-                        if let popScore {
+                        if let popScore = store.popScore(for: profile.id) {
                             PopScoreView(score: popScore)
                                 .padding(.top, 8)
                                 .matchedGeometryEffect(id: "popScore", in: profileNamespace)
-                        } else if isLoadingPopScore {
+                        } else {
                             ProgressView()
                                 .padding(.top, 8)
                                 .matchedGeometryEffect(id: "popScore", in: profileNamespace)
                         }
-                        
+
                         if !canEdit {
                             followButton
                         }
