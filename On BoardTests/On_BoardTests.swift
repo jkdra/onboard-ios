@@ -259,7 +259,14 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
     func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
     var updateNotificationSettingsError: Error?
+    // Lets a test hold the call in-flight so it can mutate store state before
+    // the call resolves — without this, a synchronous test body never gives
+    // the spawned Task a chance to actually be "in flight" when it matters.
+    var updateNotificationSettingsDelay: Duration = .zero
     func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws {
+        if updateNotificationSettingsDelay > .zero {
+            try? await Task.sleep(for: updateNotificationSettingsDelay)
+        }
         if let updateNotificationSettingsError { throw updateNotificationSettingsError }
     }
     var stubbedReactionCounts: [Reaction: Int] = [:]
@@ -406,16 +413,33 @@ struct BoardStoreTests {
         )
         store.notificationSettings = NotificationSettings(pushComments: true, pushNewPosts: true)
         service.updateNotificationSettingsError = BoardServiceError.notConfigured
+        // Keep the first save's network call in flight long enough that we can
+        // mutate state out from under it before it resolves.
+        service.updateNotificationSettingsDelay = .milliseconds(100)
 
-        // First save fails (in flight); before it resolves, a second, newer
-        // save supersedes it and succeeds.
+        // First save: optimistic mutation happens synchronously, then the sync
+        // Task suspends inside the mock's artificial delay — it has not yet
+        // reached (or thrown from) `updateNotificationSettings`.
         store.setNotificationSettings(NotificationSettings(pushComments: false, pushNewPosts: true))
-        service.updateNotificationSettingsError = nil
-        store.setNotificationSettings(NotificationSettings(pushComments: false, pushNewPosts: false))
 
-        try await Task.sleep(for: .milliseconds(50))
+        // Give the spawned Task a real chance to start running and enter the
+        // mock's sleep, so it is genuinely "in flight" (not merely scheduled)
+        // when we supersede it below. This gap is well under the 100ms delay.
+        try await Task.sleep(for: .milliseconds(10))
 
-        // The first save's rollback must not clobber the second (newer) value.
+        // Simulate a newer value arriving via some path OTHER than
+        // setNotificationSettings (e.g. an external revalidation/refresh) —
+        // this does NOT cancel the first task's `notificationSettingsSyncTask`,
+        // so when the first call's failure is finally caught, it reaches the
+        // `guard notificationSettings == newSettings else { return }` stale
+        // check rather than short-circuiting on `Task.isCancelled`.
+        store.notificationSettings = NotificationSettings(pushComments: false, pushNewPosts: false)
+
+        // Let the first save's delayed network call finish and throw.
+        try await Task.sleep(for: .milliseconds(150))
+
+        // The first save's rollback must not clobber the newer value that
+        // arrived while it was still in flight.
         #expect(store.notificationSettings?.pushNewPosts == false)
     }
 }
