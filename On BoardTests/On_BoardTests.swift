@@ -369,6 +369,93 @@ struct BoardStoreTests {
     }
 }
 
+extension BoardStoreTests {
+    @Test @MainActor func hydrateFromDiskRestoresWarmState() {
+        let boardID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(86_400 * 7),
+            status: .active
+        )
+        let profile = Profile.samples[0]
+        let post = Post(
+            authorId: profile.id,
+            boardWeekId: week.id,
+            title: "cached",
+            description: "d",
+            author: profile.handle
+        )
+        let writer = BoardStore(
+            posts: [post],
+            profiles: [profile],
+            activeBoardWeek: week,
+            boardWeeks: [week],
+            currentBoard: Board(id: boardID, name: "Test")
+        )
+        writer.persistToDisk()
+        defer { writer.clearDiskCache() }
+
+        let reader = BoardStore()
+        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+
+        #expect(reader.activeBoardWeek?.boardId == boardID)
+        #expect(reader.posts.contains { $0.id == post.id })
+        #expect(reader.profile(id: profile.id)?.id == profile.id)
+    }
+
+    @Test @MainActor func mismatchedSchemaVersionIsTreatedAsMiss() throws {
+        let boardID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(86_400 * 7),
+            status: .active
+        )
+        let staleEnvelope = CacheEnvelope(
+            schemaVersion: CacheEnvelope.currentSchemaVersion + 1,
+            cachedAt: .now,
+            boardID: boardID,
+            snapshot: BoardSnapshot(week: week, posts: [], profiles: [], userReactions: [:]),
+            archivedWeeks: [],
+            popScores: [:],
+            comments: [:],
+            commentVotes: [:],
+            notificationSettings: nil
+        )
+        let data = try BoardJSON.encoder.encode(staleEnvelope)
+        try data.write(to: BoardStore.cacheFileURL, options: .atomic)
+
+        let reader = BoardStore()
+        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+
+        #expect(reader.activeBoardWeek == nil)
+        #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
+    }
+
+    @Test @MainActor func clearDiskCacheRemovesFile() {
+        let boardID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(86_400 * 7),
+            status: .active
+        )
+        let store = BoardStore(
+            posts: [],
+            profiles: [],
+            activeBoardWeek: week,
+            boardWeeks: [week],
+            currentBoard: Board(id: boardID, name: "Test")
+        )
+        store.persistToDisk()
+        #expect(FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
+
+        store.clearDiskCache()
+        #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
+    }
+}
+
 @MainActor
 struct NetworkErrorClassifierTests {
     @Test func zeroByteResourceIsConnectivityFailure() {

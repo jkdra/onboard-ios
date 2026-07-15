@@ -61,6 +61,13 @@ final class BoardStore {
     /// (Blocked Users settings, profile screens, optimistic removal).
     var blockedUserIDs: Set<UUID> = []
     var followedUserIDs: Set<UUID> = []
+    /// Pop Score per profile, keyed by user ID — moved here from ProfileView's
+    /// local @State so it's cacheable and prefetchable. See BoardStore+Profiles.swift.
+    var popScores: [UUID: [Reaction: Int]] = [:]
+    var notificationSettings: NotificationSettings?
+    /// Surfaces a failed notification-settings save as an alert. Deliberately
+    /// separate from `loadError`, which is about board-loading failures.
+    var notificationSettingsSaveError: PresentableAlertError?
 
     // MARK: - Internals
 
@@ -91,6 +98,9 @@ final class BoardStore {
     @ObservationIgnored var reactionSyncTasks: [UUID: Task<Void, Never>] = [:]
     // Same guard for comment up/down votes, keyed per comment.
     @ObservationIgnored var commentVoteSyncTasks: [UUID: Task<Void, Never>] = [:]
+    // One in-flight notification-settings save. A rapid second toggle
+    // supersedes the first so its rollback can't invert newer state.
+    @ObservationIgnored var notificationSettingsSyncTask: Task<Void, Never>?
 
     // MARK: - Archive LRU
 
@@ -202,6 +212,14 @@ final class BoardStore {
         commentsByPostID = [:]
         cachedArchiveWeekIDs = []
         loadError = nil
+        popScores = [:]
+        notificationSettings = nil
+        notificationSettingsSaveError = nil
+        notificationSettingsSyncTask?.cancel()
+        notificationSettingsSyncTask = nil
+        // A cached board/profile/settings blob must never leak into a
+        // different account signing into the same device.
+        clearDiskCache()
         // Previously only cleared postsByID (as a side effect of
         // clearFeedItemsCache()) — postsByWeek, profileIndex, and archivedWeeks
         // were left stale from the prior session. All the source arrays above
