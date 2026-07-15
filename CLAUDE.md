@@ -60,6 +60,21 @@ The entry point (`On_BoardApp.swift`) selects mock vs. live via `AppLaunchContex
 ### Optimistic Updates
 `BoardStore+Interactions.swift` applies all mutations (reactions, post creation, comments) locally first, then syncs to Supabase. On error it rolls back and surfaces the error. Never skip the rollback path when adding new mutations.
 
+### Client-Side Cache
+`BoardStore` persists a single `CacheEnvelope` (`BoardStore/CacheEnvelope.swift`) to disk via `BoardStore+DiskCache.swift`, after every successful board `apply()` and after any mutation that changes cached state (block/unblock, notification-settings save). `refresh(for:)` hydrates from this file before its `hasCachedFeed` check, so a warm cache skips the loading spinner entirely — no changes needed to `isLoading`'s existing gating.
+
+**Adding a new cached entity**: add one field to `CacheEnvelope`, make it `Optional` (so older cache files still decode), and make sure whatever mutates it in `BoardStore` also calls `persistToDisk()`. Don't invent a second cache mechanism — one envelope, one file.
+
+**Schema drift safety**: any decode failure (bad JSON, mismatched `CacheEnvelope.schemaVersion`) is treated as a cache miss — the file is deleted and normal network loading proceeds. Never crash on a stale/malformed cache file. Bump `schemaVersion` only when an existing field's *meaning* changes in a way old data would misrepresent — adding a new `Optional` field does not require a bump.
+
+**Invalidation correctness**:
+- Sign-out calls `clearDiskCache()` (wired into `resetForSignOut()`) — a cached board/profile/settings blob must never leak into a different account's session on the same device.
+- Any mutation that changes what's cached (block, unblock, notification-settings save) calls `persistToDisk()` after resolving — don't rely solely on the next natural `refresh()` to capture it, since a force-quit in between would leave stale content cached.
+
+**Known intentional exception — do not cache**: `ProfileView`'s live `isFollowing` check (`.task(id: profile.id)`) deliberately bypasses `followedUserIDs`/any cache and re-queries the server on every profile visit, specifically so a stale cached value can't flip "Following" back to "Follow". Don't fold this into the general cache-everything pattern.
+
+**Read-vs-write failure rule**: background revalidation of already-cached data (Pop Score, comments, notification settings) fails silently — the user already has a value on screen. A failed *write* (a reaction, a notification-settings toggle, anything optimistic) always rolls back and surfaces an alert — never fail a save silently.
+
 ### Navigation Flow
 ```
 RootView
