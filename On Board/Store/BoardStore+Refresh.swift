@@ -175,6 +175,12 @@ extension BoardStore {
         guard let boardService else { return }
         guard posts.contains(where: { $0.id == postID }) else { return }
 
+        // A post already showing cached comments is a background revalidation —
+        // fail silently, matching the read-vs-write rule (reads that revalidate
+        // already-cached data fail silently; only writes alert). A post with no
+        // cached comments yet is a true first load, so its failure still surfaces.
+        let isRevalidation = commentsByPostID[postID] != nil
+
         do {
             let thread = try await boardService.fetchComments(for: postID)
             commentsByPostID[postID] = thread.comments
@@ -182,7 +188,9 @@ extension BoardStore {
                 userCommentVotes[commentID] = vote
             }
             await loadMissingCommentAuthorProfiles(in: thread.comments)
+            persistToDisk()
         } catch {
+            guard !isRevalidation else { return }
             loadError = Self.mapLoadError(error)
         }
     }

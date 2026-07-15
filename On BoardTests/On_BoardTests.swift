@@ -235,7 +235,11 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot { throw BoardServiceError.notConfigured }
     func listArchivedWeeks(boardID: UUID, limit: Int, offset: Int) async throws -> [BoardWeek] { throw BoardServiceError.notConfigured }
     func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { throw BoardServiceError.notConfigured }
-    func fetchComments(for postID: UUID) async throws -> CommentThread { throw BoardServiceError.notConfigured }
+    var commentsShouldFail = false
+    func fetchComments(for postID: UUID) async throws -> CommentThread {
+        if commentsShouldFail { throw BoardServiceError.notConfigured }
+        return CommentThread(comments: [], userVotes: [:])
+    }
     func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
     func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
         Post(authorId: authorID, boardWeekId: weekID, title: title, description: description, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio, tags: tags)
@@ -530,6 +534,45 @@ extension BoardStoreTests {
         let reader = BoardStore()
         reader.hydrateFromDiskIfNeeded(boardID: boardID)
         #expect(reader.popScore(for: profile.id)?[.like] == 5)
+    }
+
+    @Test @MainActor func loadCommentsRevalidationFailsSilentlyWhenAlreadyWarm() async {
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c", comments: [.authored(by: "maya.c", body: "hi")])
+        let service = MockBoardService()
+        let store = BoardStore(
+            posts: [post],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: service
+        )
+
+        service.commentsShouldFail = true
+        await store.loadComments(for: post.id)
+
+        // Comments were already cached (from the convenience init, which seeds
+        // commentsByPostID from any post.comments) — a background revalidation
+        // failure must not surface loadError.
+        #expect(store.loadError == nil)
+    }
+
+    @Test @MainActor func loadCommentsColdFailureSurfacesLoadError() async {
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let service = MockBoardService()
+        service.commentsShouldFail = true
+        let store = BoardStore(
+            posts: [post],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: service
+        )
+
+        await store.loadComments(for: post.id)
+
+        #expect(store.loadError != nil)
     }
 }
 
