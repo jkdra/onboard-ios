@@ -11,29 +11,27 @@ struct AccountManagementSettingsView: View {
     @State private var showDisableConfirmation = false
     @State private var isDisabling = false
     @State private var alertError: PresentableAlertError?
-    @State private var showExportConfirmation = false
+    // Paired with the disabled Data & Privacy section above.
+    // @State private var showExportConfirmation = false
 
     var body: some View {
         Form {
-            Section {
-                Button {
-                    showExportConfirmation = true
-                } label: {
-                    SettingsRowLabel(title: "Request Data Export", systemImage: "doc.text.magnifyingglass")
-                }
-                .tint(.primary)
-
-                NavigationLink(destination: BlockedUsersSettingsView()) {
-                    SettingsRowLabel(title: "Blocked Users", systemImage: "person.crop.circle.fill.badge.xmark")
-                }
-                .tint(.primary)
-            } header: {
-                Text("Data & Privacy")
-                    .fontStyle(.subheadline)
-            } footer: {
-                Text("Requesting a data export will send an archive of your profile and posts to your email.")
-                    .fontStyle(.footnote)
-            }
+            // Data & Privacy section (Request Data Export, Blocked Users) — disabled
+            // for now, to be reintroduced in a later update.
+            // Section {
+            //     Button {
+            //         showExportConfirmation = true
+            //     } label: {
+            //         SettingsRowLabel(title: "Request Data Export", systemImage: "doc.text.magnifyingglass")
+            //     }
+            //     .tint(.primary)
+            // } header: {
+            //     Text("Data & Privacy")
+            //         .fontStyle(.subheadline)
+            // } footer: {
+            //     Text("Requesting a data export will send an archive of your profile and posts to your email.")
+            //         .fontStyle(.footnote)
+            // }
 
             Section {
                 Button {
@@ -48,16 +46,16 @@ struct AccountManagementSettingsView: View {
             }
 
             Section {
-                Button(role: .destructive) {
-                    showDisableConfirmation = true
-                } label: {
-                    HStack {
-                        SettingsRowLabel(title: "Disable Account", systemImage: "person.crop.circle.fill.badge.xmark", tint: .red)
-                        Spacer()
-                        if isDisabling { ProgressView() }
-                    }
-                }
-                .disabled(isDisabling)
+//                Button(role: .destructive) {
+//                    showDisableConfirmation = true
+//                } label: {
+//                    HStack {
+//                        SettingsRowLabel(title: "Disable Account", systemImage: "person.crop.circle.fill.badge.xmark", tint: .red)
+//                        Spacer()
+//                        if isDisabling { ProgressView() }
+//                    }
+//                }
+//                .disabled(isDisabling)
 
                 
                 NavigationLink(destination: DeleteAccountView()) {
@@ -86,11 +84,12 @@ struct AccountManagementSettingsView: View {
         } message: {
             Text("Your profile and posts will be hidden from everyone. You can reactivate your account at any time by signing back in.")
         }
-        .alert("Data Export Requested", isPresented: $showExportConfirmation) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("We'll send an email with a link to download your data within a few minutes.")
-        }
+        // Paired with the disabled Data & Privacy section above.
+        // .alert("Data Export Requested", isPresented: $showExportConfirmation) {
+        //     Button("OK", role: .cancel) { }
+        // } message: {
+        //     Text("We'll send an email with a link to download your data within a few minutes.")
+        // }
         .authFailureAlert(auth, error: $alertError)
     }
 

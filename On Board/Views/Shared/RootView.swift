@@ -13,6 +13,7 @@ struct RootView: View {
     @Environment(BoardStore.self) private var store
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
     @State private var didBootstrap = false
 
@@ -77,7 +78,8 @@ struct RootView: View {
         if auth.isSignedIn, case .failed(let message) = onboarding.loadState {
             onboardingErrorView(message)
         } else if auth.isSignedIn, onboarding.isComplete {
-            BoardListView()
+            ContentView()
+                .preferredColorScheme(appearance.colorScheme)
         } else {
             // Covers: not signed in, signed in + loading status, signed in + needs onboarding.
             // The coordinator owns SignInView at its root and handles all transitions internally.

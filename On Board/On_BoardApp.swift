@@ -85,6 +85,19 @@ struct On_BoardApp: App {
                         }
                     }
 
+                    // Deep-link profile sharing
+                    // Universal Link: https://onboardapp.org/profile/<UUID>
+                    // Custom Scheme: onboard://profile/<UUID>
+                    let isProfileUniversalLink = url.host == "onboardapp.org" && url.pathComponents.count >= 3 && url.pathComponents[1] == "profile"
+                    let isProfileCustomScheme = url.scheme == "onboard" && url.host == "profile" && url.pathComponents.count >= 2
+
+                    if isProfileUniversalLink || isProfileCustomScheme {
+                        if let uuidString = url.pathComponents.last, let profileID = UUID(uuidString: uuidString) {
+                            NotificationService.shared.setPendingProfileID(profileID)
+                            return
+                        }
+                    }
+
                     // Deep-link OAuth callbacks (linkIdentity's default URL opener, web
                     // OAuth fallback) resolve via UIApplication.open, not an in-app
                     // ASWebAuthenticationSession — per the SDK's own docs, the app must

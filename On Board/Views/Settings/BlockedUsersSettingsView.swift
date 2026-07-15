@@ -27,17 +27,12 @@ struct BlockedUsersSettingsView: View {
                     .listRowBackground(Color.clear)
             } else {
                 ForEach(profiles) { profile in
-                    HStack {
-                        Text(profile.handle)
-                            .fontStyle(.headline)
-
-                        Spacer()
-                        
-                        Button("Unblock") {
-                            Task { await unblock(profile) }
+                    NavigationLink(destination: ProfileView(profile: profile, presentation: .navigation)) {
+                        HStack(spacing: 12) {
+                            AvatarView(profile: profile, size: .small)
+                            Text(profile.handle)
+                                .fontStyle(.headline)
                         }
-                        .buttonStyle(.boardSecondary)
-                        .tint(.primary)
                     }
                 }
             }
@@ -58,15 +53,6 @@ struct BlockedUsersSettingsView: View {
         defer { isLoading = false }
         do {
             profiles = try await store.blockedProfiles()
-        } catch {
-            alertError = store.presentableModerationError(error)
-        }
-    }
-    
-    private func unblock(_ profile: Profile) async {
-        do {
-            try await store.unblock(userID: profile.id)
-            profiles.removeAll(where: { $0.id == profile.id })
         } catch {
             alertError = store.presentableModerationError(error)
         }

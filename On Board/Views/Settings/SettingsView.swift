@@ -20,143 +20,141 @@ struct SettingsView: View {
     @State private var webDocument: WebDocument?
 
     var body: some View {
-        NavigationStack {
-            Form {
-                SettingsHapticsPreview()
+        // No wrapping NavigationStack — this is pushed as a BoardRoute.settings
+        // destination onto ContentView's existing NavigationStack. Nesting a
+        // second NavigationStack inside a pushed destination is the anti-pattern
+        // this avoids (double nav bars, confused back-button behavior); the
+        // Form's own navigationTitle/toolbar attach directly to the outer stack.
+        Form {
+            SettingsHapticsPreview()
 
-                Section {
-                    Picker(selection: $appearance) {
-                        ForEach(AppearancePreference.allCases) { value in
-                            Text(value.label).tag(value)
-                        }
-                    } label: {
-                        Text("Theme").fontStyle(.body)
+            Section {
+                Picker(selection: $appearance) {
+                    ForEach(AppearancePreference.allCases) { value in
+                        Text(value.label).tag(value)
                     }
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("Card rotation").fontStyle(.body)
-                            Spacer()
-                            Text(rotationIntensity == 0 || typeSize.isAccessibilitySize ? "Off" : "\(Int(rotationIntensity * 100))%")
-                                .foregroundStyle(.secondary)
-                                .fontStyle(.footnote)
-                                .monospacedDigit()
-                        }
-                        Slider(value: $rotationIntensity, in: 0...1, step: 0.05)
-                            .disabled(typeSize.isAccessibilitySize)
-                        if typeSize.isAccessibilitySize {
-                            Text("Card rotation is not available at accessibility text sizes.")
-                                .fontStyle(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .padding(.vertical, 4)
-
-                    Toggle(isOn: $hapticsEnabled) {
-                        Text("Haptics").fontStyle(.body)
-                    }
-                    .tint(.primary)
-                    
-                    Toggle(isOn: $profanityEnabled) {
-                        HStack(spacing: 6) {
-                            Text("Profanity").fontStyle(.body)
-                            Button {
-                                showProfanityInfo = true
-                            } label: {
-                                Image(systemName: "info.circle.fill")
-                                    .fontStyle(.body)
-                                    .foregroundStyle(.secondary)
-                            }
-                            .buttonStyle(.borderless)
-                        }
-                    }
-                    .tint(.primary)
-                    .alert("Profanity", isPresented: $showProfanityInfo) {
-                        Button("OK", role: .cancel) { }
-                    } message: {
-                        Text("Mild profanity may be used in weekly prompts and in-app communications for a more... informal experience. This setting does not affect user-generated content that may contain profanity.")
-                    }
-                    .tint(.primary)
-                } header: {
-                    Text("User Experience")
-                        .fontStyle(.subheadline)
-                } footer: {
-                    Text("Customize the look, feel, and content of On Board.")
-                        .fontStyle(.footnote)
+                } label: {
+                    Text("Theme").fontStyle(.body)
                 }
-
-                accountSection
-
-                Section {
-                    NavigationLink {
-                        NotificationSettingsView()
-                    } label: {
-                        SettingsRowLabel(title: "Notification Settings", systemImage: "bell.badge.fill")
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Card rotation").fontStyle(.body)
+                        Spacer()
+                        Text(rotationIntensity == 0 || typeSize.isAccessibilitySize ? "Off" : "\(Int(rotationIntensity * 100))%")
+                            .foregroundStyle(.secondary)
+                            .fontStyle(.footnote)
+                            .monospacedDigit()
                     }
-                } header: {
-                    Text("Notifications")
-                        .fontStyle(.subheadline)
-                } footer: {
-                    Text("Manage which notifications you want to receive.")
-                        .fontStyle(.footnote)
-                }
-
-                Section {
-                    Link(destination: URL(string: "mailto:\(AppLinks.supportEmail)")!) {
-                        SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill")
+                    Slider(value: $rotationIntensity, in: 0...1, step: 0.05)
+                        .disabled(typeSize.isAccessibilitySize)
+                    if typeSize.isAccessibilitySize {
+                        Text("Card rotation is not available at accessibility text sizes.")
+                            .fontStyle(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    Link(destination: AppLinks.reportMailURL) {
-                        SettingsRowLabel(title: "Report a Problem", systemImage: "exclamationmark.bubble.fill")
-                    }
-                } header: {
-                    Text("Support")
-                        .fontStyle(.subheadline)
                 }
+                .padding(.vertical, 4)
 
-                Section {
-                    legalLinkRow(
-                        title: "Privacy Policy",
-                        systemImage: "hand.raised.fill",
-                        url: AppLinks.privacyPolicyURL
-                    )
-                    legalLinkRow(
-                        title: "Terms of Service",
-                        systemImage: "doc.text.fill",
-                        url: AppLinks.termsOfServiceURL
-                    )
-                } header: {
-                    Text("Legal")
-                        .fontStyle(.subheadline)
+                Toggle(isOn: $hapticsEnabled) {
+                    Text("Haptics").fontStyle(.body)
                 }
-
-                Section {
-                    if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
-                       let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
-                        LabeledContent {
-                            Text("\(version) (\(build))").fontStyle(.body)
+                .tint(.primary)
+                
+                Toggle(isOn: $profanityEnabled) {
+                    HStack(spacing: 6) {
+                        Text("Profanity").fontStyle(.body)
+                        Button {
+                            showProfanityInfo = true
                         } label: {
-                            Text("Version").fontStyle(.body)
+                            Image(systemName: "info.circle.fill")
+                                .fontStyle(.body)
+                                .foregroundStyle(.secondary)
                         }
+                        .buttonStyle(.borderless)
                     }
-                    Text("Made with love by @jkdra")
-                        .fontStyle(.footnote)
-                        .frame(maxWidth: .infinity)
                 }
-                .listRowBackground(Color.clear)
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
+                .tint(.primary)
+                .alert("Profanity", isPresented: $showProfanityInfo) {
+                    Button("OK", role: .cancel) { }
+                } message: {
+                    Text("Mild profanity may be used in weekly prompts and in-app communications for a more... informal experience. This setting does not affect user-generated content that may contain profanity.")
                 }
+                .tint(.primary)
+            } header: {
+                Text("User Experience")
+                    .fontStyle(.subheadline)
+            } footer: {
+                Text("Customize the look, feel, and content of On Board.")
+                    .fontStyle(.footnote)
             }
-            .onChange(of: auth.isSignedIn) { _, isSignedIn in
-                guard !isSignedIn else { return }
-                dismiss()
+
+            accountSection
+
+            Section {
+                NavigationLink {
+                    NotificationSettingsView()
+                } label: {
+                    SettingsRowLabel(title: "Notification Settings", systemImage: "bell.badge.fill")
+                }
+            } header: {
+                Text("Notifications")
+                    .fontStyle(.subheadline)
+            } footer: {
+                Text("Manage which notifications you want to receive.")
+                    .fontStyle(.footnote)
             }
-            .sheet(item: $webDocument) { document in
-                WebContentSheet(document: document)
+
+            Section {
+                Link(destination: URL(string: "mailto:\(AppLinks.supportEmail)")!) {
+                    SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill")
+                }
+                Link(destination: AppLinks.reportMailURL) {
+                    SettingsRowLabel(title: "Report a Problem", systemImage: "exclamationmark.bubble.fill")
+                }
+            } header: {
+                Text("Support")
+                    .fontStyle(.subheadline)
             }
+
+            Section {
+                legalLinkRow(
+                    title: "Privacy Policy",
+                    systemImage: "hand.raised.fill",
+                    url: AppLinks.privacyPolicyURL
+                )
+                legalLinkRow(
+                    title: "Terms of Service",
+                    systemImage: "doc.text.fill",
+                    url: AppLinks.termsOfServiceURL
+                )
+            } header: {
+                Text("Legal")
+                    .fontStyle(.subheadline)
+            }
+
+            Section {
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+                   let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
+                    LabeledContent {
+                        Text("\(version) (\(build))").fontStyle(.body)
+                    } label: {
+                        Text("Version").fontStyle(.body)
+                    }
+                }
+                Text("Made with love by @jawadalkhadra")
+                    .fontStyle(.footnote)
+                    .frame(maxWidth: .infinity)
+            }
+            .listRowBackground(Color.clear)
+        }
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: auth.isSignedIn) { _, isSignedIn in
+            guard !isSignedIn else { return }
+            dismiss()
+        }
+        .sheet(item: $webDocument) { document in
+            WebContentSheet(document: document)
         }
     }
 
@@ -230,7 +228,9 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView()
-        .environment(AuthStore(service: MockAuthService()))
-        .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
+    NavigationStack {
+        SettingsView()
+    }
+    .environment(AuthStore(service: MockAuthService()))
+    .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
 }

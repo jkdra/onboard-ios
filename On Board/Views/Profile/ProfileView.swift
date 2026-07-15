@@ -50,6 +50,8 @@ struct ProfileView: View {
 
     private var canEdit: Bool { store.canEdit(profile: displayedProfile) }
 
+    private var isBlockedByMe: Bool { store.isBlocked(userID: displayedProfile.id) }
+
     private let joinedFormatter: Date.FormatStyle = .dateTime
         .month(.wide)
         .day()
@@ -147,34 +149,45 @@ struct ProfileView: View {
                     bioSection
 
                     HStack(spacing: 6) {
-                        Image(systemName: "calendar")
-                        Text("joined \(displayedProfile.joinedAt.formatted(joinedFormatter).lowercased())")
+                        
+                        Label("joined \(displayedProfile.joinedAt.formatted(joinedFormatter).lowercased())", systemImage: "calendar")
+                        
+                        if !isBlockedByMe, displayedProfile.showBirthday, let birthday = formattedBirthday {
+                            Text("•")
+                            Label(birthday.lowercased(), systemImage: "birthday.cake")
+                        }
                     }
                     .fontStyle(.footnote)
                     .foregroundStyle(.secondary)
 
-                    birthdaySection
+                    if editMode { birthdaySection }
 
                     if !editMode {
-                        if let popScore = store.popScore(for: profile.id) {
-                            PopScoreView(score: popScore)
-                                .padding(.top, 8)
-                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
-                        } else {
-                            ProgressView()
-                                .padding(.top, 8)
-                                .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                        if !isBlockedByMe {
+                            if let popScore = store.popScore(for: profile.id) {
+                                PopScoreView(score: popScore)
+                                    .padding(.top, 8)
+                                    .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                            } else {
+                                ProgressView()
+                                    .padding(.top, 8)
+                                    .matchedGeometryEffect(id: "popScore", in: profileNamespace)
+                            }
                         }
 
-                        if !canEdit {
+                        if canEdit {
+                            editProfileButton
+                        } else if isBlockedByMe {
+                            unblockButton
+                        } else {
                             followButton
                         }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .safeAreaPadding()
-                
-                if !editMode {
+
+                if !editMode, !isBlockedByMe {
                     userPostsSection
                 }
             }
@@ -228,13 +241,16 @@ struct ProfileView: View {
                     Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
                 }
             }
-            if canEdit {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { beginEditing() } label: { Label("Edit", systemImage: "pencil").fontWeight(.semibold) }
-                }
-            } else {
-                ToolbarItem(placement: .topBarTrailing) {
+            ToolbarItem(placement: .topBarTrailing) {
+                if canEdit {
+                    ShareLink(item: shareURL, subject: Text(shareSubject)) {
+                        Label("Share Profile", systemImage: "square.and.arrow.up")
+                    }
+                } else {
                     Menu {
+                        ShareLink(item: shareURL, subject: Text(shareSubject)) {
+                            Label("Share Profile", systemImage: "square.and.arrow.up")
+                        }
                         Button {
                             reportTarget = .profile(displayedProfile)
                         } label: {
@@ -264,6 +280,16 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
+    // onOpenURL handling in On_BoardApp.swift, just a different path segment.
+    private var shareURL: URL {
+        URL(string: "https://onboardapp.org/profile/\(displayedProfile.id)")!
+    }
+
+    private var shareSubject: String {
+        displayedProfile.displayName.isEmpty ? displayedProfile.handle : displayedProfile.displayName
     }
 
     @ViewBuilder
@@ -347,24 +373,22 @@ struct ProfileView: View {
         }
     }
 
-    @ViewBuilder
     private var birthdaySection: some View {
-        if !editMode {
-            if displayedProfile.showBirthday, let birthday = formattedBirthday {
-                HStack(spacing: 6) {
-                    Image(systemName: "birthday.cake")
-                    Text(birthday)
-                }
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 10) {
-                BirthdayGraphicalPicker(date: $draftBirthday, maximumDate: minBirthdayAgeDate)
-                Toggle("Show month and day on my profile", isOn: $draftShowBirthday)
-                    .fontStyle(.body)
-                    .tint(.primary)
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            DatePicker(
+                "Birthday",
+                selection: Binding(
+                    get: { draftBirthday ?? minBirthdayAgeDate },
+                    set: { draftBirthday = $0 }
+                ),
+                in: ...minBirthdayAgeDate,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.compact)
+            .fontStyle(.body)
+            Toggle("Show month and day on my profile", isOn: $draftShowBirthday)
+                .fontStyle(.body)
+                .tint(.primary)
         }
     }
 
@@ -386,6 +410,29 @@ struct ProfileView: View {
             )
         }
         .buttonStyle(isFollowing ? .boardSecondary : .boardPrimary)
+        .padding(.top, 8)
+        .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
+    }
+
+    private var editProfileButton: some View {
+        Button {
+            beginEditing()
+        } label: {
+            Label("Edit Profile", systemImage: "pencil")
+        }
+        .buttonStyle(.boardSecondary)
+        .padding(.top, 8)
+        .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
+    }
+
+    private var unblockButton: some View {
+        Button {
+            Task { await unblockUser() }
+        } label: {
+            Label("Unblock", systemImage: "hand.raised.slash")
+        }
+        .buttonStyle(.boardSecondary)
+        .disabled(isUpdatingBlock)
         .padding(.top, 8)
         .matchedGeometryEffect(id: "watchButton", in: profileNamespace)
     }
@@ -698,7 +745,7 @@ struct PopScoreView: View {
                             let spacingCorrection = CGFloat(sortedReactions.count - 1) * 2.0 / CGFloat(sortedReactions.count)
                             let width = max(0, geo.size.width * CGFloat(count) / CGFloat(total) - spacingCorrection)
                             Rectangle()
-                                .fill(color(for: reaction))
+                                .fill(style(for: reaction))
                                 .frame(width: width)
                         }
                     }
@@ -711,7 +758,7 @@ struct PopScoreView: View {
                         let count = score[reaction] ?? 0
                         HStack(spacing: 4) {
                             Text(reaction.emoji)
-                            Text("\(Int(round(Double(count) / Double(total) * 100)))%")
+                            Text("\(count)")
                                 .fontStyle(.caption2)
                                 .fontWeight(.medium)
                                 .foregroundStyle(.secondary)
@@ -721,13 +768,16 @@ struct PopScoreView: View {
             }
         }
     }
-    
-    private func color(for reaction: Reaction) -> Color {
+
+    // Like/Dislike/Laugh/Hug map onto the four hierarchical shape styles in
+    // order, reinforcing the monochrome look while keeping each reaction
+    // visually distinct.
+    private func style(for reaction: Reaction) -> AnyShapeStyle {
         switch reaction {
-        case .laugh: return .yellow
-        case .hug: return .green
-        case .like: return .pink
-        case .dislike: return .gray
+        case .like: return AnyShapeStyle(.primary)
+        case .dislike: return AnyShapeStyle(.secondary)
+        case .laugh: return AnyShapeStyle(.tertiary)
+        case .hug: return AnyShapeStyle(.quaternary)
         }
     }
 }

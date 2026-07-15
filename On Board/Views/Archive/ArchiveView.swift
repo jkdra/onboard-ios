@@ -40,6 +40,8 @@ struct ArchiveView: View {
                     }
                 case .profile(let profile):
                     ProfileView(profile: profile, presentation: .navigation)
+                case .settings:
+                    SettingsView()
                 }
             }
     }

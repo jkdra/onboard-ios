@@ -15,14 +15,12 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-
     @State private var navigationPath: [BoardRoute] = []
     @State private var showNewPost = false
     @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
     @State private var alertError: PresentableAlertError?
+    @State private var isResolvingPendingProfile = false
     @Namespace private var cardNamespace
 
     private var clearingSoon: Bool {
@@ -34,19 +32,6 @@ struct ContentView: View {
             thisWeekFeed
                 .navigationDestination(for: BoardRoute.self, destination: routeDestination)
                 .navigationBarBackButtonHidden(true)
-                .toolbar {
-                    if horizontalSizeClass == .compact {
-                        ToolbarItem(placement: .topBarLeading) {
-                            Button {
-                                navigationPath = []
-                                dismiss()
-                            } label: {
-                                Image(systemName: "list.bullet").fontWeight(.semibold)
-                            }
-                            .accessibilityLabel("Boards")
-                        }
-                    }
-                }
                 .sheet(isPresented: $showNewPost) { NewPostView() }
                 .boardErrorHandling(alertError: $alertError, suppressWhenBoardMissing: true)
                 .presentableErrorAlert(error: $alertError)
@@ -59,8 +44,12 @@ struct ContentView: View {
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
         .onAppear { openPendingPostIfReady() }
+        .onAppear { openPendingProfileIfReady() }
         .onChange(of: NotificationService.shared.pendingPostID) { _, _ in
             openPendingPostIfReady()
+        }
+        .onChange(of: NotificationService.shared.pendingProfileID) { _, _ in
+            openPendingProfileIfReady()
         }
         .onChange(of: store.isLoading) { _, loading in
             if !loading { openPendingPostIfReady() }
@@ -77,10 +66,6 @@ struct ContentView: View {
             switch last {
             case .post(let postID), .postFromProfile(let postID, _):
                 if store.post(with: postID) == nil {
-                    shouldPop = true
-                }
-            case .profile(let profile):
-                if store.isBlocked(userID: profile.id) {
                     shouldPop = true
                 }
             default:
@@ -117,6 +102,46 @@ struct ContentView: View {
                 message: "Post unavailable",
                 recoverySuggestion: "This post could not be found or you don't have access to this board."
             )
+        }
+    }
+
+    /// Navigates to the profile a shared profile link pointed at. Unlike posts,
+    /// a profile with no posts this week never arrives via the feed refresh, so
+    /// this fetches it directly instead of waiting on `store.isLoading`.
+    private func openPendingProfileIfReady() {
+        guard let profileID = NotificationService.shared.pendingProfileID else { return }
+        if let profile = store.profile(id: profileID) {
+            NotificationService.shared.clearPendingProfileID()
+            showNewPost = false
+            navigationPath = [.profile(profile)]
+            return
+        }
+
+        guard !isResolvingPendingProfile else { return }
+        guard let boardService = store.boardService else {
+            NotificationService.shared.clearPendingProfileID()
+            alertError = PresentableAlertError(
+                message: "Profile unavailable",
+                recoverySuggestion: "This profile could not be found."
+            )
+            return
+        }
+
+        isResolvingPendingProfile = true
+        Task {
+            defer { isResolvingPendingProfile = false }
+            if let fetched = try? await boardService.fetchProfiles(ids: [profileID]).first {
+                store.upsertProfile(fetched)
+                NotificationService.shared.clearPendingProfileID()
+                showNewPost = false
+                navigationPath = [.profile(fetched)]
+            } else {
+                NotificationService.shared.clearPendingProfileID()
+                alertError = PresentableAlertError(
+                    message: "Profile unavailable",
+                    recoverySuggestion: "This profile could not be found or you don't have access to this board."
+                )
+            }
         }
     }
 
@@ -195,12 +220,21 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    navigationPath.append(BoardRoute.archive)
+                Menu {
+                    Button {
+                        navigationPath.append(BoardRoute.archive)
+                    } label: {
+                        Label("Archive", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                    }
+                    Button {
+                        navigationPath.append(BoardRoute.settings)
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
                 } label: {
-                    Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90").fontWeight(.semibold)
+                    Image(systemName: "ellipsis").fontWeight(.semibold)
                 }
-                .accessibilityLabel("Archive")
+                .accessibilityLabel("More")
             }
         }
     }
@@ -230,6 +264,13 @@ struct ContentView: View {
             }
         case .profile(let profile):
             ProfileView(profile: profile, presentation: .navigation)
+        case .settings:
+            SettingsView()
+                // Reasserted here (not just on ContentView() at the RootView
+                // call site) so Settings reactively tracks `appearance`
+                // changes instead of only reflecting whatever the scheme was
+                // when this destination was pushed.
+                .preferredColorScheme(appearance.colorScheme)
         }
     }
 

@@ -142,6 +142,7 @@ struct PostDetailView: View {
             .animation(.smooth(duration: 0.3), value: editingCommentID)
         }
         .scrollDismissesKeyboard(.interactively)
+        .interactiveDismissDisabled(editMode)
         .background {
             tone.color
                 .opacity(scheme == .dark ? 0.25 : 0.20)

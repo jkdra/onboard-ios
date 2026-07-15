@@ -33,7 +33,7 @@ enum AuthProvider: String, Codable, CaseIterable, Identifiable, Sendable {
 
     var securityLabel: String {
         switch self {
-        case .apple: "Sign in with Apple"
+        case .apple: "Apple"
         case .google: "Google"
         case .phone: "Phone number"
         case .email: "Email"

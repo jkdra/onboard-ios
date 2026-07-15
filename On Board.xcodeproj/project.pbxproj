@@ -46,7 +46,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		95DC3FE72FD3688800F6E770 /* On Board: The Community Board.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "On Board: The Community Board.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		95DC3FE72FD3688800F6E770 /* On Board: Your Community Board.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "On Board: Your Community Board.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		95DC3FF42FD3688900F6E770 /* On BoardTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "On BoardTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		95DC3FFE2FD3688900F6E770 /* On BoardUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "On BoardUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		95DC40222FD36BE100F6E770 /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Project.xcconfig; sourceTree = "<group>"; };
@@ -120,7 +120,7 @@
 		95DC3FE82FD3688800F6E770 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				95DC3FE72FD3688800F6E770 /* On Board: The Community Board.app */,
+				95DC3FE72FD3688800F6E770 /* On Board: Your Community Board.app */,
 				95DC3FF42FD3688900F6E770 /* On BoardTests.xctest */,
 				95DC3FFE2FD3688900F6E770 /* On BoardUITests.xctest */,
 			);
@@ -164,7 +164,7 @@
 				954766DA2FE858F900447B56 /* GoogleSignInSwift */,
 			);
 			productName = "On Board";
-			productReference = 95DC3FE72FD3688800F6E770 /* On Board: The Community Board.app */;
+			productReference = 95DC3FE72FD3688800F6E770 /* On Board: Your Community Board.app */;
 			productType = "com.apple.product-type.application";
 		};
 		95DC3FF32FD3688900F6E770 /* On BoardTests */ = {
@@ -475,10 +475,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
 				PRODUCT_MODULE_NAME = On_Board;
-				PRODUCT_NAME = "On Board: The Community Board";
+				PRODUCT_NAME = "On Board: Your Community Board";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -516,10 +516,10 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.1.3;
+				MARKETING_VERSION = 0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
 				PRODUCT_MODULE_NAME = On_Board;
-				PRODUCT_NAME = "On Board: The Community Board";
+				PRODUCT_NAME = "On Board: Your Community Board";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;

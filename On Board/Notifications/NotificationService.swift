@@ -27,6 +27,9 @@ final class NotificationService {
     /// it once the post is available.
     private(set) var pendingPostID: UUID?
 
+    /// Profile to open from a shared profile link, same idiom as `pendingPostID`.
+    private(set) var pendingProfileID: UUID?
+
     private init() {}
 
     // Called by AppDelegate when the user taps a notification. Payloads for
@@ -44,6 +47,14 @@ final class NotificationService {
 
     func setPendingPostID(_ id: UUID) {
         pendingPostID = id
+    }
+
+    func clearPendingProfileID() {
+        pendingProfileID = nil
+    }
+
+    func setPendingProfileID(_ id: UUID) {
+        pendingProfileID = id
     }
 
     // Called by On_BoardApp when auth session changes to signed-in.

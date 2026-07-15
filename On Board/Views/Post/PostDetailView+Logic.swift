@@ -29,9 +29,11 @@ extension PostDetailView {
         do {
             try await store.block(userID: candidate.userID)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
-            // Blocking the post's author removes the post from the store —
-            // don't leave the user on an empty screen.
-            if store.feedPost(id: livePost.id) == nil { dismiss() }
+            // Blocking the post's author removes it from the store, which fires
+            // ContentView's sanitizeNavigationPath synchronously (before this
+            // network await even resolves) to pop the now-stale post route —
+            // an explicit dismiss() here would race it and, when this post was
+            // reached via a profile (.postFromProfile), pop the profile too.
         } catch {
             alertError = store.presentableModerationError(error)
         }

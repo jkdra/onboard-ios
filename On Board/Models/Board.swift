@@ -39,4 +39,5 @@ enum BoardRoute: Hashable {
     case post(Post.ID)
     case postFromProfile(postID: Post.ID, profileID: UUID)
     case profile(Profile)
+    case settings
 }

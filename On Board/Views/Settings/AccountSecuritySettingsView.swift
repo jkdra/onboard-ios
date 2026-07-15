@@ -234,7 +234,7 @@ struct AccountSecuritySettingsView: View {
                 Text(provider.securityLabel)
                     .fontStyle(.body)
                 if let detail, !detail.isEmpty {
-                    Text(detail)
+                    Text((provider == .phone ? "+" : "") + detail)
                         .fontStyle(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
