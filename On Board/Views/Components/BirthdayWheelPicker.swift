@@ -40,6 +40,12 @@ struct BirthdayWheelPicker: View {
             .frame(maxWidth: .infinity)
         }
         .disabled(!isEnabled)
+        // The wheel always *shows* a date, so commit it. Without this the
+        // binding stays nil until the user moves a wheel, leaving Continue
+        // disabled while the UI looks like a date is already picked.
+        .onAppear {
+            if date == nil { date = resolvedDate }
+        }
     }
 
     private static func ordinalFormatted(_ date: Date) -> String {
