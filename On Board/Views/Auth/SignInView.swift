@@ -101,8 +101,13 @@ struct SignInView: View {
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 18)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    
-                    socialSection
+
+                    // Mock (no-Supabase) builds hide social sign-in entirely —
+                    // the buttons would only exercise mock stubs and clutter
+                    // demo/UI-test runs.
+                    if usesLiveBackend {
+                        socialSection
+                    }
                 }
             }
         }
@@ -197,7 +202,7 @@ struct SignInView: View {
                     }
 
                     SecureField("Password", text: $password)
-                        .textFieldStyle(.board)
+                        .textFieldStyle(.boardStandard)
                         .textContentType(emailStatus?.exists == false ? .newPassword : .password)
                         .submitLabel(emailStatus?.exists == false ? .next : .go)
                         .onSubmit {
@@ -210,7 +215,7 @@ struct SignInView: View {
                     
                     if emailStatus?.exists == false {
                         SecureField("Confirm Password", text: $confirmPassword)
-                            .textFieldStyle(.board)
+                            .textFieldStyle(.boardStandard)
                             .textContentType(.newPassword)
                             .submitLabel(.go)
                             .onSubmit {
@@ -255,7 +260,7 @@ struct SignInView: View {
                 if credentialMode == .phone {
                     VStack(alignment: .leading, spacing: 6) {
                         TextField("+1 (555) 555-0100", text: $phoneNumber)
-                            .textFieldStyle(.board)
+                            .textFieldStyle(.boardStandard)
                             .keyboardType(.phonePad)
                             .textContentType(.telephoneNumber)
                             .textInputAutocapitalization(.never)
@@ -267,7 +272,7 @@ struct SignInView: View {
                 } else {
                     VStack(spacing: 10) {
                         TextField("Email address", text: $emailAddress)
-                            .textFieldStyle(.board)
+                            .textFieldStyle(.boardStandard)
                             .keyboardType(.emailAddress)
                             .textContentType(.emailAddress)
                             .textInputAutocapitalization(.never)

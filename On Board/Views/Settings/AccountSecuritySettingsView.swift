@@ -160,6 +160,14 @@ struct AccountSecuritySettingsView: View {
 
     @ViewBuilder
     private var thirdPartySection: some View {
+        // Mock (no-Supabase) builds hide the whole section — linking rows
+        // against mock stubs read as broken, not as a feature.
+        if AppConfiguration.current.isSupabaseConfigured {
+            thirdPartySectionContent
+        }
+    }
+
+    private var thirdPartySectionContent: some View {
         Section {
             if let session = auth.session {
                 appleMethodRow(session: session)
