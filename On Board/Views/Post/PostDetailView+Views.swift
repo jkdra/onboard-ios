@@ -78,7 +78,7 @@ extension PostDetailView {
 
     @ViewBuilder
     var postContent: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 16) {
             authorRow
             restOfPostContent
         }
@@ -268,7 +268,7 @@ extension PostDetailView {
     /// slots as the read-mode text, so entering edit mode morphs in place.
     @ViewBuilder
     var postEditContent: some View {
-        // Panels occupy real space, so the outer VStack's 20pt spacing is the
+        // Panels occupy real space, so the outer VStack's 16pt spacing is the
         // true visible rhythm — no inner stack needed.
         TextField("Title", text: $draftTitle, axis: .vertical)
             .textFieldStyle(.boardTitle)

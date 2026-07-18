@@ -49,7 +49,10 @@ struct NewPostView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                // 16pt, matching the profile/post editors' rhythm — the glass
+                // fields below take their true layout space (no compensated
+                // padding), so this is the actual visible gap.
+                VStack(alignment: .leading, spacing: 16) {
                     if let bannerText = finalHourBannerText {
                         HStack(spacing: 8) {
                             Image(systemName: "clock.badge.exclamationmark.fill")
@@ -67,7 +70,12 @@ struct NewPostView: View {
 
 //                    WeeklyPromptBanner()
 
+                    // Glass fields — the same "you can touch this" chrome and
+                    // context-matched typography as the post/profile editors,
+                    // so composing a post and editing one speak one language.
                     TextField("Title", text: $title, axis: .vertical)
+                        .textFieldStyle(.boardTitle)
+                        .fixedSize(horizontal: false, vertical: true)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...3)
                         .keyboardType(.default)
@@ -75,6 +83,8 @@ struct NewPostView: View {
                         .focused($focus, equals: .title)
 
                     TextField("what's on your mind?", text: $content, axis: .vertical)
+                        .textFieldStyle(.boardBody)
+                        .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(4...12)
                         .keyboardType(.twitter)
                         .focused($focus, equals: .content)
