@@ -22,6 +22,11 @@ struct CommentComposerBar: View {
     var isRecord: Bool
     let onPost: () async -> Void
     let onExpand: () -> Void
+    /// Set by the parent while `CommentComposerSheet` is presented. Presenting
+    /// a sheet resigns this bar's first responder, which would otherwise read
+    /// as a cancel via the focus-loss handler below and wipe the draft/target
+    /// the sheet is about to show.
+    var isSheetPresented: Bool = false
 
     @FocusState private var isFieldFocused: Bool
     @Namespace private var morphNamespace
@@ -29,13 +34,17 @@ struct CommentComposerBar: View {
     // Guards against a second submit while the first is in flight (ported from
     // NewCommentComposer) — the network round-trip leaves the button live.
     @State private var isPosting = false
-    // Tracked via onGeometryChange; a single subheadline line is ~20pt, so
-    // anything past 34pt means the field has wrapped and Expand appears.
+    // Tracked via onGeometryChange; compared against a Dynamic-Type-scaled
+    // ceiling to decide when the field has wrapped and Expand appears.
     @State private var fieldHeight: CGFloat = 0
+    // A single subheadline line is ~20pt at default text size; this scales
+    // with the user's text size so large accessibility sizes don't make an
+    // unwrapped single line spuriously exceed the ceiling.
+    @ScaledMetric(relativeTo: .subheadline) private var singleLineCeiling: CGFloat = 34
 
     private var trimmedEmpty: Bool { composer.draft.trimmed.isEmpty }
     private var morphAnimation: Animation { .smooth(duration: 0.35) }
-    private var isMultiline: Bool { fieldHeight > 34 }
+    private var isMultiline: Bool { fieldHeight > singleLineCeiling }
 
     var body: some View {
         Group {
@@ -55,7 +64,7 @@ struct CommentComposerBar: View {
             // Keyboard dismissal (interactive swipe / Done) exits compose.
             // Guard the posting window, where focus can drop without the user
             // cancelling.
-            if !focused && composer.isComposing && !isPosting {
+            if !focused && composer.isComposing && !isPosting && !isSheetPresented {
                 withAnimation(morphAnimation) { composer.dismiss() }
             }
         }
@@ -187,6 +196,7 @@ struct CommentComposerBar: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .disabled(isPosting)
         .accessibilityLabel("Expand composer")
     }
 
@@ -206,6 +216,7 @@ struct CommentComposerBar: View {
                 Image(systemName: "arrow.up.circle.fill")
                     .fontStyle(.title2)
                     .foregroundStyle(trimmedEmpty ? Color.secondary.opacity(0.4) : tone.color)
+                    .frame(width: 28, height: 28)
             }
         }
         .buttonStyle(.plain)
