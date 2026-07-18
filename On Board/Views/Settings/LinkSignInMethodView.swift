@@ -154,7 +154,8 @@ struct LinkSignInMethodView: View {
         otpSent = false
         otpCode = ""
         submittedDestination = ""
-        resendCooldown.reset()
+        // Cooldown deliberately kept — backing out clears the form, not the
+        // send history (see send(isResend:)).
     }
 
     private func resolvedDestination() throws -> String {
@@ -179,15 +180,23 @@ struct LinkSignInMethodView: View {
             return
         }
 
-        if isResend, !resendCooldown.canResend {
-            return
-        }
-
         isSending = true
         defer { isSending = false }
 
         do {
             let destination = try resolvedDestination()
+
+            // One window for both send paths: same destination inside the
+            // window reopens code entry without re-sending (the in-flight code
+            // stays valid); a different destination sends immediately.
+            guard resendCooldown.canSend(to: destination) else {
+                if !isResend {
+                    submittedDestination = destination
+                    otpSent = true
+                }
+                return
+            }
+
             switch mode {
             case .phone:
                 try await auth.sendLinkPhoneOTP(phone: destination)
@@ -196,7 +205,7 @@ struct LinkSignInMethodView: View {
             }
             submittedDestination = destination
             otpSent = true
-            resendCooldown.start(duration: otpCooldownSeconds)
+            resendCooldown.start(duration: otpCooldownSeconds, destination: destination)
         } catch {
             alertError = PresentableAlertError.from(error)
         }

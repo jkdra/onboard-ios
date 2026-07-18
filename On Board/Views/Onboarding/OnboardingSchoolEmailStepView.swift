@@ -42,7 +42,7 @@ struct OnboardingSchoolEmailStepView: View {
                     .foregroundStyle(.secondary)
 
                 TextField("you@school.edu", text: $email)
-                    .textFieldStyle(.board)
+                    .textFieldStyle(.boardStandard)
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .keyboardType(.emailAddress)
@@ -89,7 +89,9 @@ struct OnboardingSchoolEmailStepView: View {
                     Button("Use a different email") {
                         codeSent = false
                         otpCode = ""
-                        resendCooldown.reset()
+                        // Cooldown deliberately kept: re-sending to the SAME
+                        // email inside the window just reopens code entry (see
+                        // sendCode) instead of invalidating the code in flight.
                         lookupState = .idle
                     }
                     .fontStyle(.footnote)
@@ -199,6 +201,12 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private func sendCode() async {
+        // Same email, window still open: the code already sent is still valid —
+        // reopen the entry UI without burning it. A different email sends fresh.
+        guard resendCooldown.canSend(to: normalizedEmail) else {
+            codeSent = true
+            return
+        }
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
             codeSent = true
@@ -210,7 +218,7 @@ struct OnboardingSchoolEmailStepView: View {
                     boardName: $0.boardName ?? "On Board"
                 )
             } ?? matchedSchool
-            resendCooldown.start(duration: 30)
+            resendCooldown.start(duration: 30, destination: normalizedEmail)
         }
     }
 
@@ -219,7 +227,7 @@ struct OnboardingSchoolEmailStepView: View {
         otpCode = ""
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
-            resendCooldown.start(duration: 30)
+            resendCooldown.start(duration: 30, destination: normalizedEmail)
         }
     }
 

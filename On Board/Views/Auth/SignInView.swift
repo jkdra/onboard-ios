@@ -416,7 +416,11 @@ struct SignInView: View {
         emailStatus = nil
         showAccountDetectedToast = false
         requiresEmailVerification = false
-        resendCooldown.reset()
+        // Deliberately NOT resendCooldown.reset(): backing out clears the form,
+        // not the send history. Re-submitting the same destination inside the
+        // window reuses the in-flight code (see sendOTP) instead of burning it
+        // with a fresh send — the "Back ➜ Continue" loop used to fire a new
+        // OTP every pass, invalidating the email already on its way.
     }
 
     private func signUpWithPassword() async {
@@ -515,13 +519,25 @@ struct SignInView: View {
             return
         }
 
-        if isResend, !resendCooldown.canResend { return }
-
         isSendingOTP = true
         defer { isSendingOTP = false }
 
         do {
             let destination = try resolvedDestination()
+
+            // One window for BOTH send paths. Continue with the same address
+            // inside the window doesn't re-send (the code already in flight is
+            // still valid — a re-send would invalidate it mid-delivery); it
+            // just returns to the code-entry screen. A different address has
+            // no code in flight, so it sends immediately.
+            guard resendCooldown.canSend(to: destination) else {
+                if !isResend {
+                    submittedDestination = destination
+                    withAnimation(.snappy(duration: 0.35)) { otpSent = true }
+                }
+                return
+            }
+
             switch credentialMode {
             case .phone:
                 try await auth.sendPhoneOTP(phone: destination)
@@ -539,7 +555,7 @@ struct SignInView: View {
                 otpSent = true
             }
             if !isResend { otpCode = "" }
-            resendCooldown.start(duration: otpCooldownSeconds)
+            resendCooldown.start(duration: otpCooldownSeconds, destination: destination)
         } catch {
             presentAlert(PresentableAlertError.from(error))
         }
