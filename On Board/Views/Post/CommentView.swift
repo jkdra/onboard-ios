@@ -22,6 +22,8 @@ struct CommentView: View {
 
     @Environment(BoardStore.self) private var store
     @FocusState private var isEditorFocused: Bool
+    @State private var isCollapsed = false
+    @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
 
     private var authorProfile: Profile {
         store.profile(forAuthor: comment.author)
@@ -52,36 +54,79 @@ struct CommentView: View {
             commentContent
 
             if !comment.replies.isEmpty {
-                HStack(alignment: .top, spacing: 12) {
-                    Rectangle()
-                        .fill(.secondary.opacity(isDimmed ? 0.15 : 0.25))
-                        .frame(width: 1.5)
-                        .opacity(isDimmed ? 0.32 : 1)
+                Group {
+                    if isCollapsed {
+                        collapsedRepliesPill
+                    } else {
+                        HStack(alignment: .top, spacing: 0) {
+                            threadLine
 
-                    VStack(alignment: .leading, spacing: 14) {
-                        ForEach(comment.replies) { reply in
-                            CommentView(
-                                postID: postID,
-                                comment: reply,
-                                tone: tone,
-                                isInteractive: isInteractive,
-                                editingCommentID: editingCommentID,
-                                replyTargetID: replyTargetID,
-                                draftCommentBody: $draftCommentBody,
-                                onBeginEdit: onBeginEdit,
-                                onConfirmEdit: onConfirmEdit,
-                                onReply: onReply,
-                                onDelete: onDelete,
-                                onReport: onReport,
-                                onBlockAuthor: onBlockAuthor
-                            )
+                            VStack(alignment: .leading, spacing: 14) {
+                                ForEach(comment.replies) { reply in
+                                    CommentView(
+                                        postID: postID,
+                                        comment: reply,
+                                        tone: tone,
+                                        isInteractive: isInteractive,
+                                        editingCommentID: editingCommentID,
+                                        replyTargetID: replyTargetID,
+                                        draftCommentBody: $draftCommentBody,
+                                        onBeginEdit: onBeginEdit,
+                                        onConfirmEdit: onConfirmEdit,
+                                        onReply: onReply,
+                                        onDelete: onDelete,
+                                        onReport: onReport,
+                                        onBlockAuthor: onBlockAuthor
+                                    )
+                                }
+                            }
                         }
                     }
                 }
                 .padding(.top, 8)
+                .sensoryFeedback(trigger: isCollapsed) { _, _ in
+                    hapticsEnabled ? .impact(weight: .light) : nil
+                }
             }
         }
         .animation(.smooth(duration: 0.3), value: editingCommentID)
+    }
+
+    /// The 2pt visible capsule sits centered in a 14pt strip whose hit area is
+    /// inset a further -5pt on each side (≥24pt effective target) — the line
+    /// itself is far too thin to tap.
+    private var threadLine: some View {
+        Button {
+            withAnimation(.smooth(duration: 0.3)) { isCollapsed = true }
+        } label: {
+            Capsule(style: .continuous)
+                .fill(tone.color.opacity(isDimmed ? 0.12 : 0.30))
+                .frame(width: 2)
+                .frame(width: 14)
+                .contentShape(Rectangle().inset(by: -5))
+                .opacity(isDimmed ? 0.32 : 1)
+        }
+        .buttonStyle(.plain)
+        .disabled(editingCommentID != nil)
+        .accessibilityLabel("Collapse replies")
+    }
+
+    private var collapsedRepliesPill: some View {
+        let hiddenCount = comment.threadCount - 1
+        return Button {
+            withAnimation(.smooth(duration: 0.3)) { isCollapsed = false }
+        } label: {
+            Label("Show \(hiddenCount) \(hiddenCount == 1 ? "reply" : "replies")", systemImage: "chevron.down")
+                .fontStyle(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Capsule(style: .continuous).fill(tone.color.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Expand \(hiddenCount) hidden \(hiddenCount == 1 ? "reply" : "replies")")
+        .padding(.leading, 14)
+        .opacity(isDimmed ? 0.32 : 1)
     }
 
     @ViewBuilder
