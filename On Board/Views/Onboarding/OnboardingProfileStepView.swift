@@ -50,8 +50,10 @@ struct OnboardingProfileStepView: View {
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 8) {
                     TextField("Display name", text: $displayName, axis: .vertical)
+                        .textFieldStyle(.boardTitle)
+                        .fixedSize(horizontal: false, vertical: true)
                         .fontStyle(.largeTitle)
                         .lineLimit(1...2)
                         .keyboardType(.namePhonePad)
@@ -67,8 +69,10 @@ struct OnboardingProfileStepView: View {
                     }
                 }
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: 8) {
                     TextField("A short bio", text: $bio, axis: .vertical)
+                        .textFieldStyle(.boardBody)
+                        .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(2...5)
                         .keyboardType(.twitter)
                         .focused($focus, equals: .bio)
@@ -108,7 +112,7 @@ struct OnboardingProfileStepView: View {
                                             )
                                         )
 
-                                    if let data = photoData, let uiImage = UIImage(data: data) {
+                                    if let data = photoData, let uiImage = PhotoPreviewCache.image(for: data) {
                                         Image(uiImage: uiImage)
                                             .resizable()
                                             .scaledToFill()

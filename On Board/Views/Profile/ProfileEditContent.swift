@@ -148,7 +148,7 @@ struct ProfileEditContent: View {
         return PhotosPicker(selection: $draft.selectedPhotoItem, matching: .images) {
             ZStack(alignment: .bottomTrailing) {
                 ZStack {
-                    if let data = photoData, let uiImage = UIImage(data: data) {
+                    if let data = photoData, let uiImage = PhotoPreviewCache.image(for: data) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFill()

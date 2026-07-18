@@ -338,7 +338,7 @@ extension PostDetailView {
         if hasImage {
             // ── Image preview with overlaid controls ───────────────────────
             Group {
-                if let data = selectedEditPhotoData, let uiImage = UIImage(data: data) {
+                if let data = selectedEditPhotoData, let uiImage = PhotoPreviewCache.image(for: data) {
                     Image(uiImage: uiImage)
                         .resizable()
                         .scaledToFit()

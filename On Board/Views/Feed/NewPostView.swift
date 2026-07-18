@@ -234,7 +234,7 @@ struct NewPostView: View {
                 }
             }
 
-            if let data = selectedPhotoData, let uiImage = UIImage(data: data) {
+            if let data = selectedPhotoData, let uiImage = PhotoPreviewCache.image(for: data) {
                 Image(uiImage: uiImage)
                     .resizable()
                     .scaledToFit()
