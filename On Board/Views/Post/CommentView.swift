@@ -8,23 +8,20 @@ import SwiftUI
 struct CommentView: View {
     let postID: UUID
     let comment: Comment
+    let tone: PostTone
     var isInteractive: Bool = true
     var editingCommentID: UUID?
-    var replyingToCommentID: UUID?
+    var replyTargetID: UUID?
     @Binding var draftCommentBody: String
     var onBeginEdit: ((UUID, String) -> Void)?
     var onConfirmEdit: (() -> Void)?
-    var onReply: ((UUID) -> Void)?
-    var onCancelReply: (() -> Void)?
+    var onReply: ((Comment) -> Void)?
     var onDelete: ((UUID) -> Void)?
     var onReport: ((Comment) -> Void)?
     var onBlockAuthor: ((Comment) -> Void)?
 
     @Environment(BoardStore.self) private var store
     @FocusState private var isEditorFocused: Bool
-    @FocusState private var isReplyFocused: Bool
-    @State private var replyDraft = ""
-    @State private var isPostingReply = false
 
     private var authorProfile: Profile {
         store.profile(forAuthor: comment.author)
@@ -54,11 +51,6 @@ struct CommentView: View {
         VStack(alignment: .leading, spacing: 6) {
             commentContent
 
-            if replyingToCommentID == comment.id {
-                inlineReplyComposer
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-
             if !comment.replies.isEmpty {
                 HStack(alignment: .top, spacing: 12) {
                     Rectangle()
@@ -71,14 +63,14 @@ struct CommentView: View {
                             CommentView(
                                 postID: postID,
                                 comment: reply,
+                                tone: tone,
                                 isInteractive: isInteractive,
                                 editingCommentID: editingCommentID,
-                                replyingToCommentID: replyingToCommentID,
+                                replyTargetID: replyTargetID,
                                 draftCommentBody: $draftCommentBody,
                                 onBeginEdit: onBeginEdit,
                                 onConfirmEdit: onConfirmEdit,
                                 onReply: onReply,
-                                onCancelReply: onCancelReply,
                                 onDelete: onDelete,
                                 onReport: onReport,
                                 onBlockAuthor: onBlockAuthor
@@ -90,64 +82,6 @@ struct CommentView: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: editingCommentID)
-        .animation(.smooth(duration: 0.3), value: replyingToCommentID)
-    }
-
-    @ViewBuilder
-    private var inlineReplyComposer: some View {
-        HStack(alignment: .top, spacing: 8) {
-            TextField("Write a reply…", text: $replyDraft, axis: .vertical)
-                .fontStyle(.callout)
-                .keyboardType(.twitter)
-                .focused($isReplyFocused)
-
-            VStack(spacing: 4) {
-                Button {
-                    Task { await postReply() }
-                } label: {
-                    if isPostingReply {
-                        ProgressView().scaleEffect(0.8)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .fontStyle(.title2)
-                            .foregroundStyle(
-                                replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                    ? Color.secondary.opacity(0.4)
-                                    : Color.primary
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(replyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPostingReply)
-                .accessibilityLabel("Post reply")
-
-                Button { onCancelReply?() } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .fontStyle(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Cancel reply")
-            }
-        }
-        .padding(10)
-        .background {
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(.secondary.opacity(0.08))
-        }
-        .onAppear { isReplyFocused = true }
-    }
-
-    private func postReply() async {
-        let trimmed = replyDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        isPostingReply = true
-        defer { isPostingReply = false }
-        let succeeded = await store.addComment(postID: postID, body: trimmed, parentCommentID: comment.id)
-        if succeeded {
-            replyDraft = ""
-            onCancelReply?()
-        }
     }
 
     @ViewBuilder
@@ -257,7 +191,7 @@ struct CommentView: View {
 
                         if isInteractive && editingCommentID == nil {
                             Button {
-                                onReply?(comment.id)
+                                onReply?(comment)
                             } label: {
                                 Label("Reply", systemImage: "arrowshape.turn.up.left")
                                     .fontStyle(.caption)
@@ -275,6 +209,16 @@ struct CommentView: View {
         }
         .padding(.vertical, isBeingEdited ? 10 : 0)
         .opacity(isDimmed ? 0.32 : 1)
+        .background {
+            if replyTargetID == comment.id {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(tone.color.opacity(0.10))
+                    .padding(-6)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.3), value: replyTargetID)
+        .id(comment.id)
         .onAppear {
             guard isBeingEdited else { return }
             isEditorFocused = true

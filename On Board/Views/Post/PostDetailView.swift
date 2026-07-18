@@ -23,12 +23,11 @@ struct PostDetailView: View {
     @State var draftTags: [String] = []
     @State var showingTagSelection = false
 
-    // Comment editing / replying
+    // Comment editing / composing
     @State var editingCommentID: UUID?
     @State var draftCommentBody = ""
-    @State var replyingToCommentID: UUID?
-    @State var newCommentDraft = ""
-    @FocusState var isNewCommentFocused: Bool
+    @State var composer = CommentComposerState()
+    @State var showExpandedComposer = false
 
     // Image editing
     @State var selectedEditPhotoItem: PhotosPickerItem?
@@ -104,164 +103,170 @@ struct PostDetailView: View {
     // MARK: - Body
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                if !editMode {
-                    postContent
-                        .opacity(isCommentEditing ? 0.32 : 1)
-                    Divider()
-                        .opacity(isCommentEditing ? 0.32 : 1)
-                    commentsSection
-                } else {
-                    Text("Tap any element to edit.")
-                        .fontStyle(.footnote)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity)
-                        .matchedGeometryEffect(id: "postAuthor", in: postNamespace, anchor: .leading)
-                    
-                    TextField("Title", text: $draftTitle, axis: .vertical)
-                        .fontStyle(.largeTitle)
-                        .keyboardType(.default)
-                        .textInputAutocapitalization(.sentences)
-                        .matchedGeometryEffect(id: "postTitle", in: postNamespace, anchor: .leading)
-                    TextField("Description", text: $draftDescription, axis: .vertical)
-                        .fontStyle(.body)
-                        .keyboardType(.twitter)
-                        .matchedGeometryEffect(id: "postDescription", in: postNamespace, anchor: .leading)
-                        
-                    editTagsSection
-                    
-                    editImageSection
-                        .transition(.opacity)
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    if !editMode {
+                        postContent
+                            .opacity(isCommentEditing ? 0.32 : 1)
+                        Divider()
+                            .opacity(isCommentEditing ? 0.32 : 1)
+                        commentsSection
+                    } else {
+                        postEditContent
+                    }
                 }
+                .safeAreaPadding(.horizontal)
+                .safeAreaPadding(.top, 12)
+                .safeAreaPadding(.bottom, 32)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(.smooth(duration: 0.3), value: editingCommentID)
             }
-            .safeAreaPadding(.horizontal)
-            .safeAreaPadding(.top, 12)
-            .safeAreaPadding(.bottom, 32)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .animation(.smooth(duration: 0.3), value: editingCommentID)
-        }
-        .scrollDismissesKeyboard(.interactively)
-        .interactiveDismissDisabled(editMode)
-        .background {
-            tone.color
-                .opacity(scheme == .dark ? 0.25 : 0.20)
-                .ignoresSafeArea()
-                .overlay {
-                    AnimatedStripesView(
-                        color: tone.color,
-                        opacity: 0.1,
-                        isActive: editMode || isCommentEditing
+            .scrollDismissesKeyboard(.interactively)
+            .interactiveDismissDisabled(editMode)
+            .background {
+                tone.color
+                    .opacity(scheme == .dark ? 0.25 : 0.20)
+                    .ignoresSafeArea()
+                    .overlay {
+                        AnimatedStripesView(
+                            color: tone.color,
+                            opacity: 0.1,
+                            isActive: editMode || isCommentEditing
+                        )
+                    }
+            }
+            .animation(.smooth(duration: 0.3), value: tone)
+            .task(id: livePost.id) {
+                isLoadingComments = true
+                await store.loadComments(for: livePost.id)
+                isLoadingComments = false
+            }
+            .task(id: livePost.id) {
+                guard let authorId = livePost.authorId else { return }
+                store.prefetchPopScore(for: authorId)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                // Hidden while editing a post OR a comment — both put the keyboard
+                // up for a different text session, and the bar previously rode the
+                // keyboard into the content (the screenshot collision).
+                if !editMode && !isCommentEditing {
+                    CommentComposerBar(
+                        tone: tone,
+                        counts: livePost.reactionCounts,
+                        selectedReaction: selectedReaction,
+                        composer: $composer,
+                        isReadOnly: isReadOnly,
+                        isRecord: isReadOnly,
+                        onPost: submitComposer,
+                        onExpand: { showExpandedComposer = true },
+                        // Sheet presentation resigns first responder; without this
+                        // flag the bar's focus-loss handler would read the expand
+                        // handoff as a cancel and wipe the draft.
+                        isSheetPresented: showExpandedComposer
                     )
                 }
-        }
-        .animation(.smooth(duration: 0.3), value: tone)
-        .task(id: livePost.id) {
-            isLoadingComments = true
-            await store.loadComments(for: livePost.id)
-            isLoadingComments = false
-        }
-        .task(id: livePost.id) {
-            guard let authorId = livePost.authorId else { return }
-            store.prefetchPopScore(for: authorId)
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !editMode {
-                PostActionBar(
+            }
+            .sheet(isPresented: $showExpandedComposer) {
+                CommentComposerSheet(
+                    composer: $composer,
                     tone: tone,
-                    counts: livePost.reactionCounts,
-                    selectedReaction: selectedReaction,
-                    isInteractive: !isReadOnly && !isCommentEditing && !editMode,
-                    isRecord: isReadOnly
+                    onPost: submitComposer
                 )
             }
-        }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let text = store.clearingBannerText {
-                HStack(spacing: 8) {
-                    Image(systemName: "clock.badge.exclamationmark.fill")
-                        .foregroundStyle(.red)
-                    Text(text)
-                        .fontStyle(.footnote)
-                        .foregroundStyle(.primary)
-                    Spacer()
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let text = store.clearingBannerText {
+                    HStack(spacing: 8) {
+                        Image(systemName: "clock.badge.exclamationmark.fill")
+                            .foregroundStyle(.red)
+                        Text(text)
+                            .fontStyle(.footnote)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    .background(.regularMaterial)
+                    .overlay(Rectangle().frame(height: 0.5).foregroundStyle(.red.opacity(0.4)), alignment: .bottom)
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
-                .background(.regularMaterial)
-                .overlay(Rectangle().frame(height: 0.5).foregroundStyle(.red.opacity(0.4)), alignment: .bottom)
-                .transition(.move(edge: .top).combined(with: .opacity))
             }
-        }
-        .animation(.smooth(duration: 0.3), value: store.clearingBannerText != nil)
-        .boardErrorHandling(alertError: $alertError)
-        .presentableErrorAlert(error: $alertError)
-        .confirmationDialog(
-            "Delete this post?",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete Post", role: .destructive) {
-                Task { if await store.deletePost(id: livePost.id) { dismiss() } }
+            .animation(.smooth(duration: 0.3), value: store.clearingBannerText != nil)
+            .onChange(of: composer.target) { _, target in
+                guard let parentID = target?.replyParentID else { return }
+                withAnimation(.smooth(duration: 0.35)) {
+                    proxy.scrollTo(parentID, anchor: .center)
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This permanently removes the post and its comments.")
-        }
-        .sheet(item: $reportTarget) { target in
-            ReportContentSheet(target: target) {
-                // Reporting the post itself hides it — leave the empty screen.
-                if case .post = target { dismiss() }
+            .boardErrorHandling(alertError: $alertError)
+            .presentableErrorAlert(error: $alertError)
+            .confirmationDialog(
+                "Delete this post?",
+                isPresented: $showDeleteConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Post", role: .destructive) {
+                    Task { if await store.deletePost(id: livePost.id) { dismiss() } }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently removes the post and its comments.")
             }
-        }
-        .sheet(isPresented: $showingTagSelection) {
-            TagSelectionView(selectedTags: $draftTags)
-        }
-        .confirmationDialog(
-            "Block \(blockCandidate?.handle ?? "")?",
-            isPresented: Binding(
-                get: { blockCandidate != nil },
-                set: { if !$0 { blockCandidate = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: blockCandidate
-        ) { candidate in
-            Button("Block \(candidate.handle)", role: .destructive) {
-                Task { await blockUser(candidate) }
+            .sheet(item: $reportTarget) { target in
+                ReportContentSheet(target: target) {
+                    // Reporting the post itself hides it — leave the empty screen.
+                    if case .post = target { dismiss() }
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
-        }
-        .confirmationDialog(
-            "Delete this comment?",
-            isPresented: Binding(
-                get: { commentPendingDeletion != nil },
-                set: { if !$0 { commentPendingDeletion = nil } }
-            ),
-            titleVisibility: .visible,
-            presenting: commentPendingDeletion
-        ) { commentID in
-            Button("Delete Comment", role: .destructive) {
-                Task { await store.deleteComment(postID: livePost.id, commentID: commentID) }
+            .sheet(isPresented: $showingTagSelection) {
+                TagSelectionView(selectedTags: $draftTags)
             }
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("This also removes any replies to it.")
-        }
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBackDisabled(editMode)
-        .interactiveDismissDisabled(editMode)
-        .toolbar { toolbarContent }
-        .keyboardDoneToolbar()
-        .fullScreenCover(isPresented: $showImageViewer) {
-            if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
-                ImageViewerView(url: url)
-                    .navigationTransition(.zoom(sourceID: "postImage", in: postNamespace))
+            .confirmationDialog(
+                "Block \(blockCandidate?.handle ?? "")?",
+                isPresented: Binding(
+                    get: { blockCandidate != nil },
+                    set: { if !$0 { blockCandidate = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: blockCandidate
+            ) { candidate in
+                Button("Block \(candidate.handle)", role: .destructive) {
+                    Task { await blockUser(candidate) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
             }
-        }
-        .onChange(of: selectedEditPhotoItem) { _, item in
-            Task { await loadAndUploadEditImage(item) }
+            .confirmationDialog(
+                "Delete this comment?",
+                isPresented: Binding(
+                    get: { commentPendingDeletion != nil },
+                    set: { if !$0 { commentPendingDeletion = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: commentPendingDeletion
+            ) { commentID in
+                Button("Delete Comment", role: .destructive) {
+                    Task { await store.deleteComment(postID: livePost.id, commentID: commentID) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { _ in
+                Text("This also removes any replies to it.")
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBackDisabled(editMode)
+            .interactiveDismissDisabled(editMode)
+            .toolbar { toolbarContent }
+            .keyboardDoneToolbar()
+            .fullScreenCover(isPresented: $showImageViewer) {
+                if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
+                    ImageViewerView(url: url)
+                        .navigationTransition(.zoom(sourceID: "postImage", in: postNamespace))
+                }
+            }
+            .onChange(of: selectedEditPhotoItem) { _, item in
+                Task { await loadAndUploadEditImage(item) }
+            }
         }
     }
 }

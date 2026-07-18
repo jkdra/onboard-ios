@@ -93,7 +93,7 @@ extension PostDetailView {
     // MARK: - Comment editing
 
     func beginCommentEditing(commentID: UUID, body: String) {
-        replyingToCommentID = nil
+        withAnimation(.smooth(duration: 0.35)) { composer.dismiss() }
         editingCommentID = commentID
         draftCommentBody = body
     }
@@ -118,13 +118,16 @@ extension PostDetailView {
         }
     }
 
-    func postNewComment() async {
-        let trimmed = newCommentDraft.trimmed
+    func submitComposer() async {
+        let trimmed = composer.draft.trimmed
         guard !trimmed.isEmpty else { return }
-        let succeeded = await store.addComment(postID: livePost.id, body: trimmed, parentCommentID: nil)
+        let succeeded = await store.addComment(
+            postID: livePost.id,
+            body: trimmed,
+            parentCommentID: composer.target?.replyParentID
+        )
         if succeeded {
-            newCommentDraft = ""
-            isNewCommentFocused = false
+            withAnimation(.smooth(duration: 0.35)) { composer.finishPosting() }
         }
     }
 

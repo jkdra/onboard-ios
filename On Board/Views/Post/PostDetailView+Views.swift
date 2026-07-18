@@ -209,16 +209,6 @@ extension PostDetailView {
         }
         .opacity(isCommentEditing ? 0.32 : 1)
 
-        if !isReadOnly {
-            NewCommentComposer(
-                draft: $newCommentDraft,
-                isFocused: $isNewCommentFocused,
-                tone: tone,
-                isDisabled: isCommentEditing,
-                onPost: postNewComment
-            )
-        }
-
         if isLoadingComments && comments.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity)
@@ -235,17 +225,19 @@ extension PostDetailView {
                     CommentView(
                         postID: livePost.id,
                         comment: comment,
+                        tone: tone,
                         isInteractive: !isReadOnly,
                         editingCommentID: editingCommentID,
-                        replyingToCommentID: replyingToCommentID,
+                        replyTargetID: composer.target?.replyParentID,
                         draftCommentBody: $draftCommentBody,
                         onBeginEdit: beginCommentEditing,
                         onConfirmEdit: confirmCommentEditing,
-                        onReply: { commentID in
+                        onReply: { comment in
                             cancelCommentEditing()
-                            replyingToCommentID = commentID
+                            withAnimation(.smooth(duration: 0.35)) {
+                                composer.beginReply(parentID: comment.id, handle: comment.author)
+                            }
                         },
-                        onCancelReply: { replyingToCommentID = nil },
                         onDelete: { commentID in
                             commentPendingDeletion = commentID
                         },
