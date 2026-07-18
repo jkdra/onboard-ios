@@ -1,13 +1,13 @@
 //
-//  BirthdayGraphicalPicker.swift
+//  BirthdayWheelPicker.swift
 //  On Board
 //
 
 import SwiftUI
 
-/// Large ordinal-formatted date readout ("August 20th, 2006") over an
-/// always-visible graphical `DatePicker` — no popover, no digit entry.
-struct BirthdayGraphicalPicker: View {
+/// Large ordinal-formatted date readout ("August 20th, 2006") over a compact
+/// wheel `DatePicker` — no calendar grid, no popover, no digit entry.
+struct BirthdayWheelPicker: View {
     @Binding var date: Date?
     var isEnabled: Bool = true
     var maximumDate: Date? = nil
@@ -34,9 +34,10 @@ struct BirthdayGraphicalPicker: View {
                 in: ...(maximumDate ?? .now),
                 displayedComponents: .date
             )
-            .datePickerStyle(.graphical)
+            .datePickerStyle(.wheel)
             .labelsHidden()
             .tint(.primary)
+            .frame(maxWidth: .infinity)
         }
         .disabled(!isEnabled)
     }
@@ -66,7 +67,7 @@ struct BirthdayGraphicalPicker: View {
 
 #Preview {
     @Previewable @State var date: Date? = Calendar.current.date(byAdding: .year, value: -18, to: .now)
-    return BirthdayGraphicalPicker(
+    return BirthdayWheelPicker(
         date: $date,
         maximumDate: Calendar.current.date(byAdding: .year, value: -16, to: .now)
     )

@@ -29,7 +29,7 @@ struct OnboardingBirthdayStepView: View {
                     .fontStyle(.subheadline)
                     .foregroundStyle(.secondary)
 
-                BirthdayGraphicalPicker(date: $birthday, isEnabled: !onboarding.isSubmitting, maximumDate: minAgeDate)
+                BirthdayWheelPicker(date: $birthday, isEnabled: !onboarding.isSubmitting, maximumDate: minAgeDate)
 
                 Toggle("Show month and day on profile", isOn: $showBirthday)
                     .fontStyle(.body)
