@@ -75,18 +75,7 @@ private struct GlassFieldChrome<Content: View>: View {
         }
     }
 
-    /// Inner glass padding. Inline variants negate it back out so the text's
-    /// layout position matches the read-mode Text exactly. Keep inline insets
-    /// modest — the bleed comes out of the surrounding margins, and panels
-    /// that reach the screen edge read as slabs, not field chrome.
-    private var inset: (h: CGFloat, v: CGFloat) {
-        switch variant {
-        case .standard: (18, 16)
-        case .title: (12, 10)
-        case .body: (12, 10)
-        case .username: (10, 7)
-        }
-    }
+    private var inset: (h: CGFloat, v: CGFloat) { variant.inset }
 
     private var shape: RoundedRectangle {
         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
@@ -157,6 +146,47 @@ private struct GlassFieldChrome<Content: View>: View {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.55).delay(0.12)) {
             bubbleScale = 1
         }
+    }
+}
+
+extension BoardTextFieldStyle.Variant {
+    /// Inner glass padding. Single source of truth — `GlassFieldChrome` pads
+    /// by it, `matchedFieldText(id:in:variant:)` negates by it to register the
+    /// text frame instead of the glass frame. Keep inline insets modest — the
+    /// bleed comes out of the surrounding margins, and panels that reach the
+    /// screen edge read as slabs, not field chrome.
+    var inset: (h: CGFloat, v: CGFloat) {
+        switch self {
+        case .standard: (18, 16)
+        case .title: (12, 10)
+        case .body: (12, 10)
+        case .username: (10, 7)
+        }
+    }
+}
+
+extension View {
+    /// `matchedGeometryEffect` for a glass field that registers the *text*
+    /// frame, not the glass frame. The styled field is padded inward by the
+    /// variant's inset, so negating that inset yields a frame congruent with
+    /// the text itself (the glass overflows it symmetrically). Paired with a
+    /// plain `Text` on the read side, the edit-mode morph slides the text
+    /// inward to its inset position as the chrome appears — instead of
+    /// crossfading two copies offset by one inset. Runs entirely inside the
+    /// caller's `withAnimation` transaction; no two-phase settle.
+    func matchedFieldText(
+        id: some Hashable,
+        in namespace: Namespace.ID,
+        variant: BoardTextFieldStyle.Variant,
+        anchor: UnitPoint = .leading
+    ) -> some View {
+        let inset = variant.inset
+        return self
+            .padding(.horizontal, -inset.h)
+            .padding(.vertical, -inset.v)
+            .matchedGeometryEffect(id: id, in: namespace, anchor: anchor)
+            .padding(.horizontal, inset.h)
+            .padding(.vertical, inset.v)
     }
 }
 

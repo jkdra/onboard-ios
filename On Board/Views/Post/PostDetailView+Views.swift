@@ -15,23 +15,11 @@ extension PostDetailView {
     @ToolbarContentBuilder
     var toolbarContent: some ToolbarContent {
         if editMode {
-            ToolbarItem(placement: .topBarLeading) {
-                Button { cancelEditing() } label: {
-                    Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
-                }
-            }
-            ToolbarItem(placement: .principal) {
-                EditingIndicator()
-                    .fontStyle(.title3)
-                    .fixedSize()
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { saveEdits() } label: {
-                    Label("Save", systemImage: "checkmark").fontWeight(.semibold)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(draftTone.color)
-            }
+            EditModeToolbarItems(
+                saveTint: draftTone.color,
+                onCancel: cancelEditing,
+                onSave: saveEdits
+            )
             ToolbarItem(placement: .bottomBar) { Spacer() }
             ToolbarItem(placement: .bottomBar) {
                 TonePicker(selection: $draftTone, showBackground: false)
@@ -99,7 +87,16 @@ extension PostDetailView {
     @ViewBuilder
     private var authorRow: some View {
         HStack(spacing: 10) {
-            if originatingProfileID == authorProfile.id {
+            // Compare against the post's own authorId, NOT authorProfile.id.
+            // authorProfile comes from `store.profile(forAuthor:)`, which falls
+            // back to `Profile(handle:displayName:)` — defaulting `id` to a
+            // fresh `UUID()` — whenever the author isn't in the local profile
+            // cache. That fake id never equals originatingProfileID, so viewing
+            // your own (uncached) posts from your own profile page mistakenly
+            // took the NavigationLink branch below: the "double push" bug —
+            // tapping into a post, then its author row pushing a second, bogus
+            // copy of the very profile you were already on.
+            if originatingProfileID == livePost.authorId {
                 Button {
                     dismiss()
                 } label: {
@@ -263,6 +260,37 @@ extension PostDetailView {
                 }
             }
         }
+    }
+
+    // MARK: - Edit mode
+
+    /// Glass-field WYSIWYG editor — renders into the same matched-geometry
+    /// slots as the read-mode text, so entering edit mode morphs in place.
+    @ViewBuilder
+    var postEditContent: some View {
+        // Panels occupy real space, so the outer VStack's 20pt spacing is the
+        // true visible rhythm — no inner stack needed.
+        TextField("Title", text: $draftTitle, axis: .vertical)
+            .textFieldStyle(.boardTitle)
+            .fixedSize(horizontal: false, vertical: true)
+            .fontStyle(.largeTitle)
+            .keyboardType(.default)
+            .textInputAutocapitalization(.sentences)
+            .matchedFieldText(id: "postTitle", in: postNamespace, variant: .title)
+        TextField("Description", text: $draftDescription, axis: .vertical)
+            .textFieldStyle(.boardBody)
+            // Multi-line fields re-measure a beat after appearing; without
+            // this they settle unanimated mid-morph. Mirrors read mode's
+            // fixedSize note above.
+            .fixedSize(horizontal: false, vertical: true)
+            .fontStyle(.body)
+            .keyboardType(.twitter)
+            .matchedFieldText(id: "postDescription", in: postNamespace, variant: .body)
+
+        editTagsSection
+
+        editImageSection
+            .transition(.opacity)
     }
 
     @ViewBuilder
