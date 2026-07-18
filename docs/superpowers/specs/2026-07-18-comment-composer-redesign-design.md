@@ -59,15 +59,22 @@ exclusive states:
   are preserved; the Comment button appears alongside both except when
   `isReadOnly` (archived posts get no composer entry point, matching today's
   behavior of hiding `NewCommentComposer`).
-- **Compose state** — a glass composer: multiline `TextField` ("Add a comment…"),
-  tone-colored send button (spinner while posting, disabled when
-  trimmed-empty — port `NewCommentComposer`'s `isPosting` double-submit guard),
-  and, when replying, a context chip above the field: "↩ Replying to @handle ✕".
-  Tapping the chip's ✕ clears the reply target (compose state continues,
-  targeting a new top-level comment). Exiting compose is always one obvious
-  tap: a dedicated ✕ close button on the composer itself (mirroring the old
-  inline reply composer's cancel), and dismissing the keyboard (swipe or Done)
-  exits equally. The reaction pills are **absent** in this state — the keyboard
+- **Compose state** — a fixed spatial grammar: **✕ Cancel alone at the very
+  leading edge, outside the field** (bailing out is always one obvious tap in a
+  fixed spot), then the glass field owning everything else — the multiline text
+  plus a trailing action column pinned to the field's bottom corner. In that
+  column: the tone-colored **send** button at the bottom (spinner while
+  posting, disabled when trimmed-empty — port `NewCommentComposer`'s
+  `isPosting` double-submit guard), and, once the text wraps past one line, an
+  **Expand** button directly above send. Send and Expand never move as the
+  field grows. Expand opens a **full-screen composer sheet** — tone-tinted
+  background, large field, reply context line, `LoadingButtonLabel` post
+  button, standard keyboard conventions — sharing the same draft/target state:
+  dismissing the sheet returns to the inline field with the draft intact;
+  posting from it lands back in browse state. When replying, a context chip
+  sits above the field: "↩ Replying to @handle ✕"; tapping the chip's ✕ clears
+  the reply target (compose continues, targeting a new top-level comment).
+  Dismissing the keyboard (swipe or Done) exits to browse equally. The reaction pills are **absent** in this state — the keyboard
   collision becomes impossible by construction.
 
 **The morph:** on iOS 26, the bar lives in a `GlassEffectContainer`; the circular
@@ -149,9 +156,10 @@ clears the other, as `onReply`/`beginCommentEditing` already do today).
 - Existing comment store tests must stay green (no store changes expected).
 - Visual/manual in mock mode: morph in both states and both OS eras (iOS 26 sim
   + iOS 18 destination), keyboard up with reply targeted at a deeply nested
-  comment (the screenshot scenario), archived-week record layout, accessibility
-  text sizes (Menu layout + circle button), Reduce Motion, VoiceOver pass over
-  the thread line.
+  comment (the screenshot scenario), Expand appearing on wrap and the sheet
+  round-trip (draft intact both directions, post-from-sheet lands in browse),
+  archived-week record layout, accessibility text sizes (Menu layout + circle
+  button), Reduce Motion, VoiceOver pass over the thread line.
 
 ## Out of scope / follow-ups
 

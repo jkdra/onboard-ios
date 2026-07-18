@@ -284,16 +284,19 @@ git commit -m "Promote Comment.threadCount from view-private to model scope"
 
 ---
 
-### Task 3: CommentComposerBar view
+### Task 3: CommentComposerBar view + CommentComposerSheet
 
 **Files:**
 - Create: `On Board/Views/Post/CommentComposerBar.swift`
+- Create: `On Board/Views/Post/CommentComposerSheet.swift`
 
 **Interfaces:**
-- Consumes: `CommentComposerState`/`ComposerTarget` (Task 1), existing `ReactionBar`, `PostTone`, `Reaction`, `String.trimmed`, `.fontStyle(_:)`.
-- Produces: `CommentComposerBar(tone:counts:selectedReaction:composer:isReadOnly:isRecord:onPost:)` — Task 4 mounts this in the bottom `safeAreaInset`, replacing `PostActionBar`.
+- Consumes: `CommentComposerState`/`ComposerTarget` (Task 1), existing `ReactionBar`, `PostTone`, `Reaction`, `String.trimmed`, `.fontStyle(_:)`, `LoadingButtonLabel`, `.keyboardDoneToolbar()`.
+- Produces: `CommentComposerBar(tone:counts:selectedReaction:composer:isReadOnly:isRecord:onPost:onExpand:)` and `CommentComposerSheet(composer:tone:onPost:)` — Task 4 mounts the bar in the bottom `safeAreaInset` (replacing `PostActionBar`) and presents the sheet from `onExpand`.
 
-- [ ] **Step 1: Create the view**
+**Compose-state layout contract (from the spec):** ✕ Cancel alone at the very leading edge, outside the field. The glass field owns the text plus a trailing action column pinned to its bottom corner: send at the bottom, Expand appearing directly above send once the text wraps past one line. Send and Expand never move as the field grows.
+
+- [ ] **Step 1: Create the bar**
 
 Create `On Board/Views/Post/CommentComposerBar.swift`:
 
@@ -321,6 +324,7 @@ struct CommentComposerBar: View {
     var isReadOnly: Bool
     var isRecord: Bool
     let onPost: () async -> Void
+    let onExpand: () -> Void
 
     @FocusState private var isFieldFocused: Bool
     @Namespace private var morphNamespace
@@ -328,9 +332,13 @@ struct CommentComposerBar: View {
     // Guards against a second submit while the first is in flight (ported from
     // NewCommentComposer) — the network round-trip leaves the button live.
     @State private var isPosting = false
+    // Tracked via onGeometryChange; a single subheadline line is ~20pt, so
+    // anything past 34pt means the field has wrapped and Expand appears.
+    @State private var fieldHeight: CGFloat = 0
 
     private var trimmedEmpty: Bool { composer.draft.trimmed.isEmpty }
     private var morphAnimation: Animation { .smooth(duration: 0.35) }
+    private var isMultiline: Bool { fieldHeight > 34 }
 
     var body: some View {
         Group {
@@ -408,52 +416,104 @@ struct CommentComposerBar: View {
             }
 
             HStack(alignment: .bottom, spacing: 8) {
-                TextField(
-                    composer.target?.isReply == true ? "Write a reply…" : "Add a comment…",
-                    text: $composer.draft,
-                    axis: .vertical
-                )
-                .fontStyle(.subheadline)
-                .keyboardType(.twitter)
-                .lineLimit(1...5)
-                .focused($isFieldFocused)
-                .disabled(isPosting)
-
-                Button {
-                    withAnimation(morphAnimation) { composer.dismiss() }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .fontStyle(.title3)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close composer")
-
-                Button {
-                    Task {
-                        isPosting = true
-                        await onPost()
-                        isPosting = false
-                    }
-                } label: {
-                    if isPosting {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                            .frame(width: 28, height: 28)
-                    } else {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .fontStyle(.title2)
-                            .foregroundStyle(trimmedEmpty ? Color.secondary.opacity(0.4) : tone.color)
-                    }
-                }
-                .buttonStyle(.plain)
-                .disabled(trimmedEmpty || isPosting)
-                .accessibilityLabel("Post comment")
+                closeButton
+                fieldCluster
             }
-            .padding(12)
-            .background(morphSource(shape: RoundedRectangle(cornerRadius: 22, style: .continuous)))
         }
         .transition(.opacity)
+    }
+
+    /// ✕ lives alone at the leading edge, outside the field — cancelling is
+    /// always one obvious tap in a fixed spot.
+    private var closeButton: some View {
+        Button {
+            withAnimation(morphAnimation) { composer.dismiss() }
+        } label: {
+            Image(systemName: "xmark")
+                .fontStyle(.callout)
+                .foregroundStyle(.secondary)
+                .frame(width: 40, height: 40)
+                .contentShape(Circle())
+                .background {
+                    if #available(iOS 26.0, *) {
+                        Color.clear.glassEffect(.regular.interactive(), in: Circle())
+                    } else {
+                        Circle().fill(Color(.systemBackground).opacity(0.45))
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Cancel comment")
+    }
+
+    /// The glass field owns the text plus a trailing action column pinned to
+    /// its bottom corner: send at the bottom, Expand directly above it once
+    /// the text wraps. Neither moves as the field grows.
+    private var fieldCluster: some View {
+        HStack(alignment: .bottom, spacing: 8) {
+            TextField(
+                composer.target?.isReply == true ? "Write a reply…" : "Add a comment…",
+                text: $composer.draft,
+                axis: .vertical
+            )
+            .fontStyle(.subheadline)
+            .keyboardType(.twitter)
+            .lineLimit(1...5)
+            .focused($isFieldFocused)
+            .disabled(isPosting)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { height in
+                fieldHeight = height
+            }
+
+            VStack(spacing: 6) {
+                if isMultiline {
+                    expandButton
+                        .transition(.opacity.combined(with: .scale))
+                }
+
+                sendButton
+            }
+        }
+        .padding(12)
+        .background(morphSource(shape: RoundedRectangle(cornerRadius: 22, style: .continuous)))
+        .animation(.smooth(duration: 0.2), value: isMultiline)
+    }
+
+    private var expandButton: some View {
+        Button(action: onExpand) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .fontStyle(.footnote)
+                .foregroundStyle(.secondary)
+                .frame(width: 28, height: 28)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Expand composer")
+    }
+
+    private var sendButton: some View {
+        Button {
+            Task {
+                isPosting = true
+                await onPost()
+                isPosting = false
+            }
+        } label: {
+            if isPosting {
+                ProgressView()
+                    .scaleEffect(0.8)
+                    .frame(width: 28, height: 28)
+            } else {
+                Image(systemName: "arrow.up.circle.fill")
+                    .fontStyle(.title2)
+                    .foregroundStyle(trimmedEmpty ? Color.secondary.opacity(0.4) : tone.color)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(trimmedEmpty || isPosting)
+        .accessibilityLabel("Post comment")
     }
 
     private func replyChip(handle: String) -> some View {
@@ -526,21 +586,122 @@ struct CommentComposerBar: View {
         composer: $composer,
         isReadOnly: false,
         isRecord: false,
-        onPost: {}
+        onPost: {},
+        onExpand: {}
     )
 }
 ```
 
-- [ ] **Step 2: Build**
+- [ ] **Step 2: Create the sheet**
+
+First confirm the primary button style's exact spelling: `grep -n "boardPrimary\|struct BoardButtonStyle" Styling/Styles/BoardButtonStyle.swift` — the code below assumes `.buttonStyle(.boardPrimary)`; if the project spells it differently, match the project. Create `On Board/Views/Post/CommentComposerSheet.swift`:
+
+```swift
+//
+//  CommentComposerSheet.swift
+//  On Board
+//
+//  Full-screen expansion of the inline comment composer. Shares the same
+//  CommentComposerState — the draft and reply target travel between the
+//  inline field and the sheet untouched. Dismissing returns to the inline
+//  composer; a successful post lands back in browse state (submitComposer's
+//  finishPosting clears the target, which this view reads as "done").
+//
+
+import SwiftUI
+
+struct CommentComposerSheet: View {
+    @Binding var composer: CommentComposerState
+    let tone: PostTone
+    let onPost: () async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @FocusState private var isFocused: Bool
+    @State private var isPosting = false
+
+    private var trimmedEmpty: Bool { composer.draft.trimmed.isEmpty }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                if case .reply(_, let handle) = composer.target {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrowshape.turn.up.left.fill")
+                            .fontStyle(.caption2)
+                        Text("Replying to @\(handle)")
+                            .fontStyle(.caption)
+                    }
+                    .foregroundStyle(.secondary)
+                }
+
+                TextField("Add a comment…", text: $composer.draft, axis: .vertical)
+                    .fontStyle(.body)
+                    .keyboardType(.twitter)
+                    .focused($isFocused)
+                    .disabled(isPosting)
+                    .frame(maxHeight: .infinity, alignment: .top)
+
+                Button {
+                    Task {
+                        isPosting = true
+                        await onPost()
+                        isPosting = false
+                        if !composer.isComposing { dismiss() }
+                    }
+                } label: {
+                    LoadingButtonLabel("Post", systemImage: "arrow.up", isLoading: isPosting)
+                }
+                .buttonStyle(.boardPrimary)
+                .disabled(trimmedEmpty || isPosting)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background {
+                tone.color
+                    .opacity(scheme == .dark ? 0.25 : 0.20)
+                    .ignoresSafeArea()
+            }
+            .navigationTitle(composer.target?.isReply == true ? "Reply" : "New Comment")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.down")
+                    }
+                    .accessibilityLabel("Collapse composer")
+                }
+            }
+            .keyboardDoneToolbar()
+            .scrollDismissesKeyboard(.interactively)
+            .onAppear { isFocused = true }
+        }
+        .interactiveDismissDisabled(isPosting)
+    }
+}
+
+#Preview {
+    @Previewable @State var composer: CommentComposerState = {
+        var c = CommentComposerState()
+        c.beginNewComment()
+        return c
+    }()
+    CommentComposerSheet(composer: $composer, tone: .green, onPost: {})
+}
+```
+
+- [ ] **Step 3: Build**
 
 Run the build check from Global Constraints. Expected: `** BUILD SUCCEEDED **`. (If `GlassEffectContainer { content }` fails to infer, use `GlassEffectContainer(spacing: 8) { content }` — same behavior.)
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 cd "/Users/jawadkhadra/On Board/onboard-ios"
-git add "On Board/Views/Post/CommentComposerBar.swift"
-git commit -m "Add two-state CommentComposerBar (reactions + circle button ⇄ glass composer)"
+git add "On Board/Views/Post/CommentComposerBar.swift" "On Board/Views/Post/CommentComposerSheet.swift"
+git commit -m "Add two-state CommentComposerBar and full-screen CommentComposerSheet"
 ```
 
 ---
@@ -555,8 +716,8 @@ git commit -m "Add two-state CommentComposerBar (reactions + circle button ⇄ g
 - Delete: `On Board/Views/Post/NewCommentComposer.swift`, `On Board/Views/Post/PostActionBar.swift`
 
 **Interfaces:**
-- Consumes: `CommentComposerBar` (Task 3), `CommentComposerState` (Task 1).
-- Produces: `PostDetailView.composer: CommentComposerState`, `submitComposer() async`, and the new `CommentView` signature — `CommentView(postID:comment:tone:isInteractive:editingCommentID:replyTargetID:draftCommentBody:onBeginEdit:onConfirmEdit:onReply:onDelete:onReport:onBlockAuthor:)` where `onReply: ((Comment) -> Void)?`. Task 5 modifies `CommentView` further and relies on its `tone` property existing.
+- Consumes: `CommentComposerBar` + `CommentComposerSheet` (Task 3), `CommentComposerState` (Task 1).
+- Produces: `PostDetailView.composer: CommentComposerState`, `PostDetailView.showExpandedComposer: Bool`, `submitComposer() async`, and the new `CommentView` signature — `CommentView(postID:comment:tone:isInteractive:editingCommentID:replyTargetID:draftCommentBody:onBeginEdit:onConfirmEdit:onReply:onDelete:onReport:onBlockAuthor:)` where `onReply: ((Comment) -> Void)?`. Task 5 modifies `CommentView` further and relies on its `tone` property existing.
 
 - [ ] **Step 1: Swap PostDetailView state**
 
@@ -578,6 +739,7 @@ with:
     @State var editingCommentID: UUID?
     @State var draftCommentBody = ""
     @State var composer = CommentComposerState()
+    @State var showExpandedComposer = false
 ```
 
 - [ ] **Step 2: Replace the bottom safeAreaInset and add scroll-to-reply**
@@ -624,9 +786,17 @@ with:
                     composer: $composer,
                     isReadOnly: isReadOnly,
                     isRecord: isReadOnly,
-                    onPost: submitComposer
+                    onPost: submitComposer,
+                    onExpand: { showExpandedComposer = true }
                 )
             }
+        }
+        .sheet(isPresented: $showExpandedComposer) {
+            CommentComposerSheet(
+                composer: $composer,
+                tone: tone,
+                onPost: submitComposer
+            )
         }
 ```
 
@@ -889,6 +1059,7 @@ Launch the app in the simulator in mock mode (no `Secrets.xcconfig` → mocks; s
 2. Composer ✕ button, keyboard swipe-down, and Done all return to browse; a typed draft survives dismissal and reappears on re-open.
 3. Reply on a nested comment: chip shows the right handle, the target comment highlights and scrolls into view, chip ✕ reverts to "Add a comment…" without losing the draft.
 4. Posting (send arrow) shows the spinner, disables double-submit, clears the draft, and lands the comment under the right parent.
+4b. Typing past one line makes Expand appear above send (send never moves); Expand opens the full-screen sheet with the draft and reply context intact; sheet chevron-down returns to the inline field with the draft; posting from the sheet dismisses to browse state.
 5. Editing a comment hides the bottom bar entirely; Save/cancel brings it back.
 6. Tapping a thread line collapses to "Show N replies" with the correct recursive count and a light haptic; tapping expands.
 7. Archived post (record layout): no circle button, record pill strip intact.
