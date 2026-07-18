@@ -412,9 +412,3 @@ extension PostDetailView {
         }
     }
 }
-
-// Total comments in a subtree (a top-level comment plus all nested replies), used for
-// the "Comments N" header count.
-private extension Comment {
-    var threadCount: Int { 1 + replies.reduce(0) { $0 + $1.threadCount } }
-}

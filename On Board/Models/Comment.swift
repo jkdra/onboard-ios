@@ -72,6 +72,13 @@ extension Array where Element == Comment {
     }
 }
 
+extension Comment {
+    /// Total comments in this subtree — self plus all nested replies. Drives
+    /// the "Comments N" header count and the collapsed-thread "Show N replies"
+    /// pill (which subtracts 1 to show descendants only).
+    var threadCount: Int { 1 + replies.reduce(0) { $0 + $1.threadCount } }
+}
+
 /// Like or dislike on a comment. Stored in Supabase `comment_votes.vote`.
 enum CommentVote: String, Codable, CaseIterable, Identifiable {
     case like
