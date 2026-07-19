@@ -27,6 +27,11 @@ struct CommentComposerBar: View {
     /// as a cancel via the focus-loss handler below and wipe the draft/target
     /// the sheet is about to show.
     var isSheetPresented: Bool = false
+    /// Set by the parent while the post-failure alert is presented. Presenting
+    /// the alert resigns this bar's first responder just like the sheet does,
+    /// which would otherwise read as a cancel via the focus-loss handler below
+    /// and silently discard the reply target after a failed post.
+    var isErrorPresented: Bool = false
 
     @FocusState private var isFieldFocused: Bool
     @Namespace private var morphNamespace
@@ -64,7 +69,7 @@ struct CommentComposerBar: View {
             // Keyboard dismissal (interactive swipe / Done) exits compose.
             // Guard the posting window, where focus can drop without the user
             // cancelling.
-            if !focused && composer.isComposing && !isPosting && !isSheetPresented {
+            if !focused && composer.isComposing && !isPosting && !isSheetPresented && !isErrorPresented {
                 withAnimation(morphAnimation) { composer.dismiss() }
             }
         }
