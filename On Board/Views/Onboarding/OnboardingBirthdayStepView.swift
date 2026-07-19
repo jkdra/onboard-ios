@@ -50,7 +50,6 @@ struct OnboardingBirthdayStepView: View {
         }
         .disabled(onboarding.isSubmitting)
         .navigationTitle("Birthday")
-
     }
 }
 

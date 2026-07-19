@@ -37,7 +37,10 @@ struct AnimatedStripesView: View {
     private var step: Double { Double(stripeWidth + spacing) }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: reduceMotion || enteredAt == nil)) { tl in
+        // 30fps, matching AnimatedLogoBackgroundView's precedent: the settled
+        // drift is 18pt/sec (0.6pt/frame at 30fps), so halving the full-screen
+        // Canvas redraw rate is imperceptible.
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion || enteredAt == nil)) { tl in
             Canvas { ctx, size in
                 // When motion is reduced, xOffset stays 0 — static texture only
                 let xOffset = reduceMotion ? 0 : currentRawOffset(at: tl.date)

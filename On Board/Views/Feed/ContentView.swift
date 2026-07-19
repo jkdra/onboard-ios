@@ -161,9 +161,14 @@ struct ContentView: View {
             }
 
             if store.isLoading, store.posts.isEmpty {
-                ProgressView("Loading your board…")
-                    .padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+                // Ghost masonry in the real card geometry — reads as "the board
+                // is coming" instead of a generic spinner. Scroll stays behind
+                // it so the countdown/new-post cards keep their positions.
+                ScrollView {
+                    FeedSkeletonView()
+                }
+                .allowsHitTesting(false)
+                .transition(.opacity)
             }
         }
         .background {

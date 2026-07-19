@@ -787,7 +787,11 @@ with:
                     isReadOnly: isReadOnly,
                     isRecord: isReadOnly,
                     onPost: submitComposer,
-                    onExpand: { showExpandedComposer = true }
+                    onExpand: { showExpandedComposer = true },
+                    // Sheet presentation resigns first responder; without this
+                    // flag the bar's focus-loss handler would read the expand
+                    // handoff as a cancel and wipe the draft.
+                    isSheetPresented: showExpandedComposer
                 )
             }
         }

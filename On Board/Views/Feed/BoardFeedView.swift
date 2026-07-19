@@ -25,7 +25,14 @@ struct BoardFeedView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.6
 
-    @State private var appeared = false
+    /// Per-item entrance tracking. A single "appeared" flag only animated the
+    /// cards present at first render — anything fetched later (a refresh
+    /// landing after onAppear, archive weeks) popped in with no animation.
+    /// Each cell reveals itself on its own first appearance instead.
+    @State private var revealedIDs: Set<String> = []
+    /// The initial batch staggers by column index; later arrivals animate
+    /// immediately (an index-based delay on a single late card reads as lag).
+    @State private var initialIDs: Set<String> = []
     @State private var rotations: [String: Double] = [:]
     @State private var leftColumn: [FeedItem] = []
     @State private var rightColumn: [FeedItem] = []
@@ -52,7 +59,9 @@ struct BoardFeedView: View {
         .onAppear {
             seedRotationsIfNeeded()
             recomputeColumnsIfNeeded()
-            appeared = true
+            if initialIDs.isEmpty {
+                initialIDs = Set(items.map(\.id))
+            }
         }
         .onChange(of: items) { _, _ in
             seedRotationsForNewItems()
@@ -102,14 +111,21 @@ struct BoardFeedView: View {
         // rotated quad — which wrecks the interactive (swipe) back transition. GridCard
         // now applies `cardRotation` itself, beneath its own source. Non-post cards,
         // which have no transition source, are rotated in feedItemView instead.
+        let revealed = revealedIDs.contains(item.id)
+        let revealDelay = initialIDs.contains(item.id) ? Double(animationIndex) * 0.025 : 0
         feedItemView(for: item, cardRotation: rot, isLeadingColumn: isLeadingColumn)
-            // Entrance animation
-            .opacity(appeared ? 1 : 0)
-            .scaleEffect(appeared ? 1 : 0.94)
+            // Entrance animation — per item, so late-fetched cards animate too.
+            .opacity(revealed ? 1 : 0)
+            .scaleEffect(revealed ? 1 : 0.94)
             .animation(
-                reduceMotion ? .none : .smooth(duration: 0.4).delay(Double(animationIndex) * 0.025),
-                value: appeared
+                reduceMotion ? .none : .smooth(duration: 0.4).delay(revealDelay),
+                value: revealed
             )
+            .onAppear {
+                // First sight of this cell: it rendered hidden this frame, so
+                // inserting the id now flips `revealed` with animation.
+                revealedIDs.insert(item.id)
+            }
             // Reset fly-off — stacks multiplicatively with entrance opacity
             .offset(x: isResetting ? flyX : 0, y: isResetting ? -700 : 0)
             .rotationEffect(

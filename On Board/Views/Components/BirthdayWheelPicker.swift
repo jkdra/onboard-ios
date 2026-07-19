@@ -22,12 +22,6 @@ struct BirthdayWheelPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(Self.ordinalFormatted(resolvedDate))
-                .fontStyle(.title)
-                .fontWeight(.heavy)
-                .contentTransition(.numericText())
-                .animation(.snappy, value: resolvedDate)
-
             DatePicker(
                 "Birthday",
                 selection: selection,
@@ -46,28 +40,6 @@ struct BirthdayWheelPicker: View {
         .onAppear {
             if date == nil { date = resolvedDate }
         }
-    }
-
-    private static func ordinalFormatted(_ date: Date) -> String {
-        let calendar = Calendar.current
-        let day = calendar.component(.day, from: date)
-        let year = calendar.component(.year, from: date)
-        let month = date.formatted(.dateTime.month(.wide))
-
-        let suffix: String
-        switch day {
-        case 11, 12, 13:
-            suffix = "th"
-        default:
-            switch day % 10 {
-            case 1: suffix = "st"
-            case 2: suffix = "nd"
-            case 3: suffix = "rd"
-            default: suffix = "th"
-            }
-        }
-
-        return "\(month) \(day)\(suffix), \(year)"
     }
 }
 

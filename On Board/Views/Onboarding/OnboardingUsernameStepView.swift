@@ -24,7 +24,7 @@ struct OnboardingUsernameStepView: View {
     private let handleLimit = 32
 
     private var trimmedHandle: String {
-        handle.trimmingCharacters(in: .whitespacesAndNewlines)
+        handle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private var canContinue: Bool {
@@ -42,21 +42,17 @@ struct OnboardingUsernameStepView: View {
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    HStack(spacing: 8) {
-                        Text("@")
-                            .fontStyle(.title2)
-                            .foregroundStyle(.secondary)
-                        TextField("username", text: $handle)
-                            .fontStyle(.title2)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .textContentType(.username)
-                            .keyboardType(.asciiCapable)
-                            .onChange(of: handle) { _, _ in
-                                scheduleAvailabilityCheck()
-                            }
-                    }
-                    .textFieldStyle(.board)
+                    TextField("username", text: $handle)
+                        .fontStyle(.title2)
+                        .textInputAutocapitalization(.never)
+                        .textFieldStyle(.boardStandard)
+                        .autocorrectionDisabled()
+                        .textContentType(.username)
+                        .keyboardType(.asciiCapable)
+                        .onChange(of: handle) { _, _ in
+                            scheduleAvailabilityCheck()
+                        }
+                    
                     if trimmedHandle.count >= Int(Double(handleLimit) * 0.75) {
                         Text("\(trimmedHandle.count)/\(handleLimit)")
                             .fontStyle(.caption2)

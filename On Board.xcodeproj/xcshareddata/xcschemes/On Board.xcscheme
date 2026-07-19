@@ -16,7 +16,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "95DC3FE62FD3688800F6E770"
-               BuildableName = "On Board: Your Community Board.app"
+               BuildableName = "On Board.app"
                BlueprintName = "On Board"
                ReferencedContainer = "container:On Board.xcodeproj">
             </BuildableReference>
@@ -58,7 +58,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "95DC3FE62FD3688800F6E770"
-            BuildableName = "On Board: Your Community Board.app"
+            BuildableName = "On Board.app"
             BlueprintName = "On Board"
             ReferencedContainer = "container:On Board.xcodeproj">
          </BuildableReference>
@@ -75,7 +75,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "95DC3FE62FD3688800F6E770"
-            BuildableName = "On Board: Your Community Board.app"
+            BuildableName = "On Board.app"
             BlueprintName = "On Board"
             ReferencedContainer = "container:On Board.xcodeproj">
          </BuildableReference>

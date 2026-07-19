@@ -99,6 +99,7 @@ struct OnboardingProfileStepView: View {
                         let photoData = selectedPhotoData
                         let uploading = isUploadingPhoto
                         let hasPhoto = photoData != nil && avatarUrl != nil
+                        let uiImage = photoData.flatMap { PhotoPreviewCache.image(for: $0) }
                         PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
                             ZStack(alignment: .bottomTrailing) {
                                 ZStack {
@@ -112,7 +113,7 @@ struct OnboardingProfileStepView: View {
                                             )
                                         )
 
-                                    if let data = photoData, let uiImage = PhotoPreviewCache.image(for: data) {
+                                    if let uiImage {
                                         Image(uiImage: uiImage)
                                             .resizable()
                                             .scaledToFill()

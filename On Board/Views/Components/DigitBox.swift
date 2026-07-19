@@ -17,10 +17,14 @@ struct DigitBox: View {
             .fontStyle(.title2)
             .monospacedDigit()
             .frame(width: width, height: height)
-            .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.thinMaterial)
-            )
+            .background {
+                if #available(iOS 26.0, *) {
+                    Color.clear.glassEffect(.regular, in: .rect(cornerRadius: 10, style: .continuous))
+                } else {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.thinMaterial)
+                }
+            }
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(

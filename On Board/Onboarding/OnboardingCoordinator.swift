@@ -25,6 +25,10 @@ struct OnboardingCoordinator: View {
 
     @State private var path: [OnboardingStep] = []
     @State private var alertError: PresentableAlertError?
+    /// Bumped on every sign-out so SignInView gets a fresh identity — all its
+    /// local form state (entered email/phone, "code sent" step, cooldowns)
+    /// resets instead of resurfacing when a cancelled user lands back on it.
+    @State private var signInGeneration = 0
     /// Set when the user just completed sign-in so the first push is animated.
     @State private var pendingSignIn = false
     /// True once auth has passed through `.signingIn` this session — i.e. the user
@@ -52,25 +56,35 @@ struct OnboardingCoordinator: View {
     var body: some View {
         NavigationStack(path: $path) {
             SignInView()
+                .id(signInGeneration)
                 .navigationDestination(for: OnboardingStep.self) { step in
-                    switch step {
-                    case .birthday:
-                        OnboardingBirthdayStepView()
-                            .navigationBarBackButtonHidden()
-                    case .username:
-                        OnboardingUsernameStepView()
-                            .navigationBarBackButtonHidden()
-                    case .profile:
-                        OnboardingProfileStepView()
-                    case .contentPreferences:
-                        OnboardingContentPreferencesStepView()
-                    case .schoolVerify:
-                        OnboardingSchoolEmailStepView()
-                    case .waitlist:
-                        OnboardingWaitlistStepView()
-                    default:
-                        EmptyView()
+                    Group {
+                        switch step {
+                        case .birthday:
+                            // First step: no back (the stack root is SignInView),
+                            // so the ✕ Cancel affordance is the way out.
+                            OnboardingBirthdayStepView()
+                                .navigationBarBackButtonHidden()
+                                .onboardingCancelToolbar()
+                        case .username:
+                            OnboardingUsernameStepView()
+                        case .profile:
+                            OnboardingProfileStepView()
+                        case .contentPreferences:
+                            OnboardingContentPreferencesStepView()
+                        case .schoolVerify:
+                            OnboardingSchoolEmailStepView()
+                        case .waitlist:
+                            OnboardingWaitlistStepView()
+                        default:
+                            EmptyView()
+                        }
                     }
+                    // Inline titles: the iOS 26 SDK draws large titles over the
+                    // first lines of scroll content on these screens (title/body
+                    // overlap, visible on every step) — inline avoids the overlap
+                    // on all OS versions.
+                    .navigationBarTitleDisplayMode(.inline)
                 }
         }
         .overlay {
@@ -115,6 +129,7 @@ struct OnboardingCoordinator: View {
             } else if !isSignedIn {
                 pendingSignIn = false
                 interactiveSignIn = false
+                signInGeneration += 1
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { path = [] }

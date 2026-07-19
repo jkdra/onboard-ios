@@ -214,11 +214,42 @@ extension PostDetailView {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
         } else if comments.isEmpty {
-            Text("no comments yet. start the thread.")
-                .fontStyle(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.vertical, 12)
+            VStack(spacing: 16) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.secondary.opacity(0.5))
+                
+                VStack(spacing: 6) {
+                    Text(isReadOnly ? "No comments." : "No comments yet.")
+                        .fontStyle(.headline)
+                        .foregroundStyle(.primary)
+                    if !isReadOnly {
+                        Text("Be the first to start the thread.")
+                            .fontStyle(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                
+                if !isReadOnly {
+                    Button {
+                        withAnimation(.smooth(duration: 0.35)) {
+                            composer.beginNewComment()
+                        }
+                    } label: {
+                        Text("Add Comment")
+                            .fontStyle(.subheadline)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                    }
+                    .background(Capsule(style: .continuous).fill(tone.color.opacity(0.15)))
+                    .foregroundStyle(tone.color)
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.vertical, 32)
         } else {
             LazyVStack(alignment: .leading, spacing: 18) {
                 ForEach(comments) { comment in
