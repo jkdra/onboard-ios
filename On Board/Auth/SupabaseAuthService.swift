@@ -80,7 +80,13 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
 
     func sendEmailOTP(email: String) async throws {
         let client = try requireClient()
-        try await client.auth.signInWithOTP(email: email)
+        // redirectTo makes the email's magic link a universal link back to the
+        // app (falling back to the web /auth/callback page). The typed 6-digit
+        // code remains the primary path; this just fixes link clicks.
+        try await client.auth.signInWithOTP(
+            email: email,
+            redirectTo: AppConfiguration.webAuthCallbackURL
+        )
     }
 
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession {

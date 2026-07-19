@@ -40,6 +40,13 @@ struct AppConfiguration: Equatable, Sendable {
 
     nonisolated static let authRedirectURL = URL(string: "onboard://auth-callback")!
 
+    /// HTTPS universal link the email magic link redirects to. On a phone with
+    /// the app installed this opens the app directly (via applinks:onboardapp.org);
+    /// on desktop or without the app it lands on the branded /auth/callback page.
+    /// Must be HTTPS (not onboard://) so mail clients keep it tappable and a web
+    /// fallback exists. This URL must also be in Supabase's Redirect URLs allow-list.
+    nonisolated static let webAuthCallbackURL = URL(string: "https://onboardapp.org/auth/callback")!
+
     private final class BundleMarker {}
 
     nonisolated static let current = load()
