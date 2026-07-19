@@ -124,6 +124,7 @@ struct CommentView: View {
                 .background(Capsule(style: .continuous).fill(tone.color.opacity(0.12)))
         }
         .buttonStyle(.plain)
+        .disabled(editingCommentID != nil)
         .accessibilityLabel("Expand \(hiddenCount) hidden \(hiddenCount == 1 ? "reply" : "replies")")
         .padding(.leading, 14)
         .opacity(isDimmed ? 0.32 : 1)
@@ -165,6 +166,11 @@ struct CommentView: View {
                             .textFieldStyle(.plain)
                             .lineLimit(1...8)
                             .focused($isEditorFocused)
+                            .onChange(of: draftCommentBody) { _, newValue in
+                                if newValue.count > 280 {
+                                    draftCommentBody = String(newValue.prefix(280))
+                                }
+                            }
                             // Multi-line editing: confirmed via the toolbar "Save" button. Return
                             // inserts a newline instead of submitting, so a pasted line break or a
                             // deliberate paragraph no longer silently ends the edit.
@@ -187,33 +193,17 @@ struct CommentView: View {
                     // Kept as a sibling overlay (not inside the doubleTapHeart-wrapped
                     // VStack above) so its tap target never competes with the
                     // double-tap gesture's arbitration.
-                    if editingCommentID == nil, (isInteractive && canEdit) || !canEdit {
+                    if editingCommentID == nil, isInteractive, canEdit {
                         Menu {
-                            if isInteractive, canEdit {
-                                Button {
-                                    onBeginEdit?(comment.id, comment.body)
-                                } label: {
-                                    Label("Edit", systemImage: "pencil")
-                                }
-                                Button(role: .destructive) {
-                                    onDelete?(comment.id)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
+                            Button {
+                                onBeginEdit?(comment.id, comment.body)
+                            } label: {
+                                Label("Edit", systemImage: "pencil")
                             }
-                            if !canEdit {
-                                Button {
-                                    onReport?(comment)
-                                } label: {
-                                    Label("Report Comment", systemImage: "flag")
-                                }
-                                if comment.authorId != nil {
-                                    Button(role: .destructive) {
-                                        onBlockAuthor?(comment)
-                                    } label: {
-                                        Label("Block", systemImage: "hand.raised")
-                                    }
-                                }
+                            Button(role: .destructive) {
+                                onDelete?(comment.id)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
                             }
                         } label: {
                             Image(systemName: "ellipsis")
@@ -263,6 +253,18 @@ struct CommentView: View {
             }
         }
         .animation(.smooth(duration: 0.3), value: replyTargetID)
+        .contextMenu {
+            ShareLink(item: comment.body) {
+                Label("Share Comment", systemImage: "square.and.arrow.up")
+            }
+            if !canEdit {
+                Button(role: .destructive) {
+                    onReport?(comment)
+                } label: {
+                    Label("Report", systemImage: "flag")
+                }
+            }
+        }
         .id(comment.id)
         .onAppear {
             guard isBeingEdited else { return }

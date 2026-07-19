@@ -46,20 +46,22 @@ struct CommentComposerBar: View {
     // with the user's text size so large accessibility sizes don't make an
     // unwrapped single line spuriously exceed the ceiling.
     @ScaledMetric(relativeTo: .subheadline) private var singleLineCeiling: CGFloat = 34
+    // 2 lines of subheadline is roughly ~54pt.
+    @ScaledMetric(relativeTo: .subheadline) private var twoLineCeiling: CGFloat = 54
 
     private var trimmedEmpty: Bool { composer.draft.trimmed.isEmpty }
     private var morphAnimation: Animation { .smooth(duration: 0.35) }
     private var isMultiline: Bool { fieldHeight > singleLineCeiling }
+    private var showExpandButton: Bool { fieldHeight > twoLineCeiling }
 
     var body: some View {
         Group {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer { content }
-            } else {
-                content
-            }
+            content
         }
         .safeAreaPadding()
+        .background {
+            morphingBackgrounds
+        }
         .background(barBackground)
         .animation(morphAnimation, value: composer.isComposing)
         .onChange(of: composer.isComposing) { _, composing in
@@ -71,6 +73,15 @@ struct CommentComposerBar: View {
             // cancelling.
             if !focused && composer.isComposing && !isPosting && !isSheetPresented && !isErrorPresented {
                 withAnimation(morphAnimation) { composer.dismiss() }
+            }
+        }
+        .onChange(of: isSheetPresented) { _, presented in
+            // Dismissing the sheet (chevron-down) should return focus to the
+            // inline field with the draft intact, per spec. A successful post
+            // already dropped composer.isComposing to false by the time the
+            // sheet dismisses itself, so this only fires on a manual collapse.
+            if !presented && composer.isComposing {
+                isFieldFocused = true
             }
         }
     }
@@ -95,6 +106,7 @@ struct CommentComposerBar: View {
                 isInteractive: !isReadOnly,
                 isRecord: isRecord
             )
+            .background(Color.clear.matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace))
 
             if !isReadOnly {
                 commentButton
@@ -110,9 +122,9 @@ struct CommentComposerBar: View {
             Image(systemName: "plus.bubble.fill")
                 .fontStyle(.callout)
                 .foregroundStyle(.primary)
-                .frame(width: 52, height: 52)
+                .frame(width: 48, height: 48)
                 .contentShape(Circle())
-                .background(morphSource(shape: Circle()))
+                .background(Color.clear.matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a comment")
@@ -143,15 +155,9 @@ struct CommentComposerBar: View {
             Image(systemName: "xmark")
                 .fontStyle(.callout)
                 .foregroundStyle(.secondary)
-                .frame(width: 40, height: 40)
+                .frame(width: 44, height: 44)
                 .contentShape(Circle())
-                .background {
-                    if #available(iOS 26.0, *) {
-                        Color.clear.glassEffect(.regular.interactive(), in: Circle())
-                    } else {
-                        Circle().fill(Color(.systemBackground).opacity(0.45))
-                    }
-                }
+                .background(Color.clear.matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Cancel comment")
@@ -161,7 +167,7 @@ struct CommentComposerBar: View {
     /// its bottom corner: send at the bottom, Expand directly above it once
     /// the text wraps. Neither moves as the field grows.
     private var fieldCluster: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 10) {
             TextField(
                 composer.target?.isReply == true ? "Write a reply…" : "Add a comment…",
                 text: $composer.draft,
@@ -177,9 +183,15 @@ struct CommentComposerBar: View {
             } action: { height in
                 fieldHeight = height
             }
+            .padding(.vertical, 6)
+            .onChange(of: composer.draft) { _, newValue in
+                if newValue.count > 280 {
+                    composer.draft = String(newValue.prefix(280))
+                }
+            }
 
             VStack(spacing: 6) {
-                if isMultiline {
+                if showExpandButton {
                     expandButton
                         .transition(.opacity.combined(with: .scale))
                 }
@@ -187,9 +199,20 @@ struct CommentComposerBar: View {
                 sendButton
             }
         }
-        .padding(12)
-        .background(morphSource(shape: RoundedRectangle(cornerRadius: 22, style: .continuous)))
+        .padding(.leading, 16)
+        .padding(.trailing, 8)
+        .padding(.vertical, 6)
+        .background(Color.clear.matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace))
         .animation(.smooth(duration: 0.2), value: isMultiline)
+        .gesture(
+            DragGesture(minimumDistance: 15, coordinateSpace: .local)
+                .onEnded { value in
+                    // Only trigger on clear upward swipes
+                    if value.translation.height < -20 && abs(value.translation.width) < 40 {
+                        onExpand()
+                    }
+                }
+        )
     }
 
     private var expandButton: some View {
@@ -215,13 +238,13 @@ struct CommentComposerBar: View {
         } label: {
             if isPosting {
                 ProgressView()
-                    .scaleEffect(0.8)
-                    .frame(width: 28, height: 28)
+                    .scaleEffect(0.9)
+                    .frame(width: 32, height: 32)
             } else {
                 Image(systemName: "arrow.up.circle.fill")
-                    .fontStyle(.title2)
+                    .font(.title)
                     .foregroundStyle(trimmedEmpty ? Color.secondary.opacity(0.4) : tone.color)
-                    .frame(width: 28, height: 28)
+                    .frame(width: 32, height: 32)
             }
         }
         .buttonStyle(.plain)
@@ -230,51 +253,66 @@ struct CommentComposerBar: View {
     }
 
     private func replyChip(handle: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: "arrowshape.turn.up.left.fill")
-                .fontStyle(.caption2)
-            Text("Replying to @\(handle)")
-                .fontStyle(.caption)
-                .lineLimit(1)
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrowshape.turn.up.left.fill")
+                    .fontStyle(.caption2)
+                Text("Replying to \(handle)")
+                    .fontStyle(.caption)
+                    .lineLimit(1)
+            }
+            .padding(.leading, 12)
+            .padding(.vertical, 8)
+
             Button {
                 withAnimation(.smooth(duration: 0.25)) { composer.clearReplyTarget() }
             } label: {
                 Image(systemName: "xmark")
                     .fontStyle(.caption2)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Stop replying")
         }
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 5)
-        .background(Capsule(style: .continuous).fill(tone.color.opacity(0.14)))
+        .foregroundStyle(.primary)
+        .background {
+            if #available(iOS 26.0, *) {
+                Color.clear.glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
+            } else {
+                Capsule(style: .continuous).fill(.regularMaterial)
+            }
+        }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     // MARK: - Materials
 
-    /// Shared morph identity between the circle button and the composer field.
-    /// Under Reduce Motion the identity is dropped so the states plainly
-    /// crossfade (the .transition(.opacity) on each layout) with no shape morph.
     @ViewBuilder
-    private func morphSource(shape: some Shape) -> some View {
+    private var morphingBackgrounds: some View {
+        if !reduceMotion {
+            ZStack {
+                morphSource(
+                    shape: composer.isComposing ? AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) : AnyShape(Circle())
+                )
+                .matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace, isSource: false)
+
+                morphSource(
+                    shape: composer.isComposing ? AnyShape(Circle()) : AnyShape(Capsule(style: .continuous))
+                )
+                .matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace, isSource: false)
+            }
+            .animation(morphAnimation, value: composer.isComposing)
+        }
+    }
+
+    @ViewBuilder
+    private func morphSource(shape: AnyShape) -> some View {
         if #available(iOS 26.0, *) {
-            if reduceMotion {
-                Color.clear.glassEffect(.regular.interactive(), in: shape)
-            } else {
-                Color.clear
-                    .glassEffect(.regular.interactive(), in: shape)
-                    .glassEffectID("composerMorph", in: morphNamespace)
-            }
+            Color.clear.glassEffect(.regular.interactive(), in: shape)
         } else {
-            if reduceMotion {
-                shape.fill(Color(.systemBackground).opacity(0.45))
-            } else {
-                shape
-                    .fill(Color(.systemBackground).opacity(0.45))
-                    .matchedGeometryEffect(id: "composerMorph", in: morphNamespace)
-            }
+            shape.fill(Color(.systemBackground).opacity(0.45))
         }
     }
 

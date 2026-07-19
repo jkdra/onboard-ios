@@ -15,6 +15,11 @@ struct CommentComposerSheet: View {
     @Binding var composer: CommentComposerState
     let tone: PostTone
     let onPost: () async -> Void
+    /// Same binding PostDetailView feeds into `.presentableErrorAlert` — the
+    /// sheet is the frontmost surface while presented, so a failed post needs
+    /// its own attachment point here to actually appear instead of queuing
+    /// silently behind the covered parent.
+    @Binding var alertError: PresentableAlertError?
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
@@ -30,18 +35,32 @@ struct CommentComposerSheet: View {
                     HStack(spacing: 6) {
                         Image(systemName: "arrowshape.turn.up.left.fill")
                             .fontStyle(.caption2)
-                        Text("Replying to @\(handle)")
+                        Text("Replying to \(handle)")
                             .fontStyle(.caption)
                     }
                     .foregroundStyle(.secondary)
                 }
 
-                TextField("Add a comment…", text: $composer.draft, axis: .vertical)
+                TextField(
+                    composer.target?.isReply == true ? "Write a reply…" : "Add a comment…",
+                    text: $composer.draft,
+                    axis: .vertical
+                )
                     .fontStyle(.body)
                     .keyboardType(.twitter)
                     .focused($isFocused)
                     .disabled(isPosting)
                     .frame(maxHeight: .infinity, alignment: .top)
+                    .onChange(of: composer.draft) { _, newValue in
+                        if newValue.count > 280 {
+                            composer.draft = String(newValue.prefix(280))
+                        }
+                    }
+
+                Text("\(composer.draft.count) / 280")
+                    .fontStyle(.caption)
+                    .foregroundStyle(composer.draft.count >= 280 ? .red : .secondary)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button {
                     Task {
@@ -78,6 +97,7 @@ struct CommentComposerSheet: View {
             .keyboardDoneToolbar()
             .scrollDismissesKeyboard(.interactively)
             .onAppear { isFocused = true }
+            .presentableErrorAlert(error: $alertError)
         }
         .interactiveDismissDisabled(isPosting)
     }
@@ -89,5 +109,6 @@ struct CommentComposerSheet: View {
         c.beginNewComment()
         return c
     }()
-    CommentComposerSheet(composer: $composer, tone: .green, onPost: {})
+    @Previewable @State var alertError: PresentableAlertError?
+    CommentComposerSheet(composer: $composer, tone: .green, onPost: {}, alertError: $alertError)
 }

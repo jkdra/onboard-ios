@@ -172,7 +172,8 @@ struct PostDetailView: View {
                 CommentComposerSheet(
                     composer: $composer,
                     tone: tone,
-                    onPost: submitComposer
+                    onPost: submitComposer,
+                    alertError: $alertError
                 )
             }
             .safeAreaInset(edge: .top, spacing: 0) {
@@ -201,11 +202,7 @@ struct PostDetailView: View {
             }
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
-            .confirmationDialog(
-                "Delete this post?",
-                isPresented: $showDeleteConfirmation,
-                titleVisibility: .visible
-            ) {
+            .alert("Delete this post?", isPresented: $showDeleteConfirmation) {
                 Button("Delete Post", role: .destructive) {
                     Task { if await store.deletePost(id: livePost.id) { dismiss() } }
                 }
@@ -258,7 +255,6 @@ struct PostDetailView: View {
             .navigationBackDisabled(editMode)
             .interactiveDismissDisabled(editMode)
             .toolbar { toolbarContent }
-            .keyboardDoneToolbar()
             .fullScreenCover(isPresented: $showImageViewer) {
                 if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
                     ImageViewerView(url: url)
