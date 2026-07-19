@@ -11,6 +11,8 @@ struct ArchivedWeekView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.colorScheme) private var scheme
 
+    @State private var hasLoaded = false
+
     private let weekFormatter: Date.FormatStyle = .dateTime
         .month(.abbreviated)
         .day()
@@ -20,10 +22,24 @@ struct ArchivedWeekView: View {
         "\(week.startsAt.formatted(weekFormatter)) – \(week.endsAt.formatted(weekFormatter))"
     }
 
+    /// A revisit hits the warm archive cache synchronously, so we can show the
+    /// real feed on first render with no skeleton flash; a cold week shows the
+    /// skeleton until `.task`'s load resolves.
+    private var isReady: Bool {
+        hasLoaded || store.cachedArchiveWeekIDs.contains(week.id)
+    }
+
     var body: some View {
         ScrollView {
-            BoardFeedView(items: store.feedItems(for: week))
+            if isReady {
+                BoardFeedView(items: store.feedItems(for: week))
+            } else {
+                FeedSkeletonView()
+                    .padding(.top, 8)
+                    .transition(.opacity)
+            }
         }
+        .animation(.easeOut(duration: 0.25), value: isReady)
         .background {
             LinearGradient(
                 colors: [
@@ -39,6 +55,7 @@ struct ArchivedWeekView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await store.loadArchivedWeek(week, for: store.currentUserID)
+            hasLoaded = true
         }
     }
 }

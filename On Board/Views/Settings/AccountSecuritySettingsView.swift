@@ -35,25 +35,6 @@ struct AccountSecuritySettingsView: View {
         Form {
             traditionalMethodsSection
             thirdPartySection
-
-//            Section {
-//                securityPlaceholder(
-//                    title: "Passkeys",
-//                    subtitle: "Sign in without a password",
-//                    systemImage: "person.badge.key.fill"
-//                )
-//                securityPlaceholder(
-//                    title: "Two-factor authentication",
-//                    subtitle: "Extra protection for your account",
-//                    systemImage: "lock.shield.fill"
-//                )
-//            } header: {
-//                Text("Security")
-//                    .fontStyle(.subheadline)
-//            } footer: {
-//                Text("Additional security options are coming soon.")
-//                    .fontStyle(.footnote)
-//            }
         }
         .navigationTitle("Security")
         .navigationBarTitleDisplayMode(.inline)
@@ -374,31 +355,6 @@ struct AccountSecuritySettingsView: View {
             }
         }
         .opacity(0.55)
-    }
-
-    private func securityPlaceholder(title: String, subtitle: String, systemImage: String) -> some View {
-        HStack(spacing: 12) {
-            SettingsIconBadge(systemImage: systemImage)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .fontStyle(.body)
-                Text(subtitle)
-                    .fontStyle(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 8)
-
-            Text("Soon")
-                .fontStyle(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(Capsule(style: .continuous).fill(.quaternary))
-        }
-        .opacity(0.55)
-        .accessibilityLabel("\(title), coming soon")
     }
 
     private func refreshMethods() async {

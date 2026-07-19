@@ -310,7 +310,7 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func unfollowUser(id: UUID) async throws {}
     func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
     func isFollowing(userID: UUID) async throws -> Bool { false }
-    func searchTags(query: String) async throws -> [On_Board.Tag] { [] }
+    func searchTags(query: String, boardID: UUID) async throws -> [On_Board.Tag] { [] }
 }
 
 struct BoardStoreTests {
@@ -1221,7 +1221,7 @@ struct BoardSwitchRaceTests {
         // refresh() fetches followed IDs after every snapshot — must not trap.
         func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
     func isFollowing(userID: UUID) async throws -> Bool { false }
-        func searchTags(query: String) async throws -> [On_Board.Tag] { fatalError("unused") }
+        func searchTags(query: String, boardID: UUID) async throws -> [On_Board.Tag] { fatalError("unused") }
     }
 
     @Test func switchingBoardsMidLoadLoadsTheNewBoard() async {
@@ -1312,6 +1312,29 @@ struct TagRowCodingTests {
         #expect(rows.count == 1)
         #expect(rows.first?.postId == postID)
         #expect(rows.first?.tagName == "testing")
+    }
+}
+
+/// The `search_tags` RPC returns `(id, name, post_count)`, decoded into `Tag`
+/// through `BoardJSON.decoder` (`.convertFromSnakeCase`). An explicit
+/// `case postCount = "post_count"` on `Tag` double-converts and throws
+/// `keyNotFound` on every decode — and `TagSelectionView` swallows it with
+/// `try?`, so the tag-suggestion list silently goes permanently empty (the
+/// picker only ever offers "Create #x", never existing tags). This pins the
+/// wire shape so that landmine can't be reintroduced.
+@MainActor
+struct TagModelCodingTests {
+    @Test func decodesSnakeCasePostCountFromSearchTags() throws {
+        let id = UUID()
+        let json = #"[{"id":"\#(id.uuidString)","name":"testing","post_count":3}]"#.data(using: .utf8)!
+
+        // Qualified: `Testing.Tag` also exists in this file's scope.
+        let tags = try BoardJSON.decoder.decode([On_Board.Tag].self, from: json)
+
+        #expect(tags.count == 1)
+        #expect(tags.first?.id == id)
+        #expect(tags.first?.name == "testing")
+        #expect(tags.first?.postCount == 3)
     }
 }
 

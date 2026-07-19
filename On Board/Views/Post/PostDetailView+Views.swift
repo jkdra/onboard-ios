@@ -210,9 +210,28 @@ extension PostDetailView {
         .opacity(isCommentEditing ? 0.32 : 1)
 
         if isLoadingComments && comments.isEmpty {
-            ProgressView()
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
+            // Ghost comment rows (avatar + handle + two body lines) rather than a
+            // bare spinner, so first-load reads as "arriving". Warm visits skip
+            // this entirely — comments are cached in the envelope.
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(0..<3, id: \.self) { _ in
+                    HStack(alignment: .top, spacing: 10) {
+                        SkeletonShape(shape: Circle())
+                            .frame(width: 30, height: 30)
+                        VStack(alignment: .leading, spacing: 7) {
+                            SkeletonShape.line.frame(width: 110, height: 9)
+                            SkeletonShape.line.frame(height: 9)
+                            SkeletonShape.line.frame(width: 200, height: 9)
+                        }
+                        .padding(.top, 2)
+                        Spacer(minLength: 0)
+                    }
+                }
+            }
+            .padding(.vertical, 8)
+            .transition(.opacity)
+            .accessibilityElement()
+            .accessibilityLabel("Loading comments")
         } else if comments.isEmpty {
             VStack(spacing: 16) {
                 Image(systemName: "bubble.left.and.bubble.right")

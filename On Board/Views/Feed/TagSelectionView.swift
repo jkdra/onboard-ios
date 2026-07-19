@@ -37,7 +37,12 @@ struct TagSelectionView: View {
                 Section {
                     if !query.isEmpty {
                         let cleanTag = query.lowercased().replacingOccurrences(of: "[^a-z0-9]", with: "", options: .regularExpression)
-                        if !cleanTag.isEmpty && !selectedTags.contains(cleanTag) && selectedTags.count < 3 {
+                        // Suppress "Create #x" when an exact match already exists in the
+                        // results — otherwise typing an existing tag shows both a redundant
+                        // Create row and the real one. (Before the Tag decode fix this never
+                        // mattered: searchResults was always empty, so only Create ever showed.)
+                        let exactMatchExists = searchResults.contains { $0.name == cleanTag }
+                        if !cleanTag.isEmpty && !selectedTags.contains(cleanTag) && selectedTags.count < 3 && !exactMatchExists {
                             Button {
                                 addTag(cleanTag)
                             } label: {
@@ -76,8 +81,11 @@ struct TagSelectionView: View {
             .autocorrectionDisabled()
             .onChange(of: query) { _, newQuery in
                 Task {
-                    guard let service = store.boardService else { return }
-                    searchResults = (try? await service.searchTags(query: newQuery)) ?? []
+                    // Tag suggestions are board-scoped — pass the current board so
+                    // the picker only surfaces this board's tags.
+                    guard let service = store.boardService,
+                          let boardID = store.currentBoardId else { return }
+                    searchResults = (try? await service.searchTags(query: newQuery, boardID: boardID)) ?? []
                 }
             }
             .navigationTitle("Tags")

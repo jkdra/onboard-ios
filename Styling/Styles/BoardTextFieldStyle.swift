@@ -93,11 +93,7 @@ private struct GlassFieldChrome<Content: View>: View {
             .padding(.horizontal, inset.h)
             .padding(.vertical, inset.v)
             .background {
-                if #available(iOS 26.0, *) {
-                    Color.clear.glassEffect(.regular, in: shape)
-                } else {
-                    shape.fill(.thinMaterial)
-                }
+                GlassBackground(shape: shape, fallback: AnyShapeStyle(.thinMaterial))
             }
             .overlay(
                 shape.stroke(

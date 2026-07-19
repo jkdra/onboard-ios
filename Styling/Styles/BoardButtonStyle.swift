@@ -73,16 +73,10 @@ struct BoardButtonStyle: PrimitiveButtonStyle {
         case .primary:
             shape.fill(accent)
         case .secondary:
-            if #available(iOS 26.0, *) {
-                // .interactive() so the glass responds to the press, matching
-                // the reaction pills — the primary CTA stays solid on purpose.
-                Color.clear
-                    .glassEffect(.regular.interactive(), in: shape)
-                    .overlay(shape.stroke(accent.opacity(0.45), lineWidth: 1))
-            } else {
-                shape.fill(.thinMaterial)
-                    .overlay(shape.stroke(accent.opacity(0.45), lineWidth: 1))
-            }
+            // .interactive() so the glass responds to the press, matching the
+            // reaction pills — the primary CTA stays solid on purpose.
+            GlassBackground(shape: shape, interactive: true, fallback: AnyShapeStyle(.thinMaterial))
+                .overlay(shape.stroke(accent.opacity(0.45), lineWidth: 1))
         case .destructive:
             shape.fill(Color.red)
         }

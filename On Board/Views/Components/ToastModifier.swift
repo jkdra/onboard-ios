@@ -26,11 +26,7 @@ struct ToastModifier: ViewModifier {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
                     .background {
-                        if #available(iOS 26.0, *) {
-                            Color.clear.glassEffect(.regular, in: Capsule())
-                        } else {
-                            Capsule().fill(.regularMaterial)
-                        }
+                        GlassBackground(shape: Capsule())
                     }
                     .clipShape(Capsule())
                     .shadow(color: .black.opacity(0.1), radius: 8, x: 0, y: 4)

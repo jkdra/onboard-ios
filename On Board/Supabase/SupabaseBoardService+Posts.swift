@@ -169,15 +169,16 @@ extension SupabaseBoardService {
         }
     }
     
-    func searchTags(query: String) async throws -> [Tag] {
+    func searchTags(query: String, boardID: UUID) async throws -> [Tag] {
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !cleanQuery.isEmpty else { return [] }
         struct SearchParams: Encodable {
             let prefix: String
+            let p_board_id: UUID
             let p_limit: Int
         }
         return try await client
-            .rpc("search_tags", params: SearchParams(prefix: cleanQuery, p_limit: 10))
+            .rpc("search_tags", params: SearchParams(prefix: cleanQuery, p_board_id: boardID, p_limit: 10))
             .execute()
             .value
     }

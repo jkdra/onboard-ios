@@ -281,24 +281,19 @@ struct CommentComposerBar: View {
         }
         .foregroundStyle(.primary)
         .background {
-            if #available(iOS 26.0, *) {
-                Color.clear.glassEffect(.regular.interactive(), in: Capsule(style: .continuous))
-            } else {
-                Capsule(style: .continuous).fill(.regularMaterial)
-            }
+            GlassBackground(shape: Capsule(style: .continuous), interactive: true)
         }
         .transition(.opacity.combined(with: .move(edge: .bottom)))
     }
 
     // MARK: - Materials
 
-    @ViewBuilder
     private func glassBackground(shape: AnyShape) -> some View {
-        if #available(iOS 26.0, *) {
-            Color.clear.glassEffect(.regular.interactive(), in: shape)
-        } else {
-            shape.fill(Color(.systemBackground).opacity(0.45))
-        }
+        GlassBackground(
+            shape: shape,
+            interactive: true,
+            fallback: AnyShapeStyle(Color(.systemBackground).opacity(0.45))
+        )
     }
 
     @ViewBuilder

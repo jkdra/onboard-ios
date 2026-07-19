@@ -64,9 +64,12 @@ struct BoardAsyncImage: View {
     }
 
     private var loadingPlaceholder: some View {
-        tone.color.opacity(0.06)
+        // Shimmer skeleton rather than a spinner: an in-feed image reads as
+        // "arriving" instead of "waiting", and matches the feed's cold-load
+        // FeedSkeletonView. Tinted faintly toward the post's tone.
+        SkeletonShape(shape: Rectangle())
             .frame(minHeight: 100)
-            .overlay { ProgressView().tint(tone.color) }
+            .overlay(tone.color.opacity(0.05))
     }
 }
 
