@@ -52,6 +52,15 @@ private struct DoubleTapHeart: ViewModifier {
     var onSingleTap: (() -> Void)? = nil
 
     @State private var bursts: [HeartBurst] = []
+    /// Single/double-tap disambiguation carries the system's standard delay.
+    /// If this view is popped (e.g. NavigationStack back) while that delay is
+    /// still pending — or a stray tap lands on it during a pop's transition,
+    /// where this app's zoom navigation transition keeps source/destination
+    /// both mounted — the resolved tap can otherwise fire after the user has
+    /// already moved on, most visibly as onSingleTap's fullScreenCover
+    /// reappearing on a screen the user thinks they left. Gate on presence so
+    /// a late-resolving gesture is a no-op instead of acting on stale state.
+    @State private var isPresentedOnScreen = true
 
     func body(content: Content) -> some View {
         content
@@ -71,7 +80,7 @@ private struct DoubleTapHeart: ViewModifier {
                     SpatialTapGesture(count: 1, coordinateSpace: .local)
                 )
                 .onEnded { result in
-                    guard isEnabled else { return }
+                    guard isEnabled, isPresentedOnScreen else { return }
                     switch result {
                     case .first(let value):
                         if !isLiked() { onLike() }
@@ -81,6 +90,8 @@ private struct DoubleTapHeart: ViewModifier {
                     }
                 }
             )
+            .onAppear { isPresentedOnScreen = true }
+            .onDisappear { isPresentedOnScreen = false }
     }
 
     private func spawnBurst(at location: CGPoint) {

@@ -6,9 +6,8 @@
 //  plus a circular Comment button. Compose: a glass composer (reply context
 //  chip, multiline field, tone-colored send) replacing the whole bar. The two
 //  states never coexist, so the composer can never collide with the reaction
-//  pills above the keyboard. On iOS 26 the circle and the field share a
-//  glassEffectID, so the button visibly blooms into the composer; pre-26 the
-//  same pairing runs through matchedGeometryEffect over plain fills.
+//  pills above the keyboard. Browse and compose simply crossfade — no shared
+//  morph identity between the button and the field.
 //
 
 import SwiftUI
@@ -34,8 +33,6 @@ struct CommentComposerBar: View {
     var isErrorPresented: Bool = false
 
     @FocusState private var isFieldFocused: Bool
-    @Namespace private var morphNamespace
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     // Guards against a second submit while the first is in flight (ported from
     // NewCommentComposer) — the network round-trip leaves the button live.
     @State private var isPosting = false
@@ -59,9 +56,6 @@ struct CommentComposerBar: View {
             content
         }
         .safeAreaPadding()
-        .background {
-            morphingBackgrounds
-        }
         .background(barBackground)
         .animation(morphAnimation, value: composer.isComposing)
         .onChange(of: composer.isComposing) { _, composing in
@@ -106,7 +100,6 @@ struct CommentComposerBar: View {
                 isInteractive: !isReadOnly,
                 isRecord: isRecord
             )
-            .background(Color.clear.matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace))
 
             if !isReadOnly {
                 commentButton
@@ -124,7 +117,7 @@ struct CommentComposerBar: View {
                 .foregroundStyle(.primary)
                 .frame(width: 48, height: 48)
                 .contentShape(Circle())
-                .background(Color.clear.matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace))
+                .background(glassBackground(shape: AnyShape(Circle())))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Add a comment")
@@ -147,7 +140,10 @@ struct CommentComposerBar: View {
     }
 
     /// ✕ lives alone at the leading edge, outside the field — cancelling is
-    /// always one obvious tap in a fixed spot.
+    /// always one obvious tap in a fixed spot. Independent glass circle, not
+    /// tied to ReactionBar's frame: the reaction pills already paint their
+    /// own material (ReactionBar.reactionBackground), so sharing an identity
+    /// here would stack a second full-width glass tray behind them.
     private var closeButton: some View {
         Button {
             withAnimation(morphAnimation) { composer.dismiss() }
@@ -157,7 +153,7 @@ struct CommentComposerBar: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 44, height: 44)
                 .contentShape(Circle())
-                .background(Color.clear.matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace))
+                .background(glassBackground(shape: AnyShape(Circle())))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Cancel comment")
@@ -202,9 +198,16 @@ struct CommentComposerBar: View {
         .padding(.leading, 16)
         .padding(.trailing, 8)
         .padding(.vertical, 6)
-        .background(Color.clear.matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace))
+        .background(glassBackground(shape: AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous))))
         .animation(.smooth(duration: 0.2), value: isMultiline)
-        .gesture(
+        // highPriorityGesture, not .gesture: the TextField underneath owns its
+        // own pan/selection recognizers, which win arbitration over a plain
+        // .gesture() attached here — a swipe starting on the text itself
+        // (i.e. anywhere but the thin edge padding) would otherwise almost
+        // never reach this handler. highPriorityGesture only claims the
+        // touch once the drag clears minimumDistance, so taps/typing/cursor
+        // placement are unaffected.
+        .highPriorityGesture(
             DragGesture(minimumDistance: 15, coordinateSpace: .local)
                 .onEnded { value in
                     // Only trigger on clear upward swipes
@@ -290,25 +293,7 @@ struct CommentComposerBar: View {
     // MARK: - Materials
 
     @ViewBuilder
-    private var morphingBackgrounds: some View {
-        if !reduceMotion {
-            ZStack {
-                morphSource(
-                    shape: composer.isComposing ? AnyShape(RoundedRectangle(cornerRadius: 22, style: .continuous)) : AnyShape(Circle())
-                )
-                .matchedGeometryEffect(id: "composerMorph_frame", in: morphNamespace, isSource: false)
-
-                morphSource(
-                    shape: composer.isComposing ? AnyShape(Circle()) : AnyShape(Capsule(style: .continuous))
-                )
-                .matchedGeometryEffect(id: "cancelMorph_frame", in: morphNamespace, isSource: false)
-            }
-            .animation(morphAnimation, value: composer.isComposing)
-        }
-    }
-
-    @ViewBuilder
-    private func morphSource(shape: AnyShape) -> some View {
+    private func glassBackground(shape: AnyShape) -> some View {
         if #available(iOS 26.0, *) {
             Color.clear.glassEffect(.regular.interactive(), in: shape)
         } else {
