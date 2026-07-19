@@ -73,20 +73,16 @@ struct TagSelectionView: View {
                         }
                     }
                 } header: {
-                    Text("Search Results")
+                    Text(query.isEmpty ? "Popular Tags" : "Search Results")
                 }
             }
             .searchable(text: $query, prompt: "Search or create tags...")
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
-            .onChange(of: query) { _, newQuery in
-                Task {
-                    // Tag suggestions are board-scoped — pass the current board so
-                    // the picker only surfaces this board's tags.
-                    guard let service = store.boardService,
-                          let boardID = store.currentBoardId else { return }
-                    searchResults = (try? await service.searchTags(query: newQuery, boardID: boardID)) ?? []
-                }
+            // Runs on appear (query == "" → the board's popular tags) and on every
+            // keystroke; the id-change cancels the prior in-flight request.
+            .task(id: query) {
+                await refreshResults()
             }
             .navigationTitle("Tags")
             .navigationBarTitleDisplayMode(.inline)
@@ -101,9 +97,18 @@ struct TagSelectionView: View {
     private func addTag(_ tag: String) {
         if selectedTags.count < 3 && !selectedTags.contains(tag) {
             selectedTags.append(tag)
+            // Reset to the popular-tags state. Don't clear searchResults — the
+            // ForEach already filters out selected tags, so the rest of the list
+            // stays put (and if query was non-empty, .task(id:) re-fetches).
             query = ""
-            searchResults = []
         }
+    }
+
+    private func refreshResults() async {
+        guard let service = store.boardService,
+              let boardID = store.currentBoardId else { return }
+        // Board-scoped: only this board's tags. Empty query → popular tags.
+        searchResults = (try? await service.searchTags(query: query, boardID: boardID)) ?? []
     }
 }
 

@@ -170,8 +170,11 @@ extension SupabaseBoardService {
     }
     
     func searchTags(query: String, boardID: UUID) async throws -> [Tag] {
+        // An empty query returns the board's most-used tags (search_tags with an
+        // empty prefix orders by post_count) — this powers the picker's
+        // "Popular Tags" state so users discover and reuse existing tags rather
+        // than typing blind and creating duplicates.
         let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !cleanQuery.isEmpty else { return [] }
         struct SearchParams: Encodable {
             let prefix: String
             let p_board_id: UUID
