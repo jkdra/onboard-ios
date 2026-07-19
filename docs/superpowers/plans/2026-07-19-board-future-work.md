@@ -29,6 +29,13 @@ this file is just the checklist. **Tier 1 (board-scoped tags, count fix,
 - [ ] `BoardStore` keyed by board instead of a single `currentBoard`.
 - [ ] Board switcher UI.
 
+## Tappable tag feed
+*Trigger: when tag-browsing discovery is worth a view + RPC. Tags are decorative today.*
+
+- [ ] Tap a tag → per-board feed of posts with that tag (all weeks incl. archive),
+      interactive-glass chips. Full blueprint:
+      `docs/superpowers/specs/2026-07-19-tappable-tag-feed.md`.
+
 ## Cross-board trending (the one exception to board-scoping)
 *Trigger: once there are enough boards that a shared topic is worth surfacing.*
 
