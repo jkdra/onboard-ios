@@ -174,7 +174,7 @@ struct PostImageCropView: View {
             .shadow(radius: 2)
             .position(point)
             .gesture(resizeGesture(for: corner, in: displayFrame))
-            .accessibilityLabel("Resize crop — \(corner)")
+            .accessibilityLabel("Resize crop — \(corner.accessibilityDescription)")
     }
 
     private func resizeGesture(for corner: CropCorner, in displayFrame: CGRect) -> some Gesture {
@@ -254,6 +254,20 @@ struct PostImageCropView: View {
             image.draw(at: CGPoint(x: -pixelRect.origin.x, y: -pixelRect.origin.y))
         }
         onCrop(cropped)
+    }
+}
+
+private extension CropCorner {
+    /// Human-readable form for accessibility labels — interpolating the raw
+    /// enum case directly triggers a deprecated, unlocalized debug-description
+    /// path in SwiftUI's LocalizedStringKey interpolation.
+    var accessibilityDescription: String {
+        switch self {
+        case .topLeft: "top-left"
+        case .topRight: "top-right"
+        case .bottomLeft: "bottom-left"
+        case .bottomRight: "bottom-right"
+        }
     }
 }
 
