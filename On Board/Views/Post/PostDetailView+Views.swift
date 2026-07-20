@@ -417,7 +417,7 @@ extension PostDetailView {
             }
             // Change photo — bottom-trailing pill
             .overlay(alignment: .bottomTrailing) {
-                PhotosPicker(selection: $selectedEditPhotoItem, matching: .images) {
+                PhotoSourceButton(selection: $selectedEditPhotoItem, onCapture: { uncroppedEditImage = $0 }) {
                     Label("Change", systemImage: "camera.fill")
                         .font(.caption.weight(.medium))
                         .padding(.horizontal, 10)
@@ -430,7 +430,7 @@ extension PostDetailView {
             .transition(.scale(scale: 0.97).combined(with: .opacity))
         } else {
             // ── No image — dashed add-photo target ────────────────────────
-            PhotosPicker(selection: $selectedEditPhotoItem, matching: .images) {
+            PhotoSourceButton(selection: $selectedEditPhotoItem, onCapture: { uncroppedEditImage = $0 }) {
                 HStack(spacing: 10) {
                     Image(systemName: "photo.badge.plus")
                         .font(.title3)

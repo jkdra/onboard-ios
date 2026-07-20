@@ -38,6 +38,7 @@ struct PostDetailView: View {
     @State var uploadedEditImageUrl: String?
     @State var uploadedEditAspectRatio: Double?
     @State var editImageUploadFailed = false
+    @State var uncroppedEditImage: UIImage?
 
     // UI
     @State var showDeleteConfirmation = false
@@ -262,7 +263,19 @@ struct PostDetailView: View {
                 }
             }
             .onChange(of: selectedEditPhotoItem) { _, item in
-                Task { await loadAndUploadEditImage(item) }
+                Task { await loadEditImage(item) }
+            }
+            .fullScreenCover(item: Binding<UIImage?>(
+                get: { uncroppedEditImage },
+                set: { uncroppedEditImage = $0 }
+            )) { image in
+                PostImageCropView(image: image) { cropped in
+                    uncroppedEditImage = nil
+                    Task { await uploadCroppedEditImage(cropped) }
+                } onCancel: {
+                    uncroppedEditImage = nil
+                    selectedEditPhotoItem = nil
+                }
             }
         }
     }

@@ -143,16 +143,20 @@ extension PostDetailView {
         editImageUploadFailed = false
     }
 
-    func loadAndUploadEditImage(_ item: PhotosPickerItem?) async {
+    func loadEditImage(_ item: PhotosPickerItem?) async {
         guard let item else { return }
         guard let rawData = try? await item.loadTransferable(type: Data.self),
-              UIImage(data: rawData) != nil else { return }
-        selectedEditPhotoData = rawData
+              let uiImage = UIImage(data: rawData) else { return }
+        uncroppedEditImage = uiImage
+    }
+
+    func uploadCroppedEditImage(_ image: UIImage) async {
+        selectedEditPhotoData = image.jpegData(compressionQuality: 0.85)
         editImageUploadFailed = false
         guard let userID = store.currentUserID else { return }
         isUploadingEditImage = true
         defer { isUploadingEditImage = false }
-        if let result = await ImageUploader.upload(input: .rawData(rawData), type: .postPhoto, userID: userID) {
+        if let result = await ImageUploader.upload(input: .uiImage(image), type: .postPhoto, userID: userID) {
             uploadedEditImageUrl = result.url
             uploadedEditAspectRatio = result.aspectRatio
             draftImageUrl = nil
