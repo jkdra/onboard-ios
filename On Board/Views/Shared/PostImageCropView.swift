@@ -45,7 +45,7 @@ struct PostImageCropView: View {
 
     @State private var cropRect: CGRect = .zero
     @State private var selectedAspect: CropAspectOption = .free
-    @State private var dragStartRect: CGRect?
+    @GestureState private var dragStartRect: CGRect?
     @State private var lastDisplayFrame: CGRect = .zero
 
     private let padding: CGFloat = 16
@@ -179,9 +179,11 @@ struct PostImageCropView: View {
 
     private func resizeGesture(for corner: CropCorner, in displayFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0)
+            .updating($dragStartRect) { value, state, _ in
+                if state == nil { state = cropRect }
+            }
             .onChanged { value in
-                let start = dragStartRect ?? cropRect
-                if dragStartRect == nil { dragStartRect = start }
+                guard let start = dragStartRect else { return }
                 let anchor = PostCropGeometry.anchorPoint(for: corner, in: start)
                 let origin = PostCropGeometry.draggedPoint(for: corner, in: start)
                 let newPoint = CGPoint(
@@ -195,17 +197,17 @@ struct PostImageCropView: View {
                     bounds: displayFrame
                 )
             }
-            .onEnded { _ in dragStartRect = nil }
     }
 
     private func moveGesture(in displayFrame: CGRect) -> some Gesture {
         DragGesture()
+            .updating($dragStartRect) { value, state, _ in
+                if state == nil { state = cropRect }
+            }
             .onChanged { value in
-                let start = dragStartRect ?? cropRect
-                if dragStartRect == nil { dragStartRect = start }
+                guard let start = dragStartRect else { return }
                 cropRect = PostCropGeometry.translate(start, by: value.translation, bounds: displayFrame)
             }
-            .onEnded { _ in dragStartRect = nil }
     }
 
     // MARK: - Aspect picker
