@@ -15,6 +15,7 @@ struct ProfileEditContent: View {
     let profile: Profile
     let namespace: Namespace.ID
     @Bindable var draft: ProfileDraft
+    var onCameraCapture: (UIImage) -> Void
 
     private var minBirthdayAgeDate: Date {
         Calendar.current.date(byAdding: .year, value: -16, to: Date()) ?? Date()
@@ -146,7 +147,7 @@ struct ProfileEditContent: View {
         let currentProfile = profile
         let uiImage = photoData.flatMap { PhotoPreviewCache.image(for: $0) }
 
-        return PhotosPicker(selection: $draft.selectedPhotoItem, matching: .images) {
+        return PhotoSourceButton(selection: $draft.selectedPhotoItem, onCapture: onCameraCapture) {
             ZStack(alignment: .bottomTrailing) {
                 ZStack {
                     if let uiImage {

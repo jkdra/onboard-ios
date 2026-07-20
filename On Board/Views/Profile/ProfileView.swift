@@ -109,7 +109,8 @@ struct ProfileView: View {
                     ProfileEditContent(
                         profile: displayedProfile,
                         namespace: profileNamespace,
-                        draft: draft
+                        draft: draft,
+                        onCameraCapture: { uncroppedImage = $0 }
                     )
                 } else {
                     ProfileReadContent(
