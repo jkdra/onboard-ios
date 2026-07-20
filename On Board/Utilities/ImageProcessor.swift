@@ -37,6 +37,15 @@ enum ImageProcessor {
         return scaledImage.jpegData(compressionQuality: type.compressionQuality)
     }
 
+    /// Processes a pre-cropped UIImage for a post photo (e.g. output of
+    /// PostImageCropView). Mirrors processProfilePicture's scale-then-encode
+    /// shape but uses PhotoType.postPhoto's larger maxDimension/quality.
+    nonisolated static func processPostPhoto(_ image: UIImage) -> Data? {
+        let type = PhotoType.postPhoto
+        let scaledImage = image.scaledDown(toMaxDimension: type.maxDimension)
+        return scaledImage.jpegData(compressionQuality: type.compressionQuality)
+    }
+
     /// Processes raw image data (from PhotosPicker) for a post.
     /// This is highly memory-efficient, extracting a downsampled thumbnail directly from the source bytes
     /// without ever decoding the full-resolution bitmap into RAM.

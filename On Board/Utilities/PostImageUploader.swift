@@ -22,11 +22,11 @@ enum ImageUploader {
             
             switch input {
             case .uiImage(let image):
-                if case .profilePicture = type {
+                switch type {
+                case .profilePicture:
                     data = ImageProcessor.processProfilePicture(image)
-                } else {
-                    // Fallback if somehow post uses UIImage
-                    data = image.jpegData(compressionQuality: type.compressionQuality)
+                case .postPhoto:
+                    data = ImageProcessor.processPostPhoto(image)
                 }
             case .rawData(let raw):
                 data = ImageProcessor.processPostPhoto(from: raw)
