@@ -87,9 +87,6 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
 
     func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep {
         let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedName.isEmpty else {
-            throw OnboardingError.profileIncomplete
-        }
 
         struct Params: Encodable {
             let pDisplayName: String

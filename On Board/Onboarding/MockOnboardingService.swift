@@ -87,9 +87,6 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         }
 
         let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedName.isEmpty else {
-            throw OnboardingError.profileIncomplete
-        }
 
         var status = loadStatus(for: userID)
         status = status.updating(
