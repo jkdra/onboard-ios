@@ -100,7 +100,7 @@ struct OnboardingProfileStepView: View {
                         let uploading = isUploadingPhoto
                         let hasPhoto = photoData != nil && avatarUrl != nil
                         let uiImage = photoData.flatMap { PhotoPreviewCache.image(for: $0) }
-                        PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        PhotoSourceButton(selection: $selectedPhotoItem, onCapture: { uncroppedImage = $0 }) {
                             ZStack(alignment: .bottomTrailing) {
                                 ZStack {
                                     Circle()
