@@ -103,6 +103,12 @@ nonisolated enum PostCropGeometry {
         width = max(width, minCropDimension)
         height = max(height, minCropDimension)
 
+        if width > bounds.width || height > bounds.height {
+            let scale = min(bounds.width / width, bounds.height / height)
+            width = max(width * scale, minCropDimension)
+            height = max(height * scale, minCropDimension)
+        }
+
         let originX = point.x >= anchor.x ? anchor.x : anchor.x - width
         let originY = point.y >= anchor.y ? anchor.y : anchor.y - height
 

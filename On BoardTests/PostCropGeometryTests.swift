@@ -113,6 +113,25 @@ struct PostCropGeometryTests {
         #expect(pixelRect == CGRect(x: 0, y: 0, width: 200, height: 100))
     }
 
+    @Test func rectPreservesAspectWhenAspectAdjustmentOverflowsBounds() {
+        // Tall, narrow bounds. Aspect 0.2 (narrow) combined with a drag point
+        // that pushes the naive aspect-adjusted height (450) well past
+        // bounds.height (300), while width (90) stays under bounds.width (100).
+        // Without a proportional shrink, `clamp` would clip height down to 300
+        // independently and leave width at 90, breaking the requested aspect
+        // (90/300 = 0.3 != 0.2).
+        let bounds = CGRect(x: 0, y: 0, width: 100, height: 300)
+        let result = PostCropGeometry.rect(
+            anchor: CGPoint(x: 0, y: 0),
+            draggedPoint: CGPoint(x: 90, y: 250),
+            aspect: 0.2,
+            bounds: bounds
+        )
+        #expect(abs(result.width / result.height - 0.2) < 0.001)
+        #expect(result.width <= bounds.width)
+        #expect(result.height <= bounds.height)
+    }
+
     @Test func anchorAndDraggedPointAreOppositeCorners() {
         let rect = CGRect(x: 10, y: 20, width: 30, height: 40)
         #expect(PostCropGeometry.anchorPoint(for: .topLeft, in: rect) == CGPoint(x: 40, y: 60))
