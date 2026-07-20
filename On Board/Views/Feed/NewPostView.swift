@@ -33,6 +33,7 @@ struct NewPostView: View {
     @State private var uploadedImageUrl: String?
     @State private var uploadedAspectRatio: Double?
     @State private var isUploadingImage = false
+    @State private var uncroppedPostImage: UIImage?
     @State private var isSubmitting = false
     @State private var showingTagSelection = false
 
@@ -168,10 +169,22 @@ struct NewPostView: View {
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
             .onChange(of: selectedPhotoItem) { _, item in
-                Task { await loadAndUpload(item) }
+                Task { await loadPickedPhoto(item) }
             }
             .sheet(isPresented: $showingTagSelection) {
                 TagSelectionView(selectedTags: $tags)
+            }
+            .fullScreenCover(item: Binding<UIImage?>(
+                get: { uncroppedPostImage },
+                set: { uncroppedPostImage = $0 }
+            )) { image in
+                PostImageCropView(image: image) { cropped in
+                    uncroppedPostImage = nil
+                    Task { await uploadCroppedImage(cropped) }
+                } onCancel: {
+                    uncroppedPostImage = nil
+                    selectedPhotoItem = nil
+                }
             }
         }
     }
@@ -212,7 +225,7 @@ struct NewPostView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
                 let hasImage = selectedPhotoData != nil
-                PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                PhotoSourceButton(selection: $selectedPhotoItem, onCapture: { uncroppedPostImage = $0 }) {
                     Label(
                         hasImage ? "Change Image" : "Add Image",
                         systemImage: "photo.badge.plus"
@@ -259,27 +272,27 @@ struct NewPostView: View {
     // MARK: - Upload
 
     @MainActor
-    private func loadAndUpload(_ item: PhotosPickerItem?) async {
+    private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
         guard let item else { return }
-
         guard let rawData = try? await item.loadTransferable(type: Data.self),
-              UIImage(data: rawData) != nil else { return }
+              let uiImage = UIImage(data: rawData) else { return }
+        uncroppedPostImage = uiImage
+    }
 
-        // Show the original immediately as a preview (UIImage can't display its own WebP output).
-        selectedPhotoData = rawData
+    private func uploadCroppedImage(_ image: UIImage) async {
+        // Optimistic preview of the cropped result while it uploads.
+        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
 
         guard let userID = store.currentUserID else { return }
 
         isUploadingImage = true
         defer { isUploadingImage = false }
 
-        // Encode (JPEG, downscaled) + upload via the shared helper, which now runs the
-        // CPU-heavy encode OFF the main actor so the composer doesn't hitch.
-        if let result = await ImageUploader.upload(input: .rawData(rawData), type: .postPhoto, userID: userID) {
+        if let result = await ImageUploader.upload(input: .uiImage(image), type: .postPhoto, userID: userID) {
             uploadedImageUrl = result.url
             uploadedAspectRatio = result.aspectRatio
         } else {
-            // Encode/upload failed — post goes text-only; preview stays so user sees their image.
+            // Upload failed — post goes text-only; preview stays so user sees their image.
             uploadedImageUrl = nil
             uploadedAspectRatio = nil
         }
