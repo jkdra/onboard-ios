@@ -1446,7 +1446,7 @@ struct OnboardingProfileCompletionTests {
         let suiteName = "OnboardingProfileCompletionTests.\(userID.uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
-        let session = AuthSession(userId: userID, accessToken: "t", refreshToken: "r")
+        let session = AuthSession(userId: userID, primaryProvider: .apple)
         defaults.set(try! JSONEncoder().encode(session), forKey: "mock.auth.session")
         return (userID, defaults)
     }
