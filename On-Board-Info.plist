@@ -39,5 +39,7 @@
 		<string>ZalandoSansSemiExpanded.ttf</string>
 		<string>ZalandoSans.ttf</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>On Board uses your camera so you can take a photo directly for your profile picture or a post.</string>
 </dict>
 </plist>
