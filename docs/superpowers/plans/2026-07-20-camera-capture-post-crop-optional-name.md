@@ -421,10 +421,10 @@ enum PostCropGeometry {
         var height = abs(point.y - anchor.y)
 
         if let aspect, aspect > 0 {
-            if width / max(height, 1) > aspect {
-                width = height * aspect
-            } else {
+            if width / aspect >= height {
                 height = width / aspect
+            } else {
+                width = height * aspect
             }
         }
 
