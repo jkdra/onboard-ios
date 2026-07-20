@@ -99,10 +99,20 @@ enum ImageProcessor {
 private extension UIImage {
     nonisolated func scaledDown(toMaxDimension maxDim: CGFloat) -> UIImage {
         let longest = max(size.width, size.height)
-        guard longest > maxDim else { return self }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1.0 // Ensure consistent scale for upload
+        guard longest > maxDim else {
+            // Even when no downscaling is needed, re-render at scale 1.0 so the
+            // encoded pixel buffer matches `size` in points. Without this, an
+            // input UIImage carrying a non-1.0 scale (e.g. device-native 3x)
+            // would silently pass through with a 3x-oversized pixel buffer.
+            guard scale != 1.0 else { return self }
+            let renderer = UIGraphicsImageRenderer(size: size, format: format)
+            return renderer.image { _ in draw(in: CGRect(origin: .zero, size: size)) }
+        }
         let scale = maxDim / longest
         let newSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: newSize)
+        let renderer = UIGraphicsImageRenderer(size: newSize, format: format)
         return renderer.image { _ in draw(in: CGRect(origin: .zero, size: newSize)) }
     }
 }
