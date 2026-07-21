@@ -196,4 +196,36 @@ struct PostCropGeometryTests {
         let result = PostCropGeometry.resizeEdge(.top, of: start, to: CGPoint(x: 0, y: -500), bounds: bounds)
         #expect(result.minY == bounds.minY)
     }
+
+    @Test func rectHonorsRaisedMinimumDimension() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 400)
+        // Tiny drag that would normally collapse to minCropDimension (60),
+        // but a raised floor of 150 must win.
+        let result = PostCropGeometry.rect(
+            anchor: CGPoint(x: 20, y: 20),
+            draggedPoint: CGPoint(x: 25, y: 25),
+            aspect: nil,
+            bounds: bounds,
+            minDimension: 150
+        )
+        #expect(result.width == 150)
+        #expect(result.height == 150)
+    }
+
+    @Test func resizeEdgeHonorsRaisedMinimumDimension() {
+        let bounds = CGRect(x: 0, y: 0, width: 400, height: 400)
+        let start = CGRect(x: 20, y: 20, width: 300, height: 300)
+        // Drag bottom edge almost up to the top — a 150 floor caps the collapse.
+        let result = PostCropGeometry.resizeEdge(.bottom, of: start, to: CGPoint(x: 0, y: 25), bounds: bounds, minDimension: 150)
+        #expect(result.height == 150)
+    }
+
+    @Test func effectiveFloorNeverExceedsBounds() {
+        // A resolution-derived floor larger than the image must clamp down to
+        // the bounds, never force a rect bigger than what's available.
+        let bounds = CGRect(x: 0, y: 0, width: 100, height: 80)
+        #expect(PostCropGeometry.effectiveFloor(500, in: bounds) == 80)
+        // And it never drops below the baseline minimum.
+        #expect(PostCropGeometry.effectiveFloor(10, in: bounds) == PostCropGeometry.minCropDimension)
+    }
 }

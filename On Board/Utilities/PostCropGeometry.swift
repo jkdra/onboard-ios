@@ -91,8 +91,12 @@ nonisolated enum PostCropGeometry {
 
     /// Builds a rect from a fixed `anchor` corner and the live `draggedPoint`
     /// of the opposite corner, honoring `aspect` (nil = free), a minimum
-    /// size, and `bounds` clamping.
-    static func rect(anchor: CGPoint, draggedPoint: CGPoint, aspect: CGFloat?, bounds: CGRect) -> CGRect {
+    /// size, and `bounds` clamping. `minDimension` lets the caller raise the
+    /// floor above `minCropDimension` — e.g. to enforce a minimum output
+    /// resolution — but it's clamped to the bounds so a large floor can never
+    /// make the rect exceed the image.
+    static func rect(anchor: CGPoint, draggedPoint: CGPoint, aspect: CGFloat?, bounds: CGRect, minDimension: CGFloat = minCropDimension) -> CGRect {
+        let floor = effectiveFloor(minDimension, in: bounds)
         var point = draggedPoint
         point.x = min(max(point.x, bounds.minX), bounds.maxX)
         point.y = min(max(point.y, bounds.minY), bounds.maxY)
@@ -108,19 +112,26 @@ nonisolated enum PostCropGeometry {
             }
         }
 
-        width = max(width, minCropDimension)
-        height = max(height, minCropDimension)
+        width = max(width, floor)
+        height = max(height, floor)
 
         if width > bounds.width || height > bounds.height {
             let scale = min(bounds.width / width, bounds.height / height)
-            width = max(width * scale, minCropDimension)
-            height = max(height * scale, minCropDimension)
+            width = max(width * scale, floor)
+            height = max(height * scale, floor)
         }
 
         let originX = point.x >= anchor.x ? anchor.x : anchor.x - width
         let originY = point.y >= anchor.y ? anchor.y : anchor.y - height
 
         return clamp(CGRect(x: originX, y: originY, width: width, height: height), to: bounds)
+    }
+
+    /// Clamps a requested minimum crop dimension so it can never exceed the
+    /// bounds it must fit inside (a resolution-derived floor on a small image
+    /// would otherwise force a rect larger than the image).
+    static func effectiveFloor(_ requested: CGFloat, in bounds: CGRect) -> CGFloat {
+        min(max(requested, minCropDimension), min(bounds.width, bounds.height))
     }
 
     /// The midpoint of a given edge of `rect` — where an edge-drag handle sits.
@@ -135,23 +146,24 @@ nonisolated enum PostCropGeometry {
 
     /// Moves a single edge of `start` to `point`, keeping the opposite edge
     /// and both perpendicular bounds fixed, clamped to `bounds` and to a
-    /// minimum height/width of `minCropDimension`.
-    static func resizeEdge(_ edge: CropEdge, of start: CGRect, to point: CGPoint, bounds: CGRect) -> CGRect {
+    /// minimum height/width of `minDimension` (defaults to `minCropDimension`).
+    static func resizeEdge(_ edge: CropEdge, of start: CGRect, to point: CGPoint, bounds: CGRect, minDimension: CGFloat = minCropDimension) -> CGRect {
+        let floor = effectiveFloor(minDimension, in: bounds)
         var rect = start
         switch edge {
         case .top:
-            let newMinY = min(max(point.y, bounds.minY), start.maxY - minCropDimension)
+            let newMinY = min(max(point.y, bounds.minY), start.maxY - floor)
             rect.origin.y = newMinY
             rect.size.height = start.maxY - newMinY
         case .bottom:
-            let newMaxY = max(min(point.y, bounds.maxY), start.minY + minCropDimension)
+            let newMaxY = max(min(point.y, bounds.maxY), start.minY + floor)
             rect.size.height = newMaxY - start.minY
         case .left:
-            let newMinX = min(max(point.x, bounds.minX), start.maxX - minCropDimension)
+            let newMinX = min(max(point.x, bounds.minX), start.maxX - floor)
             rect.origin.x = newMinX
             rect.size.width = start.maxX - newMinX
         case .right:
-            let newMaxX = max(min(point.x, bounds.maxX), start.minX + minCropDimension)
+            let newMaxX = max(min(point.x, bounds.maxX), start.minX + floor)
             rect.size.width = newMaxX - start.minX
         }
         return rect

@@ -85,13 +85,28 @@ struct PostImageCropView: View {
     private let handleHitSize: CGFloat = 44
     private let edgeHandleLength: CGFloat = 36
     private let edgeHandleThickness: CGFloat = 5
-    private let cornerBracketArmLength: CGFloat = 20
+    private let cornerBracketArmLength: CGFloat = 22
     private let backdropBlurRadius: CGFloat = 20
     private let settleAnimation: Animation = .smooth(duration: 0.25)
     private let confirmAnimation: Animation = .easeInOut(duration: 0.3)
     private let confirmDelay: Duration = .milliseconds(320)
+    // The crop output is never allowed below this on its shorter side, in
+    // source-image pixels — so a user can't drag the selection down to a
+    // uselessly tiny region. Clamped to the image if it's smaller than this.
+    private let minOutputResolution: CGFloat = 640
 
     private var imageAspect: CGFloat { image.size.width / image.size.height }
+
+    /// The minimum crop-rect side, in on-screen points, that still yields at
+    /// least `minOutputResolution` pixels on the source image. Derived from
+    /// how much the image was scaled down to fit `lastDisplayFrame`.
+    private var minCropDimensionInPoints: CGFloat {
+        guard lastDisplayFrame.width > 0, image.size.width > 0 else {
+            return PostCropGeometry.minCropDimension
+        }
+        let pointsPerPixel = lastDisplayFrame.width / image.size.width
+        return minOutputResolution * pointsPerPixel
+    }
 
     /// `.original` isn't a fixed ratio — it's whatever the source image's own
     /// aspect is. Other directional options normalize their base ratio to
@@ -141,8 +156,11 @@ struct PostImageCropView: View {
                         .blur(radius: backdropBlurRadius)
                         .clipped()
 
+                    // systemBackground so the masked-out area reads as white
+                    // in light mode / black in dark mode automatically, over
+                    // the blurred backdrop below it.
                     Rectangle()
-                        .fill(Color.black.opacity(isConfirming ? 0.55 : 0.35))
+                        .fill(Color(uiColor: .systemBackground).opacity(isConfirming ? 0.8 : 0.62))
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .reverseMask {
                             Rectangle().frame(width: cropRect.width, height: cropRect.height)
@@ -333,15 +351,12 @@ struct PostImageCropView: View {
         .allowsHitTesting(false)
     }
 
+    /// Invisible corner hit target — the visible marker is the angular
+    /// bracket drawn in `cropOverlay`; this just carries the drag gesture
+    /// over a comfortable ~44pt area centered on the corner.
     private func handle(for corner: CropCorner, in displayFrame: CGRect) -> some View {
         let point = PostCropGeometry.draggedPoint(for: corner, in: cropRect)
-        return Circle()
-            .fill(Color.white)
-            .frame(width: handleVisualSize, height: handleVisualSize)
-            .shadow(radius: 2)
-            // The visible dot stays small; the actual draggable area is a
-            // larger invisible hit target centered on the same point (Apple's
-            // ~44pt minimum tap target), so it's easy to grab without looking oversized.
+        return Color.clear
             .frame(width: handleHitSize, height: handleHitSize)
             .contentShape(Rectangle())
             .position(point)
@@ -352,13 +367,16 @@ struct PostImageCropView: View {
     private func edgeHandle(for edge: CropEdge, in displayFrame: CGRect) -> some View {
         let point = PostCropGeometry.edgeMidpoint(for: edge, in: cropRect)
         let isHorizontalEdge = edge == .top || edge == .bottom
-        return Capsule()
-            .fill(Color.white)
+        // Adaptive bar (matches the bracket color), not a white capsule, so
+        // the crop chrome is one consistent adaptive set rather than mixed
+        // white/adaptive markers.
+        return RoundedRectangle(cornerRadius: 1, style: .continuous)
+            .fill(Color.primary)
             .frame(
                 width: isHorizontalEdge ? edgeHandleLength : edgeHandleThickness,
                 height: isHorizontalEdge ? edgeHandleThickness : edgeHandleLength
             )
-            .shadow(radius: 2)
+            .shadow(radius: 1)
             .frame(width: handleHitSize, height: handleHitSize)
             .contentShape(Rectangle())
             .position(point)
@@ -383,7 +401,8 @@ struct PostImageCropView: View {
                     anchor: anchor,
                     draggedPoint: newPoint,
                     aspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
-                    bounds: displayFrame
+                    bounds: displayFrame,
+                    minDimension: minCropDimensionInPoints
                 )
             }
     }
@@ -400,7 +419,7 @@ struct PostImageCropView: View {
                     x: origin.x + value.translation.width,
                     y: origin.y + value.translation.height
                 )
-                cropRect = PostCropGeometry.resizeEdge(edge, of: start, to: newPoint, bounds: displayFrame)
+                cropRect = PostCropGeometry.resizeEdge(edge, of: start, to: newPoint, bounds: displayFrame, minDimension: minCropDimensionInPoints)
             }
     }
 
@@ -433,6 +452,8 @@ struct PostImageCropView: View {
         } label: {
             HStack(spacing: 6) {
                 Text(selectedAspect.label)
+                    .fontStyle(.subheadline)
+                    .fontWeight(.semibold)
                 Image(systemName: "chevron.up.chevron.down")
                     .fontStyle(.caption2)
             }
