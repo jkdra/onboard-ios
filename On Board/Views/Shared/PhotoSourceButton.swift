@@ -36,7 +36,16 @@ struct PhotoSourceButton<Label: View>: View {
             CameraCaptureView { image in
                 showCamera = false
                 if let image {
-                    onCapture(image)
+                    // Deferred to the next run loop tick: presenting a second
+                    // fullScreenCover (the crop sheet, in the caller's
+                    // onCapture) from the exact same synchronous callback that
+                    // dismisses this one can corrupt the rendering of the
+                    // view underneath — SwiftUI needs a moment to actually
+                    // start this cover's dismiss transition before another
+                    // modal presentation begins.
+                    DispatchQueue.main.async {
+                        onCapture(image)
+                    }
                 }
             }
             .ignoresSafeArea()
