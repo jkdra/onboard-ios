@@ -1,20 +1,19 @@
 {
-  "fill" : {
-    "linear-gradient" : [
-      "extended-gray:1.00000,1.00000",
-      "display-p3:0.91991,0.92685,0.96783,1.00000"
-    ]
-  },
+  "fill" : "automatic",
   "groups" : [
     {
+      "blur-material" : null,
       "layers" : [
         {
           "fill-specializations" : [
             {
-              "appearance" : "dark",
               "value" : {
-                "solid" : "extended-gray:0.00000,1.00000"
+                "solid" : "extended-gray:1.00000,1.00000"
               }
+            },
+            {
+              "appearance" : "dark",
+              "value" : "system-dark"
             },
             {
               "appearance" : "tinted",
@@ -23,10 +22,11 @@
               }
             }
           ],
+          "glass" : true,
           "image-name" : "White Note.svg",
           "name" : "White Note",
           "position" : {
-            "scale" : 0.24,
+            "scale" : 0.26,
             "translation-in-points" : [
               -25.3984375,
               -26.5078125
@@ -40,7 +40,7 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.4
+        "value" : 0.2
       }
     },
     {
@@ -50,9 +50,7 @@
           "fill-specializations" : [
             {
               "appearance" : "dark",
-              "value" : {
-                "solid" : "extended-gray:1.00000,1.00000"
-              }
+              "value" : "system-light"
             },
             {
               "appearance" : "tinted",
@@ -64,7 +62,7 @@
           "image-name" : "Shadow 2.svg",
           "name" : "Shadow 2",
           "position" : {
-            "scale" : 0.24,
+            "scale" : 0.26,
             "translation-in-points" : [
               1,
               -1.3600008579036285
@@ -83,7 +81,7 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.4
+        "value" : 0.25
       }
     },
     {
