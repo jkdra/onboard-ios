@@ -64,21 +64,28 @@ struct PostImageCropView: View {
         var rect: CGRect
         var aspect: CropAspectOption
         var isPortrait: Bool
+        var imageScale: CGFloat
+        var imageOffset: CGSize
     }
 
     @State private var cropRect: CGRect = .zero
+    @State private var imageScale: CGFloat = 1
+    @State private var imageOffset: CGSize = .zero
     // Free by default — the crop rect still starts sized to the entire
     // photo (Free has no fixed ratio, so it just fits the frame), but
     // nothing is force-selected the way a preset ratio would be.
     @State private var selectedAspect: CropAspectOption = .free
     @State private var isPortraitOrientation = true
-    @GestureState private var dragStartRect: CGRect?
+    @GestureState private var resizeStartState: CropState?
+    @GestureState private var panStartState: CropState?
+    @GestureState private var magnifyStartState: CropState?
     @State private var lastDisplayFrame: CGRect = .zero
     @State private var isConfirming = false
 
     @State private var history: [CropState] = []
     @State private var redoStack: [CropState] = []
     @State private var initialState: CropState?
+    @State private var autoSettleTask: Task<Void, Never>?
 
     private let padding: CGFloat = 16
     private let handleVisualSize: CGFloat = 14
@@ -88,6 +95,8 @@ struct PostImageCropView: View {
     private let cornerBracketArmLength: CGFloat = 22
     private let backdropBlurRadius: CGFloat = 20
     private let settleAnimation: Animation = .smooth(duration: 0.25)
+    private let autoSettleAnimation: Animation = .smooth(duration: 0.35)
+    private let autoSettleDelay: Duration = .milliseconds(1_500)
     private let confirmAnimation: Animation = .easeInOut(duration: 0.3)
     private let confirmDelay: Duration = .milliseconds(320)
     // The crop output is never allowed below this on its shorter side, in
@@ -98,14 +107,18 @@ struct PostImageCropView: View {
     private var imageAspect: CGFloat { image.size.width / image.size.height }
 
     /// The minimum crop-rect side, in on-screen points, that still yields at
-    /// least `minOutputResolution` pixels on the source image. Derived from
-    /// how much the image was scaled down to fit `lastDisplayFrame`.
-    private var minCropDimensionInPoints: CGFloat {
-        guard lastDisplayFrame.width > 0, image.size.width > 0 else {
+    /// least `minOutputResolution` source-image pixels. It follows the
+    /// effective (possibly zoomed) image frame, not the untransformed base.
+    private func minCropDimensionInPoints(for imageRect: CGRect) -> CGFloat {
+        guard imageRect.width > 0, image.size.width > 0 else {
             return PostCropGeometry.minCropDimension
         }
-        let pointsPerPixel = lastDisplayFrame.width / image.size.width
+        let pointsPerPixel = imageRect.width / image.size.width
         return minOutputResolution * pointsPerPixel
+    }
+
+    private func minimumImageScale(for baseFrame: CGRect) -> CGFloat {
+        PostCropGeometry.minScaleToCover(base: baseFrame, cropRect: cropRect)
     }
 
     /// `.original` isn't a fixed ratio — it's whatever the source image's own
@@ -128,6 +141,11 @@ struct PostImageCropView: View {
                 )
                 let displayFrame = PostCropGeometry.imageDisplayFrame(imageSize: image.size, in: containerSize)
                     .offsetBy(dx: padding, dy: padding)
+                let effectiveImageFrame = PostCropGeometry.effectiveImageRect(
+                    base: displayFrame,
+                    scale: imageScale,
+                    offset: imageOffset
+                )
 
                 ZStack {
                     Color.clear
@@ -144,6 +162,8 @@ struct PostImageCropView: View {
                                 forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
                                 in: displayFrame
                             )
+                            imageScale = 1
+                            imageOffset = .zero
                         }
 
                     // Blurred backdrop, visible everywhere — the sharp layer
@@ -152,6 +172,8 @@ struct PostImageCropView: View {
                     Image(uiImage: image)
                         .resizable()
                         .frame(width: displayFrame.width, height: displayFrame.height)
+                        .scaleEffect(imageScale)
+                        .offset(imageOffset)
                         .position(x: displayFrame.midX, y: displayFrame.midY)
                         .blur(radius: backdropBlurRadius)
                         .clipped()
@@ -172,6 +194,8 @@ struct PostImageCropView: View {
                     Image(uiImage: image)
                         .resizable()
                         .frame(width: displayFrame.width, height: displayFrame.height)
+                        .scaleEffect(imageScale)
+                        .offset(imageOffset)
                         .position(x: displayFrame.midX, y: displayFrame.midY)
                         .mask {
                             Rectangle().frame(width: cropRect.width, height: cropRect.height)
@@ -180,7 +204,7 @@ struct PostImageCropView: View {
                         .blur(radius: isConfirming ? 14 : 0)
                         .allowsHitTesting(false)
 
-                    cropOverlay(in: displayFrame)
+                    cropOverlay(in: effectiveImageFrame, baseFrame: displayFrame)
                         .opacity(isConfirming ? 0 : 1)
                         .allowsHitTesting(!isConfirming)
                 }
@@ -193,17 +217,23 @@ struct PostImageCropView: View {
                         forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
                         in: displayFrame
                     )
+                    imageScale = 1
+                    imageOffset = .zero
                     if initialState == nil {
                         initialState = currentState()
                     }
                 }
             }
+            .onDisappear { cancelAutoSettle() }
             .ignoresSafeArea()
             .navigationTitle("Adjust Photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { onCancel() } label: {
+                    Button {
+                        cancelAutoSettle()
+                        onCancel()
+                    } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
                     .disabled(isConfirming)
@@ -256,13 +286,19 @@ struct PostImageCropView: View {
                 }
             }
             .toolbar(isConfirming ? .hidden : .visible, for: .bottomBar)
-            .onChange(of: dragStartRect) { oldValue, newValue in
-                // A drag gesture (corner/edge resize or move) just ended —
-                // oldValue is the snapshot captured at that gesture's start
-                // (via each gesture's `if state == nil { state = cropRect }`),
-                // so it's exactly the pre-drag state to push onto history.
+            .onChange(of: resizeStartState) { oldValue, newValue in
                 if let oldValue, newValue == nil {
-                    pushHistory(CropState(rect: oldValue, aspect: selectedAspect, isPortrait: isPortraitOrientation))
+                    pushHistory(oldValue)
+                }
+            }
+            .onChange(of: panStartState) { oldValue, newValue in
+                if let oldValue, newValue == nil {
+                    pushHistory(oldValue)
+                }
+            }
+            .onChange(of: magnifyStartState) { oldValue, newValue in
+                if let oldValue, newValue == nil {
+                    pushHistory(oldValue)
                 }
             }
         }
@@ -271,7 +307,7 @@ struct PostImageCropView: View {
     // MARK: - Crop rectangle + handles
 
     @ViewBuilder
-    private func cropOverlay(in displayFrame: CGRect) -> some View {
+    private func cropOverlay(in imageFrame: CGRect, baseFrame: CGRect) -> some View {
         ZStack {
             ForEach(CropCorner.allCases, id: \.self) { corner in
                 CornerBracketShape(corner: corner, armLength: cornerBracketArmLength)
@@ -288,10 +324,10 @@ struct PostImageCropView: View {
                 .contentShape(Rectangle())
                 .frame(width: cropRect.width, height: cropRect.height)
                 .position(x: cropRect.midX, y: cropRect.midY)
-                .gesture(moveGesture(in: displayFrame))
+                .gesture(imageTransformGesture(baseFrame: baseFrame))
 
             ForEach(CropCorner.allCases, id: \.self) { corner in
-                handle(for: corner, in: displayFrame)
+                handle(for: corner, in: imageFrame)
             }
 
             // Edge handles only make sense in Free mode — dragging a single
@@ -300,7 +336,7 @@ struct PostImageCropView: View {
             // point of an independent-edge handle.
             if selectedAspect == .free {
                 ForEach(CropEdge.allCases, id: \.self) { edge in
-                    edgeHandle(for: edge, in: displayFrame)
+                    edgeHandle(for: edge, in: imageFrame)
                 }
             }
         }
@@ -384,15 +420,16 @@ struct PostImageCropView: View {
             .accessibilityLabel("Resize crop — \(edge.accessibilityDescription) edge")
     }
 
-    private func resizeGesture(for corner: CropCorner, in displayFrame: CGRect) -> some Gesture {
+    private func resizeGesture(for corner: CropCorner, in imageFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0)
-            .updating($dragStartRect) { value, state, _ in
-                if state == nil { state = cropRect }
+            .updating($resizeStartState) { _, state, _ in
+                if state == nil { state = currentState() }
             }
             .onChanged { value in
-                guard let start = dragStartRect else { return }
-                let anchor = PostCropGeometry.anchorPoint(for: corner, in: start)
-                let origin = PostCropGeometry.draggedPoint(for: corner, in: start)
+                cancelAutoSettle()
+                guard let start = resizeStartState else { return }
+                let anchor = PostCropGeometry.anchorPoint(for: corner, in: start.rect)
+                let origin = PostCropGeometry.draggedPoint(for: corner, in: start.rect)
                 let newPoint = CGPoint(
                     x: origin.x + value.translation.width,
                     y: origin.y + value.translation.height
@@ -401,37 +438,130 @@ struct PostImageCropView: View {
                     anchor: anchor,
                     draggedPoint: newPoint,
                     aspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
-                    bounds: displayFrame,
-                    minDimension: minCropDimensionInPoints
+                    bounds: imageFrame,
+                    minDimension: minCropDimensionInPoints(for: imageFrame)
                 )
             }
+            .onEnded { _ in scheduleAutoSettle() }
     }
 
-    private func edgeResizeGesture(for edge: CropEdge, in displayFrame: CGRect) -> some Gesture {
+    private func edgeResizeGesture(for edge: CropEdge, in imageFrame: CGRect) -> some Gesture {
         DragGesture(minimumDistance: 0)
-            .updating($dragStartRect) { value, state, _ in
-                if state == nil { state = cropRect }
+            .updating($resizeStartState) { _, state, _ in
+                if state == nil { state = currentState() }
             }
             .onChanged { value in
-                guard let start = dragStartRect else { return }
-                let origin = PostCropGeometry.edgeMidpoint(for: edge, in: start)
+                cancelAutoSettle()
+                guard let start = resizeStartState else { return }
+                let origin = PostCropGeometry.edgeMidpoint(for: edge, in: start.rect)
                 let newPoint = CGPoint(
                     x: origin.x + value.translation.width,
                     y: origin.y + value.translation.height
                 )
-                cropRect = PostCropGeometry.resizeEdge(edge, of: start, to: newPoint, bounds: displayFrame, minDimension: minCropDimensionInPoints)
+                cropRect = PostCropGeometry.resizeEdge(
+                    edge,
+                    of: start.rect,
+                    to: newPoint,
+                    bounds: imageFrame,
+                    minDimension: minCropDimensionInPoints(for: imageFrame)
+                )
             }
+            .onEnded { _ in scheduleAutoSettle() }
     }
 
-    private func moveGesture(in displayFrame: CGRect) -> some Gesture {
-        DragGesture()
-            .updating($dragStartRect) { value, state, _ in
-                if state == nil { state = cropRect }
+    private func imageTransformGesture(baseFrame: CGRect) -> some Gesture {
+        SimultaneousGesture(
+            DragGesture()
+                .updating($panStartState) { _, state, _ in
+                    if state == nil { state = currentState() }
+                }
+                .onChanged { value in
+                    cancelAutoSettle()
+                    guard let start = panStartState else { return }
+                    imageOffset = PostCropGeometry.clampOffsetToCover(
+                        offset: CGSize(
+                            width: start.imageOffset.width + value.translation.width,
+                            height: start.imageOffset.height + value.translation.height
+                        ),
+                        base: baseFrame,
+                        scale: imageScale,
+                        cropRect: cropRect
+                    )
+                }
+                .onEnded { _ in
+                    clampImageTransform(to: baseFrame)
+                    scheduleAutoSettle()
+                },
+            MagnifyGesture()
+                .updating($magnifyStartState) { _, state, _ in
+                    if state == nil { state = currentState() }
+                }
+                .onChanged { value in
+                    cancelAutoSettle()
+                    guard let start = magnifyStartState else { return }
+                    imageScale = max(start.imageScale * value.magnification, minimumImageScale(for: baseFrame))
+                    imageOffset = PostCropGeometry.clampOffsetToCover(
+                        offset: start.imageOffset,
+                        base: baseFrame,
+                        scale: imageScale,
+                        cropRect: cropRect
+                    )
+                }
+                .onEnded { _ in
+                    clampImageTransform(to: baseFrame)
+                    scheduleAutoSettle()
+                }
+        )
+    }
+
+    private func clampImageTransform(to baseFrame: CGRect) {
+        imageScale = max(imageScale, minimumImageScale(for: baseFrame))
+        imageOffset = PostCropGeometry.clampOffsetToCover(
+            offset: imageOffset,
+            base: baseFrame,
+            scale: imageScale,
+            cropRect: cropRect
+        )
+    }
+
+    private func cancelAutoSettle() {
+        autoSettleTask?.cancel()
+        autoSettleTask = nil
+    }
+
+    private func scheduleAutoSettle() {
+        cancelAutoSettle()
+        autoSettleTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: autoSettleDelay)
+            } catch {
+                return
             }
-            .onChanged { value in
-                guard let start = dragStartRect else { return }
-                cropRect = PostCropGeometry.translate(start, by: value.translation, bounds: displayFrame)
-            }
+            guard !Task.isCancelled, !isConfirming else { return }
+            autoSettle()
+        }
+    }
+
+    private func autoSettle() {
+        autoSettleTask = nil
+        guard lastDisplayFrame.width > 0, lastDisplayFrame.height > 0 else { return }
+        let imageFrame = PostCropGeometry.effectiveImageRect(
+            base: lastDisplayFrame,
+            scale: imageScale,
+            offset: imageOffset
+        )
+        let normalized = PostCropGeometry.normalizedCrop(cropRect: cropRect, imageRect: imageFrame)
+        guard normalized.width > 0, normalized.height > 0 else { return }
+        let layout = PostCropGeometry.normalizedLayout(
+            normalizedCrop: normalized,
+            base: lastDisplayFrame,
+            viewport: lastDisplayFrame
+        )
+        withAnimation(autoSettleAnimation) {
+            cropRect = layout.cropRect
+            imageScale = layout.scale
+            imageOffset = layout.offset
+        }
     }
 
     // MARK: - Aspect menu
@@ -463,7 +593,13 @@ struct PostImageCropView: View {
     // MARK: - Undo / redo / revert
 
     private func currentState() -> CropState {
-        CropState(rect: cropRect, aspect: selectedAspect, isPortrait: isPortraitOrientation)
+        CropState(
+            rect: cropRect,
+            aspect: selectedAspect,
+            isPortrait: isPortraitOrientation,
+            imageScale: imageScale,
+            imageOffset: imageOffset
+        )
     }
 
     private func pushHistory(_ state: CropState) {
@@ -472,10 +608,13 @@ struct PostImageCropView: View {
     }
 
     private func apply(_ state: CropState) {
+        cancelAutoSettle()
         withAnimation(settleAnimation) {
             selectedAspect = state.aspect
             isPortraitOrientation = state.isPortrait
             cropRect = state.rect
+            imageScale = state.imageScale
+            imageOffset = state.imageOffset
         }
     }
 
@@ -499,6 +638,7 @@ struct PostImageCropView: View {
 
     private func selectAspect(_ option: CropAspectOption) {
         guard option != selectedAspect else { return }
+        cancelAutoSettle()
         pushHistory(currentState())
         withAnimation(settleAnimation) {
             selectedAspect = option
@@ -506,11 +646,14 @@ struct PostImageCropView: View {
                 forAspect: resolvedRatio(for: option, isPortrait: isPortraitOrientation),
                 in: lastDisplayFrame
             )
+            imageScale = 1
+            imageOffset = .zero
         }
     }
 
     private func toggleOrientation() {
         guard selectedAspect.supportsOrientationToggle else { return }
+        cancelAutoSettle()
         pushHistory(currentState())
         isPortraitOrientation.toggle()
         withAnimation(settleAnimation) {
@@ -518,6 +661,8 @@ struct PostImageCropView: View {
                 forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
                 in: lastDisplayFrame
             )
+            imageScale = 1
+            imageOffset = .zero
         }
     }
 
@@ -529,6 +674,7 @@ struct PostImageCropView: View {
     /// doesn't morph the selection into a new centered viewport, just gives
     /// a moment of visual confirmation before the sheet dismisses.
     private func beginConfirm() {
+        cancelAutoSettle()
         withAnimation(confirmAnimation) {
             isConfirming = true
         }
@@ -539,19 +685,18 @@ struct PostImageCropView: View {
     }
 
     private func confirmCrop() {
-        // GeometryReader's displayFrame isn't available here, so we rely on
-        // lastDisplayFrame, kept current by the Color.clear tracker inside
-        // the GeometryReader (see onAppear/onChange(of: geometry.size) above),
-        // which piggybacks on the same recomputation points cropRect depends on.
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1.0
         format.opaque = true
 
-        let pixelRect = PostCropGeometry.pixelRect(
-            from: cropRect,
-            imageDisplayFrame: lastDisplayFrame,
-            imageSize: image.size
+        let imageFrame = PostCropGeometry.effectiveImageRect(
+            base: lastDisplayFrame,
+            scale: imageScale,
+            offset: imageOffset
         )
+        let normalized = PostCropGeometry.normalizedCrop(cropRect: cropRect, imageRect: imageFrame)
+        let pixelRect = PostCropGeometry.pixelRect(normalizedCrop: normalized, imageSize: image.size).integral
+        guard pixelRect.width > 0, pixelRect.height > 0 else { return }
         let renderer = UIGraphicsImageRenderer(size: pixelRect.size, format: format)
         let cropped = renderer.image { _ in
             image.draw(at: CGPoint(x: -pixelRect.origin.x, y: -pixelRect.origin.y))

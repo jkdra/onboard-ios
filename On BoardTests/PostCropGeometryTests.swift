@@ -228,4 +228,79 @@ struct PostCropGeometryTests {
         // And it never drops below the baseline minimum.
         #expect(PostCropGeometry.effectiveFloor(10, in: bounds) == PostCropGeometry.minCropDimension)
     }
+
+    @Test func normalizedCropClampsSelectionToImageBounds() {
+        let normalized = PostCropGeometry.normalizedCrop(
+            cropRect: CGRect(x: -20, y: 10, width: 80, height: 80),
+            imageRect: CGRect(x: 0, y: 0, width: 100, height: 100)
+        )
+
+        #expect(normalized == CGRect(x: 0, y: 0.1, width: 0.6, height: 0.8))
+    }
+
+    @Test func effectiveImageRectAppliesScaleAroundCenterAndOffset() {
+        let imageRect = PostCropGeometry.effectiveImageRect(
+            base: CGRect(x: 50, y: 100, width: 200, height: 100),
+            scale: 2,
+            offset: CGSize(width: 30, height: -20)
+        )
+
+        #expect(imageRect == CGRect(x: -20, y: 30, width: 400, height: 200))
+    }
+
+    @Test func clampOffsetKeepsCropCoveredByTransformedImage() {
+        let base = CGRect(x: 0, y: 0, width: 200, height: 100)
+        let crop = CGRect(x: 50, y: 25, width: 100, height: 50)
+        let offset = PostCropGeometry.clampOffsetToCover(
+            offset: CGSize(width: 500, height: -500),
+            base: base,
+            scale: 1,
+            cropRect: crop
+        )
+        let imageRect = PostCropGeometry.effectiveImageRect(base: base, scale: 1, offset: offset)
+
+        #expect(imageRect.minX <= crop.minX)
+        #expect(imageRect.maxX >= crop.maxX)
+        #expect(imageRect.minY <= crop.minY)
+        #expect(imageRect.maxY >= crop.maxY)
+        #expect(offset == CGSize(width: 50, height: -25))
+    }
+
+    @Test func normalizedLayoutPreservesTheSelectedSourceRegion() {
+        let base = CGRect(x: 20, y: 40, width: 200, height: 100)
+        let viewport = CGRect(x: 20, y: 40, width: 200, height: 100)
+        let source = CGRect(x: 0.25, y: 0.2, width: 0.5, height: 0.5)
+        let layout = PostCropGeometry.normalizedLayout(
+            normalizedCrop: source,
+            base: base,
+            viewport: viewport
+        )
+        let imageRect = PostCropGeometry.effectiveImageRect(
+            base: base,
+            scale: layout.scale,
+            offset: layout.offset
+        )
+        let actual = PostCropGeometry.normalizedCrop(cropRect: layout.cropRect, imageRect: imageRect)
+
+        #expect(abs(actual.minX - source.minX) < 0.001)
+        #expect(abs(actual.minY - source.minY) < 0.001)
+        #expect(abs(actual.width - source.width) < 0.001)
+        #expect(abs(actual.height - source.height) < 0.001)
+        #expect(layout.cropRect.midX == viewport.midX)
+        #expect(layout.cropRect.midY == viewport.midY)
+    }
+
+    @Test func rectPreservesLockedAspectWhileEnforcingMinimumShortSide() {
+        let result = PostCropGeometry.rect(
+            anchor: .zero,
+            draggedPoint: CGPoint(x: 2, y: 2),
+            aspect: 4.0 / 5.0,
+            bounds: CGRect(x: 0, y: 0, width: 400, height: 400),
+            minDimension: 100
+        )
+
+        #expect(result.width == 100)
+        #expect(result.height == 125)
+        #expect(abs(result.width / result.height - (4.0 / 5.0)) < 0.001)
+    }
 }

@@ -112,8 +112,20 @@ nonisolated enum PostCropGeometry {
             }
         }
 
-        width = max(width, floor)
-        height = max(height, floor)
+        if let aspect, aspect > 0 {
+            // `floor` is the minimum allowed *shorter* side. Raising width
+            // and height independently would distort non-square locked
+            // ratios (for example 4:5 would incorrectly become 1:1).
+            let minimumWidth = aspect >= 1 ? floor * aspect : floor
+            let minimumHeight = aspect >= 1 ? floor : floor / aspect
+            if width < minimumWidth || height < minimumHeight {
+                width = minimumWidth
+                height = minimumHeight
+            }
+        } else {
+            width = max(width, floor)
+            height = max(height, floor)
+        }
 
         if width > bounds.width || height > bounds.height {
             let scale = min(bounds.width / width, bounds.height / height)
@@ -199,5 +211,106 @@ nonisolated enum PostCropGeometry {
             width: displayRect.width * scale,
             height: displayRect.height * scale
         )
+    }
+
+    // MARK: - Zoom / pan transform model
+    //
+    // The image is drawn at a fixed `base` fit-frame, then transformed on
+    // screen by a uniform `scale` (about the base's center) and a `offset`
+    // pan. The crop frame is a separate on-screen rect. The invariant is that
+    // the transformed image always fully covers the crop frame — no blank
+    // area inside the selection — which the clamp helpers below enforce.
+
+    /// Where the image actually lands on screen after `scale`/`offset` are
+    /// applied to the fit-`base` frame. (scaleEffect scales about the center.)
+    static func effectiveImageRect(base: CGRect, scale: CGFloat, offset: CGSize) -> CGRect {
+        let size = CGSize(width: base.width * scale, height: base.height * scale)
+        let center = CGPoint(x: base.midX + offset.width, y: base.midY + offset.height)
+        return CGRect(x: center.x - size.width / 2, y: center.y - size.height / 2,
+                      width: size.width, height: size.height)
+    }
+
+    /// The normalized (0…1) region of the image currently inside `cropRect`,
+    /// given where the image is drawn (`imageRect`). This is the source of
+    /// truth for what gets cropped — independent of any screen transform.
+    static func normalizedCrop(cropRect: CGRect, imageRect: CGRect) -> CGRect {
+        guard imageRect.width > 0, imageRect.height > 0 else {
+            return CGRect(x: 0, y: 0, width: 1, height: 1)
+        }
+        let visibleCrop = cropRect.intersection(imageRect)
+        guard !visibleCrop.isNull, !visibleCrop.isEmpty else {
+            return .zero
+        }
+        return CGRect(
+            x: (visibleCrop.minX - imageRect.minX) / imageRect.width,
+            y: (visibleCrop.minY - imageRect.minY) / imageRect.height,
+            width: visibleCrop.width / imageRect.width,
+            height: visibleCrop.height / imageRect.height
+        )
+    }
+
+    /// Source-pixel rect from a normalized (0…1) crop region.
+    static func pixelRect(normalizedCrop norm: CGRect, imageSize: CGSize) -> CGRect {
+        CGRect(
+            x: norm.minX * imageSize.width,
+            y: norm.minY * imageSize.height,
+            width: norm.width * imageSize.width,
+            height: norm.height * imageSize.height
+        )
+    }
+
+    /// The smallest `scale` at which the image can still cover `cropRect`
+    /// (below this, even perfectly centered, the image is too small).
+    static func minScaleToCover(base: CGRect, cropRect: CGRect) -> CGFloat {
+        guard base.width > 0, base.height > 0 else { return 1 }
+        return max(cropRect.width / base.width, cropRect.height / base.height)
+    }
+
+    /// Clamps `offset` so the transformed image still fully covers `cropRect`
+    /// at the given `scale` — the image can't be panned far enough to reveal
+    /// a blank edge inside the crop frame.
+    static func clampOffsetToCover(offset: CGSize, base: CGRect, scale: CGFloat, cropRect: CGRect) -> CGSize {
+        var o = offset
+        let halfW = base.width * scale / 2
+        // image.minX <= crop.minX  and  image.maxX >= crop.maxX
+        let maxOX = cropRect.minX - base.midX + halfW
+        let minOX = cropRect.maxX - base.midX - halfW
+        o.width = minOX <= maxOX ? min(max(o.width, minOX), maxOX) : (minOX + maxOX) / 2
+        let halfH = base.height * scale / 2
+        let maxOY = cropRect.minY - base.midY + halfH
+        let minOY = cropRect.maxY - base.midY - halfH
+        o.height = minOY <= maxOY ? min(max(o.height, minOY), maxOY) : (minOY + maxOY) / 2
+        return o
+    }
+
+    /// Auto-normalize: given the normalized region currently selected, produce
+    /// the canonical layout — a crop frame centered and enlarged to fill
+    /// `viewport` (at the selection's aspect), plus the image `scale`/`offset`
+    /// that map the *same* normalized region exactly onto that frame. This is
+    /// what recenters + zooms after the user settles, keeping the selected
+    /// content identical while making it bigger and centered.
+    static func normalizedLayout(
+        normalizedCrop norm: CGRect,
+        base: CGRect,
+        viewport: CGRect
+    ) -> (cropRect: CGRect, scale: CGFloat, offset: CGSize) {
+        guard norm.width > 0, norm.height > 0, base.width > 0, base.height > 0 else {
+            return (viewport, 1, .zero)
+        }
+        // Display aspect (w/h) of the selected region.
+        let aspect = (norm.width * base.width) / (norm.height * base.height)
+        let target = maxRect(forAspect: aspect, in: viewport)
+
+        // Effective image rect that maps `norm` onto `target`.
+        let imgW = target.width / norm.width
+        let imgH = target.height / norm.height
+        let scale = imgW / base.width
+        let imgMinX = target.minX - norm.minX * imgW
+        let imgMinY = target.minY - norm.minY * imgH
+        let offset = CGSize(
+            width: imgMinX + imgW / 2 - base.midX,
+            height: imgMinY + imgH / 2 - base.midY
+        )
+        return (target, scale, offset)
     }
 }
