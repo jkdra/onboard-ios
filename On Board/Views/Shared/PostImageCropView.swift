@@ -88,11 +88,9 @@ struct PostImageCropView: View {
     @State private var interaction = CropInteractionState()
 
     private let padding: CGFloat = 16
-    private let handleVisualSize: CGFloat = 14
     private let handleHitSize: CGFloat = 44
     private let edgeHandleLength: CGFloat = 36
     private let edgeHandleThickness: CGFloat = 5
-    private let cornerBracketArmLength: CGFloat = 22
     private let backdropBlurRadius: CGFloat = 20
     private let settleAnimation: Animation = .smooth(duration: 0.25)
     private let autoSettleAnimation: Animation = .smooth(duration: 0.35)
@@ -312,18 +310,11 @@ struct PostImageCropView: View {
         ZStack {
             Rectangle()
                 .stroke(Color.primary.opacity(0.7), lineWidth: 1)
+                .compositingGroup()
+                .shadow(color: .black.opacity(0.4), radius: 1)
                 .frame(width: cropRect.width, height: cropRect.height)
                 .position(x: cropRect.midX, y: cropRect.midY)
                 .allowsHitTesting(false)
-
-            ForEach(CropCorner.allCases, id: \.self) { corner in
-                CornerBracketShape(corner: corner, armLength: cornerBracketArmLength)
-                    .stroke(Color.primary, style: StrokeStyle(lineWidth: 3, lineCap: .square))
-                    .shadow(radius: 1)
-                    .frame(width: cropRect.width, height: cropRect.height)
-                    .position(x: cropRect.midX, y: cropRect.midY)
-                    .allowsHitTesting(false)
-            }
 
             gridLines
 
@@ -343,37 +334,6 @@ struct PostImageCropView: View {
         }
     }
 
-    /// An L-shaped corner bracket — sits flush with the crop rect's edge
-    /// rather than a continuous outline, matching a standard photo-crop
-    /// guide and keeping the boundary marker off the interior of the photo.
-    private nonisolated struct CornerBracketShape: Shape {
-        let corner: CropCorner
-        let armLength: CGFloat
-
-        func path(in rect: CGRect) -> Path {
-            var path = Path()
-            switch corner {
-            case .topLeft:
-                path.move(to: CGPoint(x: rect.minX, y: rect.minY + armLength))
-                path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
-                path.addLine(to: CGPoint(x: rect.minX + armLength, y: rect.minY))
-            case .topRight:
-                path.move(to: CGPoint(x: rect.maxX - armLength, y: rect.minY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + armLength))
-            case .bottomLeft:
-                path.move(to: CGPoint(x: rect.minX, y: rect.maxY - armLength))
-                path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.minX + armLength, y: rect.maxY))
-            case .bottomRight:
-                path.move(to: CGPoint(x: rect.maxX - armLength, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
-                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - armLength))
-            }
-            return path
-        }
-    }
-
     private var gridLines: some View {
         ZStack {
             Rectangle().fill(Color.white.opacity(0.4)).frame(width: 1, height: cropRect.height)
@@ -388,15 +348,9 @@ struct PostImageCropView: View {
         .allowsHitTesting(false)
     }
 
-    /// Invisible corner hit target — the visible marker is the angular
-    /// bracket drawn in `cropOverlay`; this just carries the drag gesture
-    /// over a comfortable ~44pt area centered on the corner.
     private func handle(for corner: CropCorner, in displayFrame: CGRect) -> some View {
         let point = CropGeometry.draggedPoint(for: corner, in: cropRect)
-        return Circle()
-            .fill(Color.primary)
-            .frame(width: 8, height: 8)
-            .shadow(radius: 1)
+        return Color.clear
             .frame(width: handleHitSize, height: handleHitSize)
             .contentShape(Rectangle())
             .position(point)
@@ -407,16 +361,14 @@ struct PostImageCropView: View {
     private func edgeHandle(for edge: CropEdge, in displayFrame: CGRect) -> some View {
         let point = CropGeometry.edgeMidpoint(for: edge, in: cropRect)
         let isHorizontalEdge = edge == .top || edge == .bottom
-        // Adaptive bar (matches the bracket color), not a white capsule, so
-        // the crop chrome is one consistent adaptive set rather than mixed
-        // white/adaptive markers.
         return RoundedRectangle(cornerRadius: 1, style: .continuous)
             .fill(Color.primary)
             .frame(
                 width: isHorizontalEdge ? edgeHandleLength : edgeHandleThickness,
                 height: isHorizontalEdge ? edgeHandleThickness : edgeHandleLength
             )
-            .shadow(radius: 1)
+            .compositingGroup()
+            .shadow(color: .black.opacity(0.5), radius: 1.5)
             .frame(width: handleHitSize, height: handleHitSize)
             .contentShape(Rectangle())
             .position(point)
