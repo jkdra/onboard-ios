@@ -157,26 +157,83 @@ nonisolated enum PostCropGeometry {
     }
 
     /// Moves a single edge of `start` to `point`, keeping the opposite edge
-    /// and both perpendicular bounds fixed, clamped to `bounds` and to a
-    /// minimum height/width of `minDimension` (defaults to `minCropDimension`).
-    static func resizeEdge(_ edge: CropEdge, of start: CGRect, to point: CGPoint, bounds: CGRect, minDimension: CGFloat = minCropDimension) -> CGRect {
+    /// fixed, clamped to `bounds` and to a minimum height/width of `minDimension`.
+    /// If an `aspect` ratio is provided, the perpendicular dimension expands or
+    /// contracts symmetrically around its center to preserve the ratio.
+    static func resizeEdge(_ edge: CropEdge, of start: CGRect, to point: CGPoint, aspect: CGFloat? = nil, bounds: CGRect, minDimension: CGFloat = minCropDimension) -> CGRect {
         let floor = effectiveFloor(minDimension, in: bounds)
         var rect = start
-        switch edge {
-        case .top:
-            let newMinY = min(max(point.y, bounds.minY), start.maxY - floor)
-            rect.origin.y = newMinY
-            rect.size.height = start.maxY - newMinY
-        case .bottom:
-            let newMaxY = max(min(point.y, bounds.maxY), start.minY + floor)
-            rect.size.height = newMaxY - start.minY
-        case .left:
-            let newMinX = min(max(point.x, bounds.minX), start.maxX - floor)
-            rect.origin.x = newMinX
-            rect.size.width = start.maxX - newMinX
-        case .right:
-            let newMaxX = max(min(point.x, bounds.maxX), start.minX + floor)
-            rect.size.width = newMaxX - start.minX
+        
+        if let aspect, aspect > 0 {
+            let minimumWidth = aspect >= 1 ? floor * aspect : floor
+            let minimumHeight = aspect >= 1 ? floor : floor / aspect
+            
+            switch edge {
+            case .top, .bottom:
+                let fixedCenter = start.midX
+                let maxHalfWidth = min(fixedCenter - bounds.minX, bounds.maxX - fixedCenter)
+                let maxHeight = maxHalfWidth * 2 / aspect
+                
+                var newHeight: CGFloat
+                var newY: CGFloat
+                if edge == .top {
+                    let maxAllowedPointY = start.maxY - minimumHeight
+                    let minAllowedPointY = max(bounds.minY, start.maxY - maxHeight)
+                    let newMinY = min(max(point.y, minAllowedPointY), maxAllowedPointY)
+                    newHeight = start.maxY - newMinY
+                    newY = newMinY
+                } else {
+                    let minAllowedPointY = start.minY + minimumHeight
+                    let maxAllowedPointY = min(bounds.maxY, start.minY + maxHeight)
+                    let newMaxY = max(min(point.y, minAllowedPointY), maxAllowedPointY)
+                    newHeight = newMaxY - start.minY
+                    newY = start.minY
+                }
+                
+                let newWidth = newHeight * aspect
+                rect = CGRect(x: fixedCenter - newWidth / 2, y: newY, width: newWidth, height: newHeight)
+                
+            case .left, .right:
+                let fixedCenter = start.midY
+                let maxHalfHeight = min(fixedCenter - bounds.minY, bounds.maxY - fixedCenter)
+                let maxWidth = maxHalfHeight * 2 * aspect
+                
+                var newWidth: CGFloat
+                var newX: CGFloat
+                if edge == .left {
+                    let maxAllowedPointX = start.maxX - minimumWidth
+                    let minAllowedPointX = max(bounds.minX, start.maxX - maxWidth)
+                    let newMinX = min(max(point.x, minAllowedPointX), maxAllowedPointX)
+                    newWidth = start.maxX - newMinX
+                    newX = newMinX
+                } else {
+                    let minAllowedPointX = start.minX + minimumWidth
+                    let maxAllowedPointX = min(bounds.maxX, start.minX + maxWidth)
+                    let newMaxX = max(min(point.x, minAllowedPointX), maxAllowedPointX)
+                    newWidth = newMaxX - start.minX
+                    newX = start.minX
+                }
+                
+                let newHeight = newWidth / aspect
+                rect = CGRect(x: newX, y: fixedCenter - newHeight / 2, width: newWidth, height: newHeight)
+            }
+        } else {
+            switch edge {
+            case .top:
+                let newMinY = min(max(point.y, bounds.minY), start.maxY - floor)
+                rect.origin.y = newMinY
+                rect.size.height = start.maxY - newMinY
+            case .bottom:
+                let newMaxY = max(min(point.y, bounds.maxY), start.minY + floor)
+                rect.size.height = newMaxY - start.minY
+            case .left:
+                let newMinX = min(max(point.x, bounds.minX), start.maxX - floor)
+                rect.origin.x = newMinX
+                rect.size.width = start.maxX - newMinX
+            case .right:
+                let newMaxX = max(min(point.x, bounds.maxX), start.minX + floor)
+                rect.size.width = newMaxX - start.minX
+            }
         }
         return rect
     }
