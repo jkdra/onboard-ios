@@ -139,4 +139,61 @@ struct PostCropGeometryTests {
         #expect(PostCropGeometry.anchorPoint(for: .bottomRight, in: rect) == CGPoint(x: 10, y: 20))
         #expect(PostCropGeometry.draggedPoint(for: .bottomRight, in: rect) == CGPoint(x: 40, y: 60))
     }
+
+    @Test func edgeMidpointsAreCenteredOnEachSide() {
+        let rect = CGRect(x: 10, y: 20, width: 30, height: 40)
+        #expect(PostCropGeometry.edgeMidpoint(for: .top, in: rect) == CGPoint(x: 25, y: 20))
+        #expect(PostCropGeometry.edgeMidpoint(for: .bottom, in: rect) == CGPoint(x: 25, y: 60))
+        #expect(PostCropGeometry.edgeMidpoint(for: .left, in: rect) == CGPoint(x: 10, y: 40))
+        #expect(PostCropGeometry.edgeMidpoint(for: .right, in: rect) == CGPoint(x: 40, y: 40))
+    }
+
+    @Test func resizeTopEdgeMovesOriginKeepsBottomFixed() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        let result = PostCropGeometry.resizeEdge(.top, of: start, to: CGPoint(x: 999, y: 10), bounds: bounds)
+        #expect(result.minY == 10)
+        #expect(result.maxY == start.maxY)
+        #expect(result.minX == start.minX)
+        #expect(result.width == start.width)
+    }
+
+    @Test func resizeBottomEdgeMovesHeightKeepsTopFixed() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        let result = PostCropGeometry.resizeEdge(.bottom, of: start, to: CGPoint(x: 999, y: 150), bounds: bounds)
+        #expect(result.minY == start.minY)
+        #expect(result.maxY == 150)
+    }
+
+    @Test func resizeLeftEdgeKeepsRightFixed() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        let result = PostCropGeometry.resizeEdge(.left, of: start, to: CGPoint(x: 5, y: 999), bounds: bounds)
+        #expect(result.minX == 5)
+        #expect(result.maxX == start.maxX)
+    }
+
+    @Test func resizeRightEdgeKeepsLeftFixed() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        let result = PostCropGeometry.resizeEdge(.right, of: start, to: CGPoint(x: 190, y: 999), bounds: bounds)
+        #expect(result.minX == start.minX)
+        #expect(result.maxX == 190)
+    }
+
+    @Test func resizeEdgeEnforcesMinimumDimension() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        // Dragging top edge almost to the bottom edge — must not collapse below minCropDimension.
+        let result = PostCropGeometry.resizeEdge(.top, of: start, to: CGPoint(x: 0, y: 115), bounds: bounds)
+        #expect(result.height == PostCropGeometry.minCropDimension)
+    }
+
+    @Test func resizeEdgeClampsToBounds() {
+        let bounds = CGRect(x: 0, y: 0, width: 200, height: 200)
+        let start = CGRect(x: 20, y: 40, width: 60, height: 80)
+        let result = PostCropGeometry.resizeEdge(.top, of: start, to: CGPoint(x: 0, y: -500), bounds: bounds)
+        #expect(result.minY == bounds.minY)
+    }
 }

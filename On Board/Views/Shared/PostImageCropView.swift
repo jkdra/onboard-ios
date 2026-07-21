@@ -44,13 +44,23 @@ struct PostImageCropView: View {
     var onCancel: () -> Void
 
     @State private var cropRect: CGRect = .zero
-    @State private var selectedAspect: CropAspectOption = .free
+    // Matches Apple's own crop tool: start framed exactly as the photo
+    // already is, and let the user override with a different ratio — not
+    // "Free" by default, which would visually misrepresent an uncropped
+    // photo's own aspect as an arbitrary starting rect.
+    @State private var selectedAspect: CropAspectOption = .original
     @GestureState private var dragStartRect: CGRect?
     @State private var lastDisplayFrame: CGRect = .zero
+    @State private var isConfirming = false
 
     private let padding: CGFloat = 16
-    private let handleSize: CGFloat = 28
+    private let handleVisualSize: CGFloat = 14
+    private let handleHitSize: CGFloat = 44
+    private let edgeHandleLength: CGFloat = 36
+    private let edgeHandleThickness: CGFloat = 5
     private let settleAnimation: Animation = .smooth(duration: 0.25)
+    private let confirmAnimation: Animation = .easeInOut(duration: 0.3)
+    private let confirmDelay: Duration = .milliseconds(320)
 
     private var imageAspect: CGFloat { image.size.width / image.size.height }
 
@@ -73,15 +83,24 @@ struct PostImageCropView: View {
                     ZStack {
                         Color.clear
                             .onAppear { lastDisplayFrame = displayFrame }
-                            .onChange(of: geometry.size) { _, _ in lastDisplayFrame = displayFrame }
+                            .onChange(of: geometry.size) { _, _ in
+                                lastDisplayFrame = displayFrame
+                                // The container can settle to its final size a
+                                // beat after first appear (e.g. mid-presentation
+                                // transition) — re-snap so the crop rect doesn't
+                                // stay stuck at whatever transient frame it was
+                                // first computed against.
+                                cropRect = PostCropGeometry.maxRect(forAspect: resolvedRatio(for: selectedAspect), in: displayFrame)
+                            }
 
                         Image(uiImage: image)
                             .resizable()
                             .frame(width: displayFrame.width, height: displayFrame.height)
                             .position(x: displayFrame.midX, y: displayFrame.midY)
+                            .blur(radius: isConfirming ? 14 : 0)
 
                         Rectangle()
-                            .fill(Color.black.opacity(0.6))
+                            .fill(Color.black.opacity(isConfirming ? 0.85 : 0.6))
                             .frame(width: geometry.size.width, height: geometry.size.height)
                             .reverseMask {
                                 Rectangle().frame(width: cropRect.width, height: cropRect.height)
@@ -90,6 +109,8 @@ struct PostImageCropView: View {
                             .allowsHitTesting(false)
 
                         cropOverlay(in: displayFrame)
+                            .opacity(isConfirming ? 0 : 1)
+                            .allowsHitTesting(!isConfirming)
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .onAppear {
@@ -107,6 +128,7 @@ struct PostImageCropView: View {
                 aspectPicker
                     .padding(.vertical, 14)
                     .background(Color.black)
+                    .opacity(isConfirming ? 0 : 1)
             }
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Adjust Photo")
@@ -116,12 +138,14 @@ struct PostImageCropView: View {
                     Button { onCancel() } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
+                    .disabled(isConfirming)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { confirmCrop() } label: {
+                    Button { beginConfirm() } label: {
                         Label("Confirm", systemImage: "checkmark").fontWeight(.semibold)
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isConfirming)
                 }
             }
         }
@@ -149,6 +173,16 @@ struct PostImageCropView: View {
             ForEach(CropCorner.allCases, id: \.self) { corner in
                 handle(for: corner, in: displayFrame)
             }
+
+            // Edge handles only make sense in Free mode — dragging a single
+            // edge while an aspect ratio is locked would have to also move a
+            // perpendicular edge to preserve the ratio, which defeats the
+            // point of an independent-edge handle.
+            if selectedAspect == .free {
+                ForEach(CropEdge.allCases, id: \.self) { edge in
+                    edgeHandle(for: edge, in: displayFrame)
+                }
+            }
         }
     }
 
@@ -170,11 +204,33 @@ struct PostImageCropView: View {
         let point = PostCropGeometry.draggedPoint(for: corner, in: cropRect)
         return Circle()
             .fill(Color.white)
-            .frame(width: handleSize, height: handleSize)
+            .frame(width: handleVisualSize, height: handleVisualSize)
             .shadow(radius: 2)
+            // The visible dot stays small; the actual draggable area is a
+            // larger invisible hit target centered on the same point (Apple's
+            // ~44pt minimum tap target), so it's easy to grab without looking oversized.
+            .frame(width: handleHitSize, height: handleHitSize)
+            .contentShape(Rectangle())
             .position(point)
             .gesture(resizeGesture(for: corner, in: displayFrame))
             .accessibilityLabel("Resize crop — \(corner.accessibilityDescription)")
+    }
+
+    private func edgeHandle(for edge: CropEdge, in displayFrame: CGRect) -> some View {
+        let point = PostCropGeometry.edgeMidpoint(for: edge, in: cropRect)
+        let isHorizontalEdge = edge == .top || edge == .bottom
+        return Capsule()
+            .fill(Color.white)
+            .frame(
+                width: isHorizontalEdge ? edgeHandleLength : edgeHandleThickness,
+                height: isHorizontalEdge ? edgeHandleThickness : edgeHandleLength
+            )
+            .shadow(radius: 2)
+            .frame(width: handleHitSize, height: handleHitSize)
+            .contentShape(Rectangle())
+            .position(point)
+            .gesture(edgeResizeGesture(for: edge, in: displayFrame))
+            .accessibilityLabel("Resize crop — \(edge.accessibilityDescription) edge")
     }
 
     private func resizeGesture(for corner: CropCorner, in displayFrame: CGRect) -> some Gesture {
@@ -196,6 +252,22 @@ struct PostImageCropView: View {
                     aspect: resolvedRatio(for: selectedAspect),
                     bounds: displayFrame
                 )
+            }
+    }
+
+    private func edgeResizeGesture(for edge: CropEdge, in displayFrame: CGRect) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .updating($dragStartRect) { value, state, _ in
+                if state == nil { state = cropRect }
+            }
+            .onChanged { value in
+                guard let start = dragStartRect else { return }
+                let origin = PostCropGeometry.edgeMidpoint(for: edge, in: start)
+                let newPoint = CGPoint(
+                    x: origin.x + value.translation.width,
+                    y: origin.y + value.translation.height
+                )
+                cropRect = PostCropGeometry.resizeEdge(edge, of: start, to: newPoint, bounds: displayFrame)
             }
     }
 
@@ -235,6 +307,21 @@ struct PostImageCropView: View {
 
     // MARK: - Crop rendering
 
+    /// Plays a brief "confirming" transition (blur the surroundings, fade out
+    /// the crop chrome) before actually handing back the cropped image. A
+    /// scoped version of Apple's crop-confirm animation — this doesn't morph
+    /// the selection into a new centered viewport, just gives a moment of
+    /// visual confirmation before the sheet dismisses.
+    private func beginConfirm() {
+        withAnimation(confirmAnimation) {
+            isConfirming = true
+        }
+        Task {
+            try? await Task.sleep(for: confirmDelay)
+            confirmCrop()
+        }
+    }
+
     private func confirmCrop() {
         // GeometryReader's displayFrame isn't available here, so we rely on
         // lastDisplayFrame, kept current by the Color.clear tracker inside
@@ -267,6 +354,17 @@ private extension CropCorner {
         case .topRight: "top-right"
         case .bottomLeft: "bottom-left"
         case .bottomRight: "bottom-right"
+        }
+    }
+}
+
+private extension CropEdge {
+    var accessibilityDescription: String {
+        switch self {
+        case .top: "top"
+        case .bottom: "bottom"
+        case .left: "left"
+        case .right: "right"
         }
     }
 }

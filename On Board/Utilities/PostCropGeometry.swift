@@ -13,6 +13,14 @@ nonisolated enum CropCorner: CaseIterable {
     case topLeft, topRight, bottomLeft, bottomRight
 }
 
+/// A single edge of the crop rect, for independent width/height resizing.
+/// Freeform only — dragging one edge while an aspect ratio is locked would
+/// have to also move a perpendicular edge to preserve the ratio, which isn't
+/// what a single-edge handle is for.
+nonisolated enum CropEdge: CaseIterable {
+    case top, bottom, left, right
+}
+
 nonisolated enum PostCropGeometry {
     /// Smallest allowed crop-rect side, in points, on either axis.
     static let minCropDimension: CGFloat = 60
@@ -113,6 +121,40 @@ nonisolated enum PostCropGeometry {
         let originY = point.y >= anchor.y ? anchor.y : anchor.y - height
 
         return clamp(CGRect(x: originX, y: originY, width: width, height: height), to: bounds)
+    }
+
+    /// The midpoint of a given edge of `rect` — where an edge-drag handle sits.
+    static func edgeMidpoint(for edge: CropEdge, in rect: CGRect) -> CGPoint {
+        switch edge {
+        case .top: return CGPoint(x: rect.midX, y: rect.minY)
+        case .bottom: return CGPoint(x: rect.midX, y: rect.maxY)
+        case .left: return CGPoint(x: rect.minX, y: rect.midY)
+        case .right: return CGPoint(x: rect.maxX, y: rect.midY)
+        }
+    }
+
+    /// Moves a single edge of `start` to `point`, keeping the opposite edge
+    /// and both perpendicular bounds fixed, clamped to `bounds` and to a
+    /// minimum height/width of `minCropDimension`.
+    static func resizeEdge(_ edge: CropEdge, of start: CGRect, to point: CGPoint, bounds: CGRect) -> CGRect {
+        var rect = start
+        switch edge {
+        case .top:
+            let newMinY = min(max(point.y, bounds.minY), start.maxY - minCropDimension)
+            rect.origin.y = newMinY
+            rect.size.height = start.maxY - newMinY
+        case .bottom:
+            let newMaxY = max(min(point.y, bounds.maxY), start.minY + minCropDimension)
+            rect.size.height = newMaxY - start.minY
+        case .left:
+            let newMinX = min(max(point.x, bounds.minX), start.maxX - minCropDimension)
+            rect.origin.x = newMinX
+            rect.size.width = start.maxX - newMinX
+        case .right:
+            let newMaxX = max(min(point.x, bounds.maxX), start.minX + minCropDimension)
+            rect.size.width = newMaxX - start.minX
+        }
+        return rect
     }
 
     /// Moves `rect` by `translation`, clamped so it stays fully inside `bounds`.
