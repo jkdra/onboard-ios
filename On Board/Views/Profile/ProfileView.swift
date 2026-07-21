@@ -64,7 +64,7 @@ struct ProfileView: View {
                 get: { uncroppedImage },
                 set: { uncroppedImage = $0 }
             )) { image in
-                ImageCropView(image: image) { cropped in
+                ProfileImageCropView(image: image) { cropped in
                     uncroppedImage = nil
                     Task { await uploadCroppedPhoto(cropped) }
                 } onCancel: {

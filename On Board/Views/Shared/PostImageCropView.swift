@@ -799,7 +799,7 @@ private extension CropEdge {
     return PostImageCropView(image: dummyImage, onCrop: { _ in }, onCancel: {})
 }
 
-private extension UIApplication {
+extension UIApplication {
     var safeAreaInsets: UIEdgeInsets {
         connectedScenes
             .compactMap { $0 as? UIWindowScene }
