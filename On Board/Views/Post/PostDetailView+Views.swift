@@ -36,14 +36,14 @@ extension PostDetailView {
             }
         }
 
-        if showImageViewer, imageViewerScale == 1.0 {
+        if showImageViewer, imageViewerScale <= 1.0 {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
                         showImageViewer = false
                     }
                 } label: {
-                    Image(systemName: "xmark")
+                    Label("Close", systemImage: "xmark")
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                 }
