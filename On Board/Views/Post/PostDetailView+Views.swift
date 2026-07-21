@@ -36,7 +36,21 @@ extension PostDetailView {
             }
         }
 
-        if !editMode, !isCommentEditing {
+        if showImageViewer, imageViewerScale == 1.0 {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                        showImageViewer = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                }
+            }
+        }
+
+        if !editMode, !isCommentEditing, !showImageViewer {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if canEdit && !isReadOnly {
@@ -60,6 +74,7 @@ extension PostDetailView {
                 } label: {
                     Image(systemName: "ellipsis").fontWeight(.semibold)
                 }
+
             }
         }
 
@@ -179,13 +194,16 @@ extension PostDetailView {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .stroke(tone.color.opacity(0.25), lineWidth: 0.9)
                 }
-                .matchedTransitionSource(id: "postImage", in: postNamespace)
+                .background {
+                    Color.clear.matchedGeometryEffect(id: "postImage", in: postNamespace)
+                }
+                .opacity(showImageViewer ? 0 : 1)
                 .doubleTapHeart(
                     size: 80,
                     isEnabled: !isReadOnly,
                     isLiked: { store.userReaction(for: livePost.id) == .like },
                     onLike: { store.setReaction(postId: livePost.id, reaction: .like) },
-                    onSingleTap: { showImageViewer = true }
+                    onSingleTap: { withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = true } }
                 )
         }
     }

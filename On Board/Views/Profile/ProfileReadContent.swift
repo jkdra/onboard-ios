@@ -24,6 +24,7 @@ enum ProfileGeometryID: Hashable {
 struct ProfileReadContent: View {
     let profile: Profile
     let namespace: Namespace.ID
+    let isAvatarViewerOpen: Bool
     let isUpdatingBlock: Bool
     let onEditProfile: () -> Void
     let onAvatarTap: () -> Void
@@ -96,13 +97,14 @@ struct ProfileReadContent: View {
     }
 
     private var avatar: some View {
-        Button {
-            onAvatarTap()
-        } label: {
+        Button(action: onAvatarTap) {
             AvatarView(profile: profile, size: .large)
+                .background {
+                    Color.clear.matchedGeometryEffect(id: ProfileGeometryID.avatarImage, in: namespace)
+                }
+                .opacity(isAvatarViewerOpen ? 0 : 1)
         }
         .buttonStyle(.plain)
-        .matchedTransitionSource(id: ProfileGeometryID.avatarImage, in: namespace)
         .accessibilityLabel("\(profile.displayName) avatar")
     }
 

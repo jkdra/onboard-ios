@@ -46,6 +46,7 @@ struct PostDetailView: View {
     @State var alertError: PresentableAlertError?
     @State var isLoadingComments = false
     @State var showImageViewer = false
+    @State var imageViewerScale: CGFloat = 1.0
 
     // Moderation
     @State var reportTarget: ReportTarget?
@@ -253,14 +254,21 @@ struct PostDetailView: View {
                 Text("This also removes any replies to it.")
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBackDisabled(editMode)
-            .interactiveDismissDisabled(editMode)
+            .navigationBackDisabled(editMode || showImageViewer)
+            .navigationBarBackButtonHidden(showImageViewer)
+            .interactiveDismissDisabled(editMode || showImageViewer)
             .toolbar { toolbarContent }
-            .fullScreenCover(isPresented: $showImageViewer) {
-                if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
-                    ImageViewerView(url: url)
-                        .navigationTransition(.zoom(sourceID: "postImage", in: postNamespace))
-                }
+            .overlay {
+                ImageViewerView(
+                    url: URL(string: livePost.imageUrl ?? ""),
+                    namespace: postNamespace,
+                    sourceID: "postImage",
+                    isPresented: $showImageViewer,
+                    aspectRatio: livePost.imageAspectRatio.map { CGFloat($0) },
+                    currentScale: $imageViewerScale
+                )
+                .ignoresSafeArea()
+                .zIndex(100)
             }
             .onChange(of: selectedEditPhotoItem) { _, item in
                 Task { await loadEditImage(item) }

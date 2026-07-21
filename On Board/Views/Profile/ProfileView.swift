@@ -26,6 +26,7 @@ struct ProfileView: View {
     @Environment(\.dismiss) private var dismiss
     @Namespace private var profileNamespace
     @State private var showAvatarViewer = false
+    @State private var avatarViewerScale: CGFloat = 1.0
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
@@ -72,11 +73,19 @@ struct ProfileView: View {
                     draft.selectedPhotoItem = nil
                 }
             }
-            .fullScreenCover(isPresented: $showAvatarViewer) {
-                if let urlString = displayedProfile.avatarUrl, let url = URL(string: urlString) {
-                    ImageViewerView(url: url)
-                        .navigationTransition(.zoom(sourceID: ProfileGeometryID.avatarImage, in: profileNamespace))
-                }
+            .interactiveDismissDisabled(showAvatarViewer)
+            .navigationBarBackButtonHidden(showAvatarViewer)
+            .overlay {
+                ImageViewerView(
+                    url: URL(string: displayedProfile.avatarUrl ?? ""),
+                    namespace: profileNamespace,
+                    sourceID: ProfileGeometryID.avatarImage,
+                    isPresented: $showAvatarViewer,
+                    aspectRatio: 1.0,
+                    currentScale: $avatarViewerScale
+                )
+                .ignoresSafeArea()
+                .zIndex(100)
             }
             .task(id: profile.id) {
                 // Ask directly whether a follows row exists for this one profile,
@@ -116,11 +125,14 @@ struct ProfileView: View {
                     ProfileReadContent(
                         profile: displayedProfile,
                         namespace: profileNamespace,
+                        isAvatarViewerOpen: showAvatarViewer,
                         isUpdatingBlock: isUpdatingBlock,
                         onEditProfile: beginEditing,
                         onAvatarTap: {
                             if displayedProfile.avatarUrl != nil {
-                                showAvatarViewer = true
+                                withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                                    showAvatarViewer = true
+                                }
                             }
                         },
                         onUnblock: { Task { await unblockUser() } }
@@ -137,7 +149,7 @@ struct ProfileView: View {
         .background {
             AnimatedStripesView(isActive: editMode)
         }
-        .navigationBackDisabled(editMode)
+        .navigationBackDisabled(editMode || showAvatarViewer)
         .interactiveDismissDisabled(editMode)
         .keyboardDoneToolbar()
         .toolbar { profileToolbar }
@@ -154,7 +166,7 @@ struct ProfileView: View {
                 onCancel: cancelEditing,
                 onSave: saveProfile
             )
-        } else {
+        } else if !showAvatarViewer {
             if presentation == .sheet {
                 ToolbarItem(placement: .topBarLeading) {
                     Button { dismiss() } label: { Label("Close", systemImage: "xmark").fontWeight(.semibold) }
@@ -196,6 +208,20 @@ struct ProfileView: View {
                         Image(systemName: "ellipsis").fontWeight(.semibold)
                     }
                     .disabled(isUpdatingBlock)
+                }
+            }
+        }
+
+        if showAvatarViewer, avatarViewerScale == 1.0 {
+            ToolbarItem(placement: .topBarLeading) {
+                Button {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                        showAvatarViewer = false
+                    }
+                } label: {
+                    Image(systemName: "xmark")
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
                 }
             }
         }
