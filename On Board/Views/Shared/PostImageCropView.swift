@@ -9,6 +9,7 @@
 //  avatar crop, pan/zoom-the-image model) — here the image is static and the
 //  crop rectangle itself is resized/moved, matching a Photos-app-style crop
 //  tool. Inherits the system light/dark appearance rather than forcing dark.
+//  Content extends full-bleed behind the translucent top/bottom bars.
 //
 
 import SwiftUI
@@ -66,11 +67,10 @@ struct PostImageCropView: View {
     }
 
     @State private var cropRect: CGRect = .zero
-    // Matches Apple's own crop tool: start framed exactly as the photo
-    // already is, and let the user override with a different ratio — not
-    // "Free" by default, which would visually misrepresent an uncropped
-    // photo's own aspect as an arbitrary starting rect.
-    @State private var selectedAspect: CropAspectOption = .original
+    // Free by default — the crop rect still starts sized to the entire
+    // photo (Free has no fixed ratio, so it just fits the frame), but
+    // nothing is force-selected the way a preset ratio would be.
+    @State private var selectedAspect: CropAspectOption = .free
     @State private var isPortraitOrientation = true
     @GestureState private var dragStartRect: CGRect?
     @State private var lastDisplayFrame: CGRect = .zero
@@ -85,6 +85,8 @@ struct PostImageCropView: View {
     private let handleHitSize: CGFloat = 44
     private let edgeHandleLength: CGFloat = 36
     private let edgeHandleThickness: CGFloat = 5
+    private let cornerBracketArmLength: CGFloat = 20
+    private let backdropBlurRadius: CGFloat = 20
     private let settleAnimation: Animation = .smooth(duration: 0.25)
     private let confirmAnimation: Animation = .easeInOut(duration: 0.3)
     private let confirmDelay: Duration = .milliseconds(320)
@@ -104,74 +106,81 @@ struct PostImageCropView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                GeometryReader { geometry in
-                    let containerSize = CGSize(
-                        width: geometry.size.width - padding * 2,
-                        height: geometry.size.height - padding * 2
-                    )
-                    let displayFrame = PostCropGeometry.imageDisplayFrame(imageSize: image.size, in: containerSize)
-                        .offsetBy(dx: padding, dy: padding)
+            GeometryReader { geometry in
+                let containerSize = CGSize(
+                    width: geometry.size.width - padding * 2,
+                    height: geometry.size.height - padding * 2
+                )
+                let displayFrame = PostCropGeometry.imageDisplayFrame(imageSize: image.size, in: containerSize)
+                    .offsetBy(dx: padding, dy: padding)
 
-                    ZStack {
-                        Color.clear
-                            .onAppear { lastDisplayFrame = displayFrame }
-                            .onChange(of: geometry.size) { _, _ in
-                                lastDisplayFrame = displayFrame
-                                // The container can settle to its final size a
-                                // beat after first appear (e.g. mid-presentation
-                                // transition) — re-snap so the crop rect doesn't
-                                // stay stuck at whatever transient frame it was
-                                // first computed against. Not a user action, so
-                                // this doesn't push undo history.
-                                cropRect = PostCropGeometry.maxRect(
-                                    forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
-                                    in: displayFrame
-                                )
-                            }
+                ZStack {
+                    Color.clear
+                        .onAppear { lastDisplayFrame = displayFrame }
+                        .onChange(of: geometry.size) { _, _ in
+                            lastDisplayFrame = displayFrame
+                            // The container can settle to its final size a
+                            // beat after first appear (e.g. mid-presentation
+                            // transition) — re-snap so the crop rect doesn't
+                            // stay stuck at whatever transient frame it was
+                            // first computed against. Not a user action, so
+                            // this doesn't push undo history.
+                            cropRect = PostCropGeometry.maxRect(
+                                forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
+                                in: displayFrame
+                            )
+                        }
 
-                        Image(uiImage: image)
-                            .resizable()
-                            .frame(width: displayFrame.width, height: displayFrame.height)
-                            .position(x: displayFrame.midX, y: displayFrame.midY)
-                            .blur(radius: isConfirming ? 14 : 0)
+                    // Blurred backdrop, visible everywhere — the sharp layer
+                    // below covers it entirely within the crop rect, so this
+                    // only ever shows through in the masked-out area.
+                    Image(uiImage: image)
+                        .resizable()
+                        .frame(width: displayFrame.width, height: displayFrame.height)
+                        .position(x: displayFrame.midX, y: displayFrame.midY)
+                        .blur(radius: backdropBlurRadius)
+                        .clipped()
 
-                        Rectangle()
-                            .fill(Color.black.opacity(isConfirming ? 0.85 : 0.6))
-                            .frame(width: geometry.size.width, height: geometry.size.height)
-                            .reverseMask {
-                                Rectangle().frame(width: cropRect.width, height: cropRect.height)
-                                    .position(x: cropRect.midX, y: cropRect.midY)
-                            }
-                            .allowsHitTesting(false)
+                    Rectangle()
+                        .fill(Color.black.opacity(isConfirming ? 0.55 : 0.35))
+                        .frame(width: geometry.size.width, height: geometry.size.height)
+                        .reverseMask {
+                            Rectangle().frame(width: cropRect.width, height: cropRect.height)
+                                .position(x: cropRect.midX, y: cropRect.midY)
+                        }
+                        .allowsHitTesting(false)
 
-                        cropOverlay(in: displayFrame)
-                            .opacity(isConfirming ? 0 : 1)
-                            .allowsHitTesting(!isConfirming)
+                    // Sharp image, clipped to only the crop rect.
+                    Image(uiImage: image)
+                        .resizable()
+                        .frame(width: displayFrame.width, height: displayFrame.height)
+                        .position(x: displayFrame.midX, y: displayFrame.midY)
+                        .mask {
+                            Rectangle().frame(width: cropRect.width, height: cropRect.height)
+                                .position(x: cropRect.midX, y: cropRect.midY)
+                        }
+                        .blur(radius: isConfirming ? 14 : 0)
+                        .allowsHitTesting(false)
+
+                    cropOverlay(in: displayFrame)
+                        .opacity(isConfirming ? 0 : 1)
+                        .allowsHitTesting(!isConfirming)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
+                .onAppear {
+                    if initialState == nil {
+                        isPortraitOrientation = imageAspect <= 1
                     }
-                    .frame(width: geometry.size.width, height: geometry.size.height)
-                    .onAppear {
-                        if initialState == nil {
-                            isPortraitOrientation = imageAspect <= 1
-                        }
-                        cropRect = PostCropGeometry.maxRect(
-                            forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
-                            in: displayFrame
-                        )
-                        if initialState == nil {
-                            initialState = currentState()
-                        }
+                    cropRect = PostCropGeometry.maxRect(
+                        forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
+                        in: displayFrame
+                    )
+                    if initialState == nil {
+                        initialState = currentState()
                     }
                 }
-                .background(Color(uiColor: .systemBackground).ignoresSafeArea())
-                .clipped()
-
-                aspectPicker
-                    .padding(.vertical, 14)
-                    .background(Color(uiColor: .systemBackground))
-                    .opacity(isConfirming ? 0 : 1)
             }
-            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
+            .ignoresSafeArea()
             .navigationTitle("Adjust Photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -188,7 +197,47 @@ struct PostImageCropView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(isConfirming)
                 }
+                ToolbarItem(placement: .bottomBar) {
+                    aspectMenu
+                        .disabled(isConfirming)
+                }
+                if selectedAspect.supportsOrientationToggle {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button {
+                            toggleOrientation()
+                        } label: {
+                            Image(systemName: isPortraitOrientation ? "rectangle.portrait" : "rectangle")
+                        }
+                        .disabled(isConfirming)
+                        .accessibilityLabel(isPortraitOrientation ? "Switch to landscape" : "Switch to portrait")
+                    }
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Spacer()
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button { undo() } label: {
+                        Image(systemName: "arrow.uturn.backward")
+                    }
+                    .disabled(history.isEmpty || isConfirming)
+                    .accessibilityLabel("Undo")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button { redo() } label: {
+                        Image(systemName: "arrow.uturn.forward")
+                    }
+                    .disabled(redoStack.isEmpty || isConfirming)
+                    .accessibilityLabel("Redo")
+                }
+                ToolbarItem(placement: .bottomBar) {
+                    Button { revertToOriginal() } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .disabled(initialState == nil || currentState() == initialState || isConfirming)
+                    .accessibilityLabel("Revert to original")
+                }
             }
+            .toolbar(isConfirming ? .hidden : .visible, for: .bottomBar)
             .onChange(of: dragStartRect) { oldValue, newValue in
                 // A drag gesture (corner/edge resize or move) just ended —
                 // oldValue is the snapshot captured at that gesture's start
@@ -206,10 +255,14 @@ struct PostImageCropView: View {
     @ViewBuilder
     private func cropOverlay(in displayFrame: CGRect) -> some View {
         ZStack {
-            Rectangle()
-                .stroke(Color.white, lineWidth: 2)
-                .frame(width: cropRect.width, height: cropRect.height)
-                .position(x: cropRect.midX, y: cropRect.midY)
+            ForEach(CropCorner.allCases, id: \.self) { corner in
+                CornerBracketShape(corner: corner, armLength: cornerBracketArmLength)
+                    .stroke(Color.primary, style: StrokeStyle(lineWidth: 3, lineCap: .square))
+                    .shadow(radius: 1)
+                    .frame(width: cropRect.width, height: cropRect.height)
+                    .position(x: cropRect.midX, y: cropRect.midY)
+                    .allowsHitTesting(false)
+            }
 
             gridLines
 
@@ -232,6 +285,37 @@ struct PostImageCropView: View {
                     edgeHandle(for: edge, in: displayFrame)
                 }
             }
+        }
+    }
+
+    /// An L-shaped corner bracket — sits flush with the crop rect's edge
+    /// rather than a continuous outline, matching a standard photo-crop
+    /// guide and keeping the boundary marker off the interior of the photo.
+    private nonisolated struct CornerBracketShape: Shape {
+        let corner: CropCorner
+        let armLength: CGFloat
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            switch corner {
+            case .topLeft:
+                path.move(to: CGPoint(x: rect.minX, y: rect.minY + armLength))
+                path.addLine(to: CGPoint(x: rect.minX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.minX + armLength, y: rect.minY))
+            case .topRight:
+                path.move(to: CGPoint(x: rect.maxX - armLength, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + armLength))
+            case .bottomLeft:
+                path.move(to: CGPoint(x: rect.minX, y: rect.maxY - armLength))
+                path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+                path.addLine(to: CGPoint(x: rect.minX + armLength, y: rect.maxY))
+            case .bottomRight:
+                path.move(to: CGPoint(x: rect.maxX - armLength, y: rect.maxY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+                path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - armLength))
+            }
+            return path
         }
     }
 
@@ -331,68 +415,28 @@ struct PostImageCropView: View {
             }
     }
 
-    // MARK: - Aspect menu, orientation, undo/redo/revert
+    // MARK: - Aspect menu
 
-    private var aspectPicker: some View {
-        HStack(spacing: 14) {
-            Menu {
-                ForEach(CropAspectOption.allCases) { option in
-                    Button {
-                        selectAspect(option)
-                    } label: {
-                        if selectedAspect == option {
-                            Label(option.label, systemImage: "checkmark")
-                        } else {
-                            Text(option.label)
-                        }
+    private var aspectMenu: some View {
+        Menu {
+            ForEach(CropAspectOption.allCases) { option in
+                Button {
+                    selectAspect(option)
+                } label: {
+                    if selectedAspect == option {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
                     }
                 }
-            } label: {
-                HStack(spacing: 6) {
-                    Text(selectedAspect.label)
-                    Image(systemName: "chevron.up.chevron.down")
-                        .fontStyle(.caption2)
-                }
-                .fontStyle(.footnote)
-                .fontWeight(.semibold)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(Color.primary.opacity(0.12), in: Capsule())
             }
-
-            if selectedAspect.supportsOrientationToggle {
-                Button {
-                    toggleOrientation()
-                } label: {
-                    Image(systemName: isPortraitOrientation ? "rectangle.portrait" : "rectangle")
-                        .frame(width: 32, height: 32)
-                        .background(Color.primary.opacity(0.12), in: Circle())
-                }
-                .accessibilityLabel(isPortraitOrientation ? "Switch to landscape" : "Switch to portrait")
+        } label: {
+            HStack(spacing: 6) {
+                Text(selectedAspect.label)
+                Image(systemName: "chevron.up.chevron.down")
+                    .fontStyle(.caption2)
             }
-
-            Spacer()
-
-            Button { undo() } label: {
-                Image(systemName: "arrow.uturn.backward")
-            }
-            .disabled(history.isEmpty)
-            .accessibilityLabel("Undo")
-
-            Button { redo() } label: {
-                Image(systemName: "arrow.uturn.forward")
-            }
-            .disabled(redoStack.isEmpty)
-            .accessibilityLabel("Redo")
-
-            Button { revertToOriginal() } label: {
-                Image(systemName: "arrow.counterclockwise")
-            }
-            .disabled(initialState == nil || currentState() == initialState)
-            .accessibilityLabel("Revert to original")
         }
-        .foregroundStyle(.primary)
-        .padding(.horizontal, 16)
     }
 
     // MARK: - Undo / redo / revert
@@ -458,11 +502,11 @@ struct PostImageCropView: View {
 
     // MARK: - Crop rendering
 
-    /// Plays a brief "confirming" transition (blur the surroundings, fade out
-    /// the crop chrome) before actually handing back the cropped image. A
-    /// scoped version of Apple's crop-confirm animation — this doesn't morph
-    /// the selection into a new centered viewport, just gives a moment of
-    /// visual confirmation before the sheet dismisses.
+    /// Plays a brief "confirming" transition (blur the surroundings further,
+    /// fade out the crop chrome) before actually handing back the cropped
+    /// image. A scoped version of Apple's crop-confirm animation — this
+    /// doesn't morph the selection into a new centered viewport, just gives
+    /// a moment of visual confirmation before the sheet dismisses.
     private func beginConfirm() {
         withAnimation(confirmAnimation) {
             isConfirming = true
