@@ -37,7 +37,11 @@ struct ImageCropView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { geometry in
-                let maskSize = min(geometry.size.width - (padding * 2), 600)
+                // Clamped to 0: during the crop sheet's presentation transition,
+                // geometry.size briefly reports a width smaller than the padding,
+                // which would otherwise go negative and produce invalid-frame
+                // warnings on every view sized from maskSize below.
+                let maskSize = max(0, min(geometry.size.width - (padding * 2), 600))
                 let imageAspect = image.size.width / image.size.height
                 // Sized so the image's shorter dimension exactly fills the crop
                 // circle at scale == 1 — the image is never smaller than the
