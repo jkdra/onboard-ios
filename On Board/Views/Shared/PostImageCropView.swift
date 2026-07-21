@@ -490,18 +490,31 @@ struct PostImageCropView: View {
                 .onChanged { value in
                     notifyInteractionStarted()
                     guard let start = panStartState else { return }
-                    imageOffset = PostCropGeometry.clampOffsetToCover(
-                        offset: CGSize(
-                            width: start.imageOffset.width + value.translation.width,
-                            height: start.imageOffset.height + value.translation.height
-                        ),
+                    
+                    let rawOffset = CGSize(
+                        width: start.imageOffset.width + value.translation.width,
+                        height: start.imageOffset.height + value.translation.height
+                    )
+                    
+                    let clampedOffset = PostCropGeometry.clampOffsetToCover(
+                        offset: rawOffset,
                         base: baseFrame,
                         scale: imageScale,
                         cropRect: cropRect
                     )
+                    
+                    let dx = rawOffset.width - clampedOffset.width
+                    let dy = rawOffset.height - clampedOffset.height
+                    
+                    imageOffset = CGSize(
+                        width: clampedOffset.width + dx * 0.3,
+                        height: clampedOffset.height + dy * 0.3
+                    )
                 }
                 .onEnded { _ in
-                    clampImageTransform(to: baseFrame)
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        clampImageTransform(to: baseFrame)
+                    }
                     scheduleAutoSettle()
                 },
             MagnifyGesture()
@@ -513,16 +526,37 @@ struct PostImageCropView: View {
                     guard let start = magnifyStartState else { return }
                     let minScale = minimumImageScale(for: baseFrame)
                     let maxScale = maximumImageScale(for: baseFrame)
-                    imageScale = min(max(start.imageScale * value.magnification, minScale), maxScale)
-                    imageOffset = PostCropGeometry.clampOffsetToCover(
+                    
+                    let rawScale = start.imageScale * value.magnification
+                    let clampedScale = min(max(rawScale, minScale), maxScale)
+                    
+                    if rawScale < minScale {
+                        imageScale = clampedScale - (clampedScale - rawScale) * 0.3
+                    } else if rawScale > maxScale {
+                        imageScale = clampedScale + (rawScale - clampedScale) * 0.3
+                    } else {
+                        imageScale = clampedScale
+                    }
+                    
+                    let clampedOffset = PostCropGeometry.clampOffsetToCover(
                         offset: start.imageOffset,
                         base: baseFrame,
                         scale: imageScale,
                         cropRect: cropRect
                     )
+                    
+                    let dx = start.imageOffset.width - clampedOffset.width
+                    let dy = start.imageOffset.height - clampedOffset.height
+                    
+                    imageOffset = CGSize(
+                        width: clampedOffset.width + dx * 0.3,
+                        height: clampedOffset.height + dy * 0.3
+                    )
                 }
                 .onEnded { _ in
-                    clampImageTransform(to: baseFrame)
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        clampImageTransform(to: baseFrame)
+                    }
                     scheduleAutoSettle()
                 }
         )
