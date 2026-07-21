@@ -1,5 +1,5 @@
 //
-//  PostCropGeometry.swift
+//  CropGeometry.swift
 //  On Board
 //
 //  Pure geometry for PostImageCropView's freeform/aspect-constrained crop
