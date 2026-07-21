@@ -7,7 +7,7 @@
 //  fully unit-testable without rendering anything.
 //
 
-import CoreGraphics
+import UIKit
 
 nonisolated enum CropCorner: CaseIterable {
     case topLeft, topRight, bottomLeft, bottomRight
@@ -21,7 +21,48 @@ nonisolated enum CropEdge: CaseIterable {
     case top, bottom, left, right
 }
 
-nonisolated enum PostCropGeometry {
+nonisolated enum CropGeometry {
+    // MARK: - Safe Area & Sizing
+
+    /// Shrinks the view by the safe area and standard toolbar heights (44pt top, 49pt bottom).
+    static func containerSize(for geometrySize: CGSize, safeAreaInsets: UIEdgeInsets) -> CGSize {
+        let padding: CGFloat = 16
+        let topInset = safeAreaInsets.top + 44
+        let bottomInset = safeAreaInsets.bottom + 49
+        
+        let availableWidth = geometrySize.width - (padding * 2) - safeAreaInsets.left - safeAreaInsets.right
+        let availableHeight = geometrySize.height - (padding * 2) - topInset - bottomInset
+        
+        return CGSize(
+            width: availableWidth,
+            height: availableHeight
+        )
+    }
+
+    // MARK: - Rubber Banding Math
+
+    static func rubberBandedScale(raw: CGFloat, min: CGFloat, max: CGFloat, friction: CGFloat = 0.3) -> CGFloat {
+        if raw < min {
+            return min - (min - raw) * friction
+        } else if raw > max {
+            return max + (raw - max) * friction
+        } else {
+            return raw
+        }
+    }
+
+    static func rubberBandedOffset(raw: CGSize, clamped: CGSize, friction: CGFloat = 0.3) -> CGSize {
+        let dx = raw.width - clamped.width
+        let dy = raw.height - clamped.height
+        
+        return CGSize(
+            width: clamped.width + dx * friction,
+            height: clamped.height + dy * friction
+        )
+    }
+
+    // MARK: - Frame & Ratio Math
+
     /// Smallest allowed crop-rect side, in points, on either axis.
     static let minCropDimension: CGFloat = 60
 

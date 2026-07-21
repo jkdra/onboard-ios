@@ -20,8 +20,7 @@ struct ProfileImageCropView: View {
     @State private var offset: CGSize = .zero
     @State private var panStartState: (scale: CGFloat, offset: CGSize)?
 
-    @State private var autoSettleTask: Task<Void, Never>?
-    @State private var isBlurRemoved = false
+    @State private var interaction = CropInteractionState()
 
     private let padding: CGFloat = 16
     private let minScale: CGFloat = 1.0
@@ -32,12 +31,7 @@ struct ProfileImageCropView: View {
         NavigationStack {
             GeometryReader { geometry in
                 let windowInsets = UIApplication.shared.safeAreaInsets
-                let topInset = windowInsets.top + 44
-                let bottomInset = windowInsets.bottom + 49
-                let containerSize = CGSize(
-                    width: geometry.size.width - padding * 2 - windowInsets.left - windowInsets.right,
-                    height: geometry.size.height - padding * 2 - topInset - bottomInset
-                )
+                let containerSize = CropGeometry.containerSize(for: geometry.size, safeAreaInsets: windowInsets)
                 let maskSize = max(0, min(min(containerSize.width, containerSize.height), 600))
                 let imageAspect = image.size.width / image.size.height
                 let baseWidth = imageAspect > 1 ? maskSize * imageAspect : maskSize
@@ -53,26 +47,21 @@ struct ProfileImageCropView: View {
                         .scaleEffect(scale)
                         .offset(offset)
                         .frame(width: geometry.size.width, height: geometry.size.height)
-                        .blur(radius: isBlurRemoved ? 0 : backdropBlurRadius)
+                        .blur(radius: interaction.isBlurRemoved ? 0 : backdropBlurRadius)
                         .contentShape(Rectangle())
                         .gesture(
                             SimultaneousGesture(
                                 MagnifyGesture()
                                     .onChanged { value in
-                                        notifyInteractionStarted()
+                                        interaction.notifyInteractionStarted()
                                         if magnifyStartState == nil { magnifyStartState = (scale, offset) }
                                         guard let start = magnifyStartState else { return }
                                         
-                                        let rawScale = start.scale * value.magnification
-                                        let clampedScale = min(max(rawScale, minScale), maxScale)
-                                        
-                                        if rawScale < minScale {
-                                            scale = clampedScale - (clampedScale - rawScale) * 0.3
-                                        } else if rawScale > maxScale {
-                                            scale = clampedScale + (rawScale - clampedScale) * 0.3
-                                        } else {
-                                            scale = clampedScale
-                                        }
+                                        scale = CropGeometry.rubberBandedScale(
+                                            raw: start.scale * value.magnification,
+                                            min: minScale,
+                                            max: maxScale
+                                        )
                                         
                                         let clampedOffset = clampedPanOffset(
                                             offset: start.offset,
@@ -82,24 +71,18 @@ struct ProfileImageCropView: View {
                                             maskSize: maskSize
                                         )
                                         
-                                        let dx = start.offset.width - clampedOffset.width
-                                        let dy = start.offset.height - clampedOffset.height
-                                        
-                                        offset = CGSize(
-                                            width: clampedOffset.width + dx * 0.3,
-                                            height: clampedOffset.height + dy * 0.3
-                                        )
+                                        offset = CropGeometry.rubberBandedOffset(raw: start.offset, clamped: clampedOffset)
                                     }
                                     .onEnded { _ in
                                         magnifyStartState = nil
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                             clampImageTransform(maskSize: maskSize, baseWidth: baseWidth, baseHeight: baseHeight)
                                         }
-                                        scheduleAutoSettle()
+                                        interaction.scheduleAutoSettle()
                                     },
                                 DragGesture()
                                     .onChanged { value in
-                                        notifyInteractionStarted()
+                                        interaction.notifyInteractionStarted()
                                         if panStartState == nil { panStartState = (scale, offset) }
                                         guard let start = panStartState else { return }
                                         
@@ -116,20 +99,14 @@ struct ProfileImageCropView: View {
                                             maskSize: maskSize
                                         )
                                         
-                                        let dx = rawOffset.width - clampedOffset.width
-                                        let dy = rawOffset.height - clampedOffset.height
-                                        
-                                        offset = CGSize(
-                                            width: clampedOffset.width + dx * 0.3,
-                                            height: clampedOffset.height + dy * 0.3
-                                        )
+                                        offset = CropGeometry.rubberBandedOffset(raw: rawOffset, clamped: clampedOffset)
                                     }
                                     .onEnded { _ in
                                         panStartState = nil
                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                             clampImageTransform(maskSize: maskSize, baseWidth: baseWidth, baseHeight: baseHeight)
                                         }
-                                        scheduleAutoSettle()
+                                        interaction.scheduleAutoSettle()
                                     }
                             )
                         )
@@ -247,33 +224,6 @@ struct ProfileImageCropView: View {
         let pointsPerPixel = maskSize / minImageDimension
         let minBasePoints = 512 * pointsPerPixel
         return max(maskSize / minBasePoints, minScale)
-    }
-
-    // MARK: - Interaction State
-
-    private func cancelAutoSettle() {
-        autoSettleTask?.cancel()
-        autoSettleTask = nil
-    }
-
-    private func notifyInteractionStarted() {
-        cancelAutoSettle()
-        if !isBlurRemoved {
-            withAnimation(.easeOut(duration: 0.2)) {
-                isBlurRemoved = true
-            }
-        }
-    }
-
-    private func scheduleAutoSettle() {
-        cancelAutoSettle()
-        autoSettleTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1_500))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: 0.3)) {
-                isBlurRemoved = false
-            }
-        }
     }
 
     // MARK: - Crop rendering
