@@ -2,28 +2,33 @@
 //  PostImageCropView.swift
 //  On Board
 //
-//  Rectangular photo crop tool for post photos: freeform (drag corner
-//  handles) or a preset aspect ratio, with a rule-of-thirds guide sized to
-//  the current crop rect. Distinct from ImageCropView (circular avatar crop,
-//  pan/zoom-the-image model) — here the image is static and the crop
-//  rectangle itself is resized/moved, matching a Photos-app-style crop tool.
+//  Rectangular photo crop tool for post photos: freeform (drag corner or
+//  edge handles) or a preset aspect ratio (independently flippable between
+//  portrait/landscape), with undo/redo/revert and a rule-of-thirds guide
+//  sized to the current crop rect. Distinct from ImageCropView (circular
+//  avatar crop, pan/zoom-the-image model) — here the image is static and the
+//  crop rectangle itself is resized/moved, matching a Photos-app-style crop
+//  tool. Inherits the system light/dark appearance rather than forcing dark.
 //
 
 import SwiftUI
 import UIKit
 
-enum CropAspectOption: CaseIterable, Identifiable {
-    case free, square, portrait45, landscape169, original
+enum CropAspectOption: CaseIterable, Identifiable, Equatable {
+    case free, square, ratio4x5, ratio16x9, original
 
     var id: Self { self }
 
-    var ratio: CGFloat? {
+    /// Base numeric ratio (width / height) before orientation is applied.
+    /// `nil` for options with no fixed ratio (`.free`) or ones resolved
+    /// dynamically against the source image (`.original`).
+    var baseRatio: CGFloat? {
         switch self {
         case .free: return nil
         case .square: return 1.0
-        case .portrait45: return 4.0 / 5.0
-        case .landscape169: return 16.0 / 9.0
-        case .original: return nil // resolved against the image's own aspect at use site
+        case .ratio4x5: return 4.0 / 5.0
+        case .ratio16x9: return 16.0 / 9.0
+        case .original: return nil
         }
     }
 
@@ -31,9 +36,20 @@ enum CropAspectOption: CaseIterable, Identifiable {
         switch self {
         case .free: return "Free"
         case .square: return "1:1"
-        case .portrait45: return "4:5"
-        case .landscape169: return "16:9"
+        case .ratio4x5: return "4:5"
+        case .ratio16x9: return "16:9"
         case .original: return "Original"
+        }
+    }
+
+    /// Whether this option has a meaningful portrait/landscape distinction.
+    /// Square is symmetric, Free has no fixed ratio, and Original always
+    /// matches the source image's own orientation — none of those benefit
+    /// from an independent orientation flip.
+    var supportsOrientationToggle: Bool {
+        switch self {
+        case .ratio4x5, .ratio16x9: return true
+        case .free, .square, .original: return false
         }
     }
 }
@@ -43,15 +59,26 @@ struct PostImageCropView: View {
     var onCrop: (UIImage) -> Void
     var onCancel: () -> Void
 
+    private struct CropState: Equatable {
+        var rect: CGRect
+        var aspect: CropAspectOption
+        var isPortrait: Bool
+    }
+
     @State private var cropRect: CGRect = .zero
     // Matches Apple's own crop tool: start framed exactly as the photo
     // already is, and let the user override with a different ratio — not
     // "Free" by default, which would visually misrepresent an uncropped
     // photo's own aspect as an arbitrary starting rect.
     @State private var selectedAspect: CropAspectOption = .original
+    @State private var isPortraitOrientation = true
     @GestureState private var dragStartRect: CGRect?
     @State private var lastDisplayFrame: CGRect = .zero
     @State private var isConfirming = false
+
+    @State private var history: [CropState] = []
+    @State private var redoStack: [CropState] = []
+    @State private var initialState: CropState?
 
     private let padding: CGFloat = 16
     private let handleVisualSize: CGFloat = 14
@@ -64,9 +91,15 @@ struct PostImageCropView: View {
 
     private var imageAspect: CGFloat { image.size.width / image.size.height }
 
-    /// `.original` isn't a fixed ratio — it's whatever the source image's own aspect is.
-    private func resolvedRatio(for option: CropAspectOption) -> CGFloat? {
-        option == .original ? imageAspect : option.ratio
+    /// `.original` isn't a fixed ratio — it's whatever the source image's own
+    /// aspect is. Other directional options normalize their base ratio to
+    /// whichever orientation is currently selected, regardless of which
+    /// orientation the base ratio was originally defined in.
+    private func resolvedRatio(for option: CropAspectOption, isPortrait: Bool) -> CGFloat? {
+        if option == .original { return imageAspect }
+        guard let base = option.baseRatio else { return nil }
+        guard option.supportsOrientationToggle else { return base }
+        return isPortrait ? min(base, 1 / base) : max(base, 1 / base)
     }
 
     var body: some View {
@@ -89,8 +122,12 @@ struct PostImageCropView: View {
                                 // beat after first appear (e.g. mid-presentation
                                 // transition) — re-snap so the crop rect doesn't
                                 // stay stuck at whatever transient frame it was
-                                // first computed against.
-                                cropRect = PostCropGeometry.maxRect(forAspect: resolvedRatio(for: selectedAspect), in: displayFrame)
+                                // first computed against. Not a user action, so
+                                // this doesn't push undo history.
+                                cropRect = PostCropGeometry.maxRect(
+                                    forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
+                                    in: displayFrame
+                                )
                             }
 
                         Image(uiImage: image)
@@ -114,23 +151,27 @@ struct PostImageCropView: View {
                     }
                     .frame(width: geometry.size.width, height: geometry.size.height)
                     .onAppear {
-                        cropRect = PostCropGeometry.maxRect(forAspect: resolvedRatio(for: selectedAspect), in: displayFrame)
-                    }
-                    .onChange(of: selectedAspect) { _, newValue in
-                        withAnimation(settleAnimation) {
-                            cropRect = PostCropGeometry.maxRect(forAspect: resolvedRatio(for: newValue), in: displayFrame)
+                        if initialState == nil {
+                            isPortraitOrientation = imageAspect <= 1
+                        }
+                        cropRect = PostCropGeometry.maxRect(
+                            forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
+                            in: displayFrame
+                        )
+                        if initialState == nil {
+                            initialState = currentState()
                         }
                     }
                 }
-                .background(Color.black.ignoresSafeArea())
+                .background(Color(uiColor: .systemBackground).ignoresSafeArea())
                 .clipped()
 
                 aspectPicker
                     .padding(.vertical, 14)
-                    .background(Color.black)
+                    .background(Color(uiColor: .systemBackground))
                     .opacity(isConfirming ? 0 : 1)
             }
-            .background(Color.black.ignoresSafeArea())
+            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
             .navigationTitle("Adjust Photo")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -148,8 +189,16 @@ struct PostImageCropView: View {
                     .disabled(isConfirming)
                 }
             }
+            .onChange(of: dragStartRect) { oldValue, newValue in
+                // A drag gesture (corner/edge resize or move) just ended —
+                // oldValue is the snapshot captured at that gesture's start
+                // (via each gesture's `if state == nil { state = cropRect }`),
+                // so it's exactly the pre-drag state to push onto history.
+                if let oldValue, newValue == nil {
+                    pushHistory(CropState(rect: oldValue, aspect: selectedAspect, isPortrait: isPortraitOrientation))
+                }
+            }
         }
-        .preferredColorScheme(.dark)
     }
 
     // MARK: - Crop rectangle + handles
@@ -249,7 +298,7 @@ struct PostImageCropView: View {
                 cropRect = PostCropGeometry.rect(
                     anchor: anchor,
                     draggedPoint: newPoint,
-                    aspect: resolvedRatio(for: selectedAspect),
+                    aspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
                     bounds: displayFrame
                 )
             }
@@ -282,26 +331,128 @@ struct PostImageCropView: View {
             }
     }
 
-    // MARK: - Aspect picker
+    // MARK: - Aspect menu, orientation, undo/redo/revert
 
     private var aspectPicker: some View {
-        HStack(spacing: 10) {
-            ForEach(CropAspectOption.allCases) { option in
-                Button {
-                    selectedAspect = option
-                } label: {
-                    Text(option.label)
-                        .fontStyle(.footnote)
-                        .fontWeight(.semibold)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 8)
-                        .background(
-                            selectedAspect == option ? Color.white : Color.white.opacity(0.15),
-                            in: Capsule()
-                        )
-                        .foregroundStyle(selectedAspect == option ? .black : .white)
+        HStack(spacing: 14) {
+            Menu {
+                ForEach(CropAspectOption.allCases) { option in
+                    Button {
+                        selectAspect(option)
+                    } label: {
+                        if selectedAspect == option {
+                            Label(option.label, systemImage: "checkmark")
+                        } else {
+                            Text(option.label)
+                        }
+                    }
                 }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(selectedAspect.label)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .fontStyle(.caption2)
+                }
+                .fontStyle(.footnote)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.12), in: Capsule())
             }
+
+            if selectedAspect.supportsOrientationToggle {
+                Button {
+                    toggleOrientation()
+                } label: {
+                    Image(systemName: isPortraitOrientation ? "rectangle.portrait" : "rectangle")
+                        .frame(width: 32, height: 32)
+                        .background(Color.primary.opacity(0.12), in: Circle())
+                }
+                .accessibilityLabel(isPortraitOrientation ? "Switch to landscape" : "Switch to portrait")
+            }
+
+            Spacer()
+
+            Button { undo() } label: {
+                Image(systemName: "arrow.uturn.backward")
+            }
+            .disabled(history.isEmpty)
+            .accessibilityLabel("Undo")
+
+            Button { redo() } label: {
+                Image(systemName: "arrow.uturn.forward")
+            }
+            .disabled(redoStack.isEmpty)
+            .accessibilityLabel("Redo")
+
+            Button { revertToOriginal() } label: {
+                Image(systemName: "arrow.counterclockwise")
+            }
+            .disabled(initialState == nil || currentState() == initialState)
+            .accessibilityLabel("Revert to original")
+        }
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 16)
+    }
+
+    // MARK: - Undo / redo / revert
+
+    private func currentState() -> CropState {
+        CropState(rect: cropRect, aspect: selectedAspect, isPortrait: isPortraitOrientation)
+    }
+
+    private func pushHistory(_ state: CropState) {
+        history.append(state)
+        redoStack.removeAll()
+    }
+
+    private func apply(_ state: CropState) {
+        withAnimation(settleAnimation) {
+            selectedAspect = state.aspect
+            isPortraitOrientation = state.isPortrait
+            cropRect = state.rect
+        }
+    }
+
+    private func undo() {
+        guard let previous = history.popLast() else { return }
+        redoStack.append(currentState())
+        apply(previous)
+    }
+
+    private func redo() {
+        guard let next = redoStack.popLast() else { return }
+        history.append(currentState())
+        apply(next)
+    }
+
+    private func revertToOriginal() {
+        guard let initialState, currentState() != initialState else { return }
+        pushHistory(currentState())
+        apply(initialState)
+    }
+
+    private func selectAspect(_ option: CropAspectOption) {
+        guard option != selectedAspect else { return }
+        pushHistory(currentState())
+        withAnimation(settleAnimation) {
+            selectedAspect = option
+            cropRect = PostCropGeometry.maxRect(
+                forAspect: resolvedRatio(for: option, isPortrait: isPortraitOrientation),
+                in: lastDisplayFrame
+            )
+        }
+    }
+
+    private func toggleOrientation() {
+        guard selectedAspect.supportsOrientationToggle else { return }
+        pushHistory(currentState())
+        isPortraitOrientation.toggle()
+        withAnimation(settleAnimation) {
+            cropRect = PostCropGeometry.maxRect(
+                forAspect: resolvedRatio(for: selectedAspect, isPortrait: isPortraitOrientation),
+                in: lastDisplayFrame
+            )
         }
     }
 
