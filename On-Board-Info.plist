@@ -13,11 +13,13 @@
 			</array>
 		</dict>
 		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
 			<key>CFBundleURLName</key>
 			<string>com.google.GIDSignIn</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.609819130016-ps5jn4mhva2c0uhagcc89a1d71kubt3g</string>
+				<string>com.googleusercontent.apps.423685361183-4sd3s0b5lbjlnvu69oqh2p7h0eitpfe5</string>
 			</array>
 		</dict>
 	</array>
@@ -37,7 +39,5 @@
 		<string>ZalandoSansSemiExpanded.ttf</string>
 		<string>ZalandoSans.ttf</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>On Board uses your camera so you can take a photo directly for your profile picture or a post.</string>
 </dict>
 </plist>
