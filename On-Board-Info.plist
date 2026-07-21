@@ -23,16 +23,14 @@
 	</array>
 	<key>GoogleClientID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
-	<key>MKDirectionsApplicationSupportedModes</key>
-	<array/>
-	<key>SupabaseAnonKey</key>
-	<string>$(SUPABASE_ANON_KEY)</string>
-	<key>SupabaseURL</key>
-	<string>https://pvgmcqokvcqsztaeqcpe.supabase.co</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>INSendMessageIntent</string>
 	</array>
+	<key>SupabaseAnonKey</key>
+	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>SupabaseURL</key>
+	<string>https://pvgmcqokvcqsztaeqcpe.supabase.co</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>ZalandoSansExpanded.ttf</string>
