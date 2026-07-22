@@ -2,6 +2,7 @@
   "fill" : "automatic",
   "groups" : [
     {
+      "blur-material" : null,
       "layers" : [
         {
           "fill-specializations" : [
@@ -15,17 +16,29 @@
               "value" : "system-dark"
             },
             {
+              "appearance" : "dark",
+              "value" : "system-dark"
+            },
+            {
               "appearance" : "tinted",
               "value" : {
                 "solid" : "extended-gray:0.00000,1.00000"
               }
             }
           ],
-          "glass" : false,
+          "glass-specializations" : [
+            {
+              "value" : true
+            },
+            {
+              "appearance" : "dark",
+              "value" : false
+            }
+          ],
           "image-name" : "White Note.svg",
           "name" : "White Note",
           "position" : {
-            "scale" : 0.26,
+            "scale" : 0.25,
             "translation-in-points" : [
               -25.3984375,
               -26.5078125
@@ -35,15 +48,17 @@
       ],
       "shadow" : {
         "kind" : "neutral",
-        "opacity" : 0.6
+        "opacity" : 0
       },
+      "specular" : false,
       "translucency" : {
         "enabled" : true,
-        "value" : 0.25
+        "value" : 0
       }
     },
     {
-      "blur-material" : 0.3,
+      "blur-material" : 0.15000000000000002,
+      "hidden" : false,
       "layers" : [
         {
           "fill-specializations" : [
@@ -61,7 +76,7 @@
           "image-name" : "Shadow 2.svg",
           "name" : "Shadow 2",
           "position" : {
-            "scale" : 0.26,
+            "scale" : 0.25,
             "translation-in-points" : [
               1,
               -1.3600008579036285
@@ -69,6 +84,7 @@
           }
         }
       ],
+      "lighting" : "individual",
       "refractivity" : {
         "depth" : 0,
         "enabled" : false,
@@ -78,6 +94,7 @@
         "kind" : "neutral",
         "opacity" : 0.6
       },
+      "specular" : false,
       "translucency" : {
         "enabled" : true,
         "value" : 0.25
