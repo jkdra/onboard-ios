@@ -254,8 +254,7 @@ struct PostDetailView: View {
                 Text("This also removes any replies to it.")
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBackDisabled(editMode || showImageViewer)
-            .navigationBarBackButtonHidden(showImageViewer)
+            .navigationBarBackButtonHidden(editMode || showImageViewer)
             .interactiveDismissDisabled(editMode || showImageViewer)
             .toolbar { toolbarContent }
             .overlay {

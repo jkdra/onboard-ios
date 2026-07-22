@@ -73,8 +73,8 @@ struct ProfileView: View {
                     draft.selectedPhotoItem = nil
                 }
             }
-            .interactiveDismissDisabled(showAvatarViewer)
-            .navigationBarBackButtonHidden(showAvatarViewer)
+            .interactiveDismissDisabled(editMode || showAvatarViewer)
+            .navigationBarBackButtonHidden(editMode || showAvatarViewer)
             .overlay {
                 ImageViewerView(
                     url: URL(string: displayedProfile.avatarUrl ?? ""),

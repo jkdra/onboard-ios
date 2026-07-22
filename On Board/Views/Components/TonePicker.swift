@@ -69,7 +69,7 @@ struct TonePicker: View {
             Text(selection?.displayName ?? "Any Color!")
                 .fontStyle(.subheadline)
                 .fontWeight(.heavy)
-            Image(systemName: "chevron.down")
+            Image(systemName: "chevron.up.chevron.down")
                 .fontStyle(.caption2)
                 .fontWeight(.bold)
                 .opacity(0.55)
