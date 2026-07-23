@@ -46,9 +46,14 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
             return .username
         }
 
-        if displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return .profile
-        }
+        // Deliberately NO display-name gate here: display name is optional by
+        // design (the profile step says so), so an empty one is not evidence
+        // of unfinished onboarding. The old `displayName.isEmpty → .profile`
+        // check trapped legitimately-admitted users who skipped it in an
+        // inescapable loop — server said complete, client bounced them to the
+        // profile step, and resubmitting an (allowed) empty name re-tripped
+        // the gate. The provisional-handle check above already catches
+        // accounts that truly never finished.
 
         // boardId is set only after admin approval. verifiedSchoolEmail alone is not
         // enough to bypass school verify — waitlistJoinedAt must not short-circuit

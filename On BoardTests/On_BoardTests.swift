@@ -894,6 +894,54 @@ struct MockOnboardingServiceTests {
         #expect(status.waitlistJoinedAt != nil)
     }
 
+    @Test @MainActor func vipEmailInstantAdmissionThroughStore() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingVIPStore")!
+        defaults.removePersistentDomain(forName: "MockOnboardingVIPStore")
+
+        let authService = MockAuthService(defaults: defaults)
+        let auth = AuthStore(service: authService)
+        await auth.verifyPhoneOTP(phone: "+15555550104", token: "123456")
+
+        let store = OnboardingStore(
+            service: MockOnboardingService(defaults: defaults),
+            auth: auth,
+            network: NetworkMonitor()
+        )
+        await store.refresh()
+
+        // Full device sequence, through the store like the UI drives it.
+        #expect(await store.submitBirthday(birthday: Calendar.current.date(byAdding: .year, value: -20, to: .now)!, showBirthday: false))
+        #expect(await store.submitUsername("vip.store.tester"))
+        #expect(await store.submitProfile(displayName: "VIP", bio: nil))
+        #expect(await store.sendSchoolVerificationCode(to: "vip@example.edu"))
+        let verified = await store.verifySchoolEmail("vip@example.edu", code: "123456")
+        #expect(verified, "verify failed: \(store.lastError ?? "no error")")
+        #expect(store.isComplete)
+    }
+
+    @Test func vipEmailSimulatesInstantAdmission() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingVIP")!
+        defaults.removePersistentDomain(forName: "MockOnboardingVIP")
+
+        let auth = MockAuthService(defaults: defaults)
+        _ = try await auth.verifyPhoneOTP(phone: "+15555550103", token: "123456")
+
+        let onboarding = MockOnboardingService(defaults: defaults)
+        _ = try await onboarding.completeBirthday(
+            birthday: Calendar.current.date(byAdding: .year, value: -20, to: .now)!,
+            showBirthday: false
+        )
+        _ = try await onboarding.completeUsername("vip.tester")
+        _ = try await onboarding.completeProfile(displayName: "VIP", bio: nil, avatarUrl: nil)
+        _ = try await onboarding.beginSchoolEmailVerification("vip@example.edu")
+        let step = try await onboarding.completeSchoolEmailVerification("vip@example.edu", token: "123456")
+        #expect(step == .complete)
+
+        let status = try await onboarding.fetchStatus()
+        #expect(status.effectiveOnboardingStep == .complete)
+        #expect(!status.needsOnboarding)
+    }
+
     @Test func rejectsSchoolEmailAlreadyLinkedToAnotherAccount() async throws {
         let defaults = UserDefaults(suiteName: "MockOnboardingEmailInUse")!
         defaults.removePersistentDomain(forName: "MockOnboardingEmailInUse")
@@ -987,6 +1035,36 @@ struct OnboardingStoreTests {
         #expect(status.isComplete)
         #expect(status.needsOnboarding)
         #expect(status.effectiveOnboardingStep == .username)
+    }
+
+    /// Display name is optional by design — an admitted user who skipped it
+    /// must read as complete. The old empty-displayName gate trapped these
+    /// users in an inescapable profile-step loop (found via a real device's
+    /// stuck mock state, 2026-07-22).
+    @Test @MainActor func emptyDisplayNameDoesNotBlockAdmittedUser() {
+        let status = OnboardingStatus(
+            id: UUID(),
+            handle: "real.handle",
+            displayName: "",
+            bio: nil,
+            avatarUrl: nil,
+            birthday: "2000-01-01",
+            showBirthday: false,
+            onboardingStep: .complete,
+            onboardingCompletedAt: .now,
+            waitlistJoinedAt: .now,
+            verifiedSchoolEmail: "student@example.edu",
+            pendingSchoolEmail: nil,
+            schoolName: "Example University",
+            boardId: SampleBoardID.main,
+            boardName: "On Board",
+            referralCode: "abc123",
+            verifiedReferralCount: 0,
+            instantInvitesRemaining: 3
+        )
+
+        #expect(status.effectiveOnboardingStep == .complete)
+        #expect(!status.needsOnboarding)
     }
 }
 

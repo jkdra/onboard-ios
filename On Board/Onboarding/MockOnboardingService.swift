@@ -159,6 +159,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.schoolVerificationIncomplete
         }
 
+        // A local part starting with "vip" simulates a golden-ticket instant
+        // admission (live complete_v2 admits instantly when the referrer is
+        // admitted with quota) — lands on the board, fires the welcome flow.
+        let instantlyAdmitted = normalized.hasPrefix("vip")
+
         status = OnboardingStatus(
             id: status.id,
             handle: status.handle,
@@ -167,8 +172,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             avatarUrl: status.avatarUrl,
             birthday: status.birthday,
             showBirthday: status.showBirthday,
-            onboardingStep: .waitlist,
-            onboardingCompletedAt: status.onboardingCompletedAt,
+            onboardingStep: instantlyAdmitted ? .complete : .waitlist,
+            onboardingCompletedAt: instantlyAdmitted ? .now : status.onboardingCompletedAt,
             // Verifying your .edu is what puts you on the waitlist — mirrors the live
             // complete_school_email_verification_v2 RPC, which inserts the waitlist
             // row here. So waitlistJoinedAt is set at verify time, not on a separate
@@ -184,7 +189,7 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             instantInvitesRemaining: status.instantInvitesRemaining
         )
         save(status, for: userID)
-        return .waitlist
+        return instantlyAdmitted ? .complete : .waitlist
     }
 
     func joinWaitlist() async throws -> OnboardingStep {
@@ -204,6 +209,22 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
 
     func submitReferralCode(_ code: String) async throws {
         try await Task.sleep(for: .milliseconds(180))
+    }
+
+    /// Dev-only lever for the waitlist screen's "Join Board [DEV]" button:
+    /// admits the current mock user on the spot, mirroring what an admin
+    /// approval does to the live status. Exercises the first-time welcome flow
+    /// without needing the vip@ email convention.
+    func devAdmitCurrentUser() {
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else { return }
+        var status = loadStatus(for: userID)
+        status = status.updating(
+            onboardingStep: .complete,
+            onboardingCompletedAt: .now,
+            boardId: SampleBoardID.main,
+            boardName: "On Board"
+        )
+        save(status, for: userID)
     }
 
     private func loadStatus(for userID: UUID) -> OnboardingStatus {

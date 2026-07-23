@@ -238,6 +238,15 @@ struct OnboardingWaitlistStepView: View {
                 .buttonStyle(.boardPrimary)
                 .tint(.primary)
             }
+
+            if onboarding.supportsDevAdmission {
+                Button("Join Board [DEV]") {
+                    Task { await onboarding.devAdmit() }
+                }
+                .fontStyle(.footnote)
+                .foregroundStyle(.secondary)
+                .padding(.top, 4)
+            }
         }
     }
 }

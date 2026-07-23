@@ -17,6 +17,13 @@ struct RootView: View {
 
     @State private var didBootstrap = false
 
+    /// Welcome celebration: set while this session has shown an incomplete
+    /// onboarding status, so the flip to complete is a real live admission
+    /// (waitlist approval or golden-ticket verify) — never a returning user
+    /// whose status simply loads as complete.
+    @State private var sawIncompleteOnboarding = false
+    @State private var showWelcome = false
+
     private var requiresNetwork: Bool {
         AppConfiguration.current.isSupabaseConfigured
     }
@@ -68,6 +75,23 @@ struct RootView: View {
             network.recheck()
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshOnForeground() }
+        }
+        .onChange(of: onboarding.needsOnboarding) { _, needsOnboarding in
+            if needsOnboarding { sawIncompleteOnboarding = true }
+        }
+        .onChange(of: onboarding.isComplete) { _, isComplete in
+            guard isComplete, sawIncompleteOnboarding,
+                  let userID = auth.session?.userId,
+                  !WelcomeCelebration.hasShown(for: userID) else { return }
+            WelcomeCelebration.markShown(for: userID)
+            showWelcome = true
+        }
+        .onChange(of: auth.isSignedIn) { _, isSignedIn in
+            if !isSignedIn { sawIncompleteOnboarding = false }
+        }
+        .fullScreenCover(isPresented: $showWelcome) {
+            WelcomeOnBoardView(boardName: onboarding.status?.boardName)
+                .preferredColorScheme(appearance.colorScheme)
         }
     }
 

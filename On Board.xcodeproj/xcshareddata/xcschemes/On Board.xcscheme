@@ -41,6 +41,22 @@
                ReferencedContainer = "container:On Board.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "95DC3FFD2FD3688900F6E770"
+               BuildableName = "On BoardUITests.xctest"
+               BlueprintName = "On BoardUITests"
+               ReferencedContainer = "container:On Board.xcodeproj">
+            </BuildableReference>
+            <SkippedTests>
+               <Test
+                  Identifier = "PolishWalkthroughUITests">
+               </Test>
+            </SkippedTests>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

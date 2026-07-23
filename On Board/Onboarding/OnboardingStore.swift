@@ -275,6 +275,19 @@ final class OnboardingStore {
         }
     }
 
+    /// Whether the dev-only instant-admission lever is available (mock mode).
+    var supportsDevAdmission: Bool {
+        service is MockOnboardingService && !AppConfiguration.current.isSupabaseConfigured
+    }
+
+    /// Mock-only: admit the current user immediately, as an admin approval
+    /// would. No-op against the live service.
+    func devAdmit() async {
+        guard let mock = service as? MockOnboardingService else { return }
+        mock.devAdmitCurrentUser()
+        await refresh(force: true)
+    }
+
     @discardableResult
     func joinWaitlist() async -> Bool {
         await performSubmit {
