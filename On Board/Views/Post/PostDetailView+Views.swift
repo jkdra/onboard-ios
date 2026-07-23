@@ -73,6 +73,7 @@ extension PostDetailView {
                     }
                 } label: {
                     Image(systemName: "ellipsis").fontWeight(.semibold)
+                        .accessibilityLabel("Post options")
                 }
 
             }

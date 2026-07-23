@@ -242,6 +242,7 @@ struct NewPostView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .foregroundStyle(.secondary)
+                            .accessibilityLabel("Remove image")
                     }
                     .buttonStyle(.plain)
                 }
