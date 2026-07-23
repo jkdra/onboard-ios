@@ -257,6 +257,18 @@ final class OnboardingStore {
         }
     }
 
+    /// Persist the user's expected graduation month. Used by the client-inserted
+    /// `.graduation` onboarding step and by Institution Settings. On success the
+    /// refresh clears the null `expectedGraduation` that was gating the step.
+    @discardableResult
+    func submitGraduation(_ month: Date) async -> Bool {
+        await performSubmit {
+            try await service.setExpectedGraduation(month)
+            await refresh(force: true)
+            return true
+        }
+    }
+
     @discardableResult
     func sendSchoolVerificationCode(to email: String) async -> Bool {
         await performSubmit {

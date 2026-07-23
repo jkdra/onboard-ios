@@ -74,6 +74,7 @@ protocol OnboardingService: Sendable {
     func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep
     func joinWaitlist() async throws -> OnboardingStep
     func submitReferralCode(_ code: String) async throws
+    func setExpectedGraduation(_ month: Date) async throws
 }
 
 enum OnboardingServiceFactory {

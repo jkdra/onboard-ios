@@ -29,6 +29,11 @@ struct OnboardingStatus: Equatable, Codable, Sendable {
     /// code consumes one and skips the waitlist. nil until the migration ships.
     let instantInvitesRemaining: Int?
 
+    /// Expected graduation month as an ISO date string ("2027-05-01"), or nil
+    /// if the user hasn't provided it yet. Drives the client-inserted
+    /// `.graduation` onboarding step and the Institution Settings editor.
+    let expectedGraduation: String?
+
     /// Raw DB step — may read `complete` for users grandfathered by migration before picking a handle.
     var isComplete: Bool { onboardingStep == .complete }
 

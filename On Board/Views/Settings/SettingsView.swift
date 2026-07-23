@@ -89,6 +89,16 @@ struct SettingsView: View {
 
             accountSection
 
+            Section {
+                NavigationLink {
+                    InstitutionSettingsView()
+                } label: {
+                    SettingsRowLabel(title: "Institution Settings", systemImage: "graduationcap.fill")
+                }
+            } header: {
+                Text("Campus").fontStyle(.subheadline)
+            }
+
             inviteSection
 
             Section {

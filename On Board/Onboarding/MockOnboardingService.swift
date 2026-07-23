@@ -186,7 +186,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             boardName: match.boardName,
             referralCode: status.referralCode,
             verifiedReferralCount: status.verifiedReferralCount,
-            instantInvitesRemaining: status.instantInvitesRemaining
+            instantInvitesRemaining: status.instantInvitesRemaining,
+            expectedGraduation: status.expectedGraduation
         )
         save(status, for: userID)
         return instantlyAdmitted ? .complete : .waitlist
@@ -209,6 +210,25 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
 
     func submitReferralCode(_ code: String) async throws {
         try await Task.sleep(for: .milliseconds(180))
+    }
+
+    func setExpectedGraduation(_ month: Date) async throws {
+        try await Task.sleep(for: .milliseconds(150))
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
+            throw OnboardingError.notAuthenticated
+        }
+        var status = loadStatus(for: userID)
+        status = status.updating(expectedGraduation: Self.monthString(from: month))
+        save(status, for: userID)
+    }
+
+    /// "yyyy-MM-01" — the wire format OnboardingStatus.expectedGraduation uses.
+    static func monthString(from date: Date) -> String {
+        let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-01"
+        return f.string(from: date)
     }
 
     /// Dev-only lever for the waitlist screen's "Join Board [DEV]" button:
@@ -278,7 +298,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
                 boardName: "On Board",
                 referralCode: "maya123",
                 verifiedReferralCount: 5,
-                instantInvitesRemaining: 3
+                instantInvitesRemaining: 3,
+                expectedGraduation: "2027-05-01"
             )
         }
 
@@ -300,7 +321,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             boardName: nil,
             referralCode: "newuser1",
             verifiedReferralCount: 0,
-            instantInvitesRemaining: 3
+            instantInvitesRemaining: 3,
+            expectedGraduation: nil
         )
     }
 
@@ -328,7 +350,8 @@ private extension OnboardingStatus {
         pendingSchoolEmail: String?? = nil,
         schoolName: String?? = nil,
         boardId: UUID?? = nil,
-        boardName: String?? = nil
+        boardName: String?? = nil,
+        expectedGraduation: String?? = nil
     ) -> OnboardingStatus {
         OnboardingStatus(
             id: id,
@@ -348,7 +371,8 @@ private extension OnboardingStatus {
             boardName: boardName ?? self.boardName,
             referralCode: self.referralCode,
             verifiedReferralCount: self.verifiedReferralCount,
-            instantInvitesRemaining: self.instantInvitesRemaining
+            instantInvitesRemaining: self.instantInvitesRemaining,
+            expectedGraduation: expectedGraduation ?? self.expectedGraduation
         )
     }
 }

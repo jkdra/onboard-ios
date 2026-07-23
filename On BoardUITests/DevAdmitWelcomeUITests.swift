@@ -83,6 +83,14 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         otpField.tap()
         otpField.typeText("123456")
 
+        // ── Graduation ───────────────────────────────────────────────────
+        // Client-inserted step after school verification; the default month/year
+        // is fine, so just Continue.
+        XCTAssertTrue(app.navigationBars["Graduation"].waitForExistence(timeout: 10), "graduation step did not appear")
+        let gradContinue = app.buttons["Continue"]
+        XCTAssertTrue(gradContinue.waitForExistence(timeout: 4))
+        gradContinue.tap()
+
         // ── Waitlist → dev admission ─────────────────────────────────────
         let devButton = app.buttons["Join Board [DEV]"]
         XCTAssertTrue(devButton.waitForExistence(timeout: 12), "waitlist screen with dev button did not appear")

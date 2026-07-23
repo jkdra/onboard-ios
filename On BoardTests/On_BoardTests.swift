@@ -1029,7 +1029,8 @@ struct OnboardingStoreTests {
             boardName: nil,
             referralCode: nil,
             verifiedReferralCount: nil,
-            instantInvitesRemaining: nil
+            instantInvitesRemaining: nil,
+            expectedGraduation: nil
         )
 
         #expect(status.isComplete)
@@ -1060,7 +1061,8 @@ struct OnboardingStoreTests {
             boardName: "On Board",
             referralCode: "abc123",
             verifiedReferralCount: 0,
-            instantInvitesRemaining: 3
+            instantInvitesRemaining: 3,
+            expectedGraduation: nil
         )
 
         #expect(status.effectiveOnboardingStep == .complete)
@@ -1124,6 +1126,10 @@ struct OnboardingStalenessTests {
         func submitReferralCode(_ code: String) async throws {
             try await inner.submitReferralCode(code)
         }
+
+        func setExpectedGraduation(_ month: Date) async throws {
+            try await inner.setExpectedGraduation(month)
+        }
     }
 
     @Test func refreshIfOnlineRefetchesOnceStatusIsStale() async throws {
@@ -1165,7 +1171,7 @@ struct OnboardingCoordinatorTargetPathTests {
     @Test func waitlistStepProducesFullPath() {
         #expect(
             OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
-                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .waitlist]
+                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
         )
     }
 
