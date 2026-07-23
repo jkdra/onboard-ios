@@ -89,13 +89,34 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         devButton.tap()
 
         // ── Welcome celebration ──────────────────────────────────────────
-        let reveal = app.staticTexts["You're in!"]
+        // Typewriter text — match on the full typed line's container.
+        let reveal = app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "You're in!")).firstMatch
         XCTAssertTrue(reveal.waitForExistence(timeout: 10), "welcome celebration did not appear after dev admission")
 
-        let cta = app.buttons["Step on board"]
-        XCTAssertTrue(cta.waitForExistence(timeout: 5))
-        cta.tap()
-        XCTAssertTrue(reveal.waitForNonExistence(timeout: 5))
+        let continueButton = app.buttons["Continue"]
+        XCTAssertTrue(continueButton.waitForExistence(timeout: 6))
+        let enabledCTA = NSPredicate(format: "isEnabled == true")
+        XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: enabledCTA, object: continueButton)], timeout: 6)
+        continueButton.tap()
+
+        // ── Pledge ────────────────────────────────────────────────────────
+        XCTAssertTrue(app.staticTexts["One more thing."].waitForExistence(timeout: 6), "pledge screen did not appear")
+
+        let signButton = app.buttons["Sign & step on board"]
+        XCTAssertTrue(signButton.waitForExistence(timeout: 4))
+        XCTAssertFalse(signButton.isEnabled, "sign button should be disabled before a signature is drawn")
+
+        let canvas = app.descendants(matching: .any).matching(identifier: "SignatureCanvas").firstMatch
+        XCTAssertTrue(canvas.waitForExistence(timeout: 4), "signature canvas missing")
+        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.25, dy: 0.5))
+            .press(forDuration: 0.05, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.75, dy: 0.55)))
+
+        XCTWaiter().wait(for: [XCTNSPredicateExpectation(predicate: enabledCTA, object: signButton)], timeout: 4)
+        XCTAssertTrue(signButton.isEnabled, "sign button did not enable after drawing")
+        signButton.tap()
+
+        // Signing dismisses the whole cover back to the feed.
+        XCTAssertTrue(app.staticTexts["One more thing."].waitForNonExistence(timeout: 6))
     }
 
     @MainActor
