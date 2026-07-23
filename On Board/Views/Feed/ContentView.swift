@@ -11,6 +11,7 @@ struct ContentView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(AuthStore.self) private var auth
+    @Environment(OnboardingStore.self) private var onboarding
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
@@ -21,6 +22,7 @@ struct ContentView: View {
     @State private var pulseLowOpacity = false
     @State private var alertError: PresentableAlertError?
     @State private var isResolvingPendingProfile = false
+    @State private var showWelcomeReplay = false
     @Namespace private var cardNamespace
 
     private var clearingSoon: Bool {
@@ -149,6 +151,15 @@ struct ContentView: View {
         let feedItems = store.feedItems
         return ZStack {
             ScrollView {
+                if onboarding.supportsDevAdmission {
+                    Button("Replay Welcome [DEV]") {
+                        showWelcomeReplay = true
+                    }
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 4)
+                }
+
                 BoardFeedView(
                     items: feedItems,
                     onNewPost: { showNewPost = true },
@@ -204,6 +215,9 @@ struct ContentView: View {
         }
         .refreshable {
             await store.refresh(for: store.currentUserID)
+        }
+        .fullScreenCover(isPresented: $showWelcomeReplay) {
+            WelcomeOnBoardView(boardName: onboarding.status?.boardName)
         }
         .navigationTitle("This Week")
         .task {
