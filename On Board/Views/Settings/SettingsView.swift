@@ -17,7 +17,6 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showProfanityInfo = false
-    @State private var webDocument: WebDocument?
 
     var body: some View {
         // No wrapping NavigationStack — this is pushed as a BoardRoute.settings
@@ -122,12 +121,12 @@ struct SettingsView: View {
                 legalLinkRow(
                     title: "Privacy Policy",
                     systemImage: "hand.raised.fill",
-                    url: AppLinks.privacyPolicyURL
+                    type: .privacy
                 )
                 legalLinkRow(
                     title: "Terms of Service",
                     systemImage: "doc.text.fill",
-                    url: AppLinks.termsOfServiceURL
+                    type: .terms
                 )
             } header: {
                 Text("Legal")
@@ -155,34 +154,23 @@ struct SettingsView: View {
             guard !isSignedIn else { return }
             dismiss()
         }
-        .sheet(item: $webDocument) { document in
-            WebContentSheet(document: document)
-        }
     }
 
     // MARK: - Legal links
 
-    private func legalLinkRow(title: String, systemImage: String, url: URL) -> some View {
-        Button {
-            webDocument = WebDocument(title: title, url: url)
+    private func legalLinkRow(title: String, systemImage: String, type: LegalDocumentType) -> some View {
+        // Native in-app policy page (fetches the canonical text from the
+        // backend), not a web view — a NavigationLink pushes PolicyView.
+        NavigationLink {
+            PolicyView(type: type)
         } label: {
             HStack(spacing: 12) {
                 SettingsIconBadge(systemImage: systemImage)
                 Text(title).fontStyle(.body)
-                Spacer(minLength: 8)
-                // Signals this row shows external (web) content, even though
-                // it opens in-app rather than handing off to Safari.
-                Image(systemName: "arrow.up.right")
-                    .fontStyle(.footnote)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
         .foregroundStyle(.primary)
-        .accessibilityHint("Opens in a web view")
     }
 
     // MARK: - Invite section
