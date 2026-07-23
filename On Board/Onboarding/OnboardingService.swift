@@ -13,6 +13,7 @@ enum OnboardingError: Error, Equatable, Sendable, LocalizedError {
     case profileIncomplete
     case invalidSchoolEmail
     case schoolUnsupported
+    case schoolEmailInUse
     case schoolVerificationIncomplete
     case networkUnavailable
     case sessionExpired
@@ -34,6 +35,8 @@ enum OnboardingError: Error, Equatable, Sendable, LocalizedError {
             "Use a valid .edu email address."
         case .schoolUnsupported:
             "We don't support that school yet."
+        case .schoolEmailInUse:
+            "That school email is already linked to another account."
         case .schoolVerificationIncomplete:
             "Verify your school email to continue."
         case .networkUnavailable:
@@ -66,9 +69,11 @@ protocol OnboardingService: Sendable {
     func completeUsername(_ handle: String) async throws -> OnboardingStep
     func completeProfile(displayName: String, bio: String?, avatarUrl: String?) async throws -> OnboardingStep
     func lookupSchool(for email: String) async throws -> SchoolMatch?
+    func checkSchoolEmailAvailable(_ email: String) async throws -> Bool
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch
     func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep
     func joinWaitlist() async throws -> OnboardingStep
+    func submitReferralCode(_ code: String) async throws
 }
 
 enum OnboardingServiceFactory {

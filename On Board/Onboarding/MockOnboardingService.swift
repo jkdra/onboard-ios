@@ -104,6 +104,13 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return Self.match(for: email)
     }
 
+    func checkSchoolEmailAvailable(_ email: String) async throws -> Bool {
+        try await Task.sleep(for: .milliseconds(120))
+        // Same convention as beginSchoolEmailVerification's in-use guard: a
+        // local part starting with "taken" simulates a registered email.
+        return !EmailNormalizer.normalized(email).hasPrefix("taken")
+    }
+
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
         try await Task.sleep(for: .milliseconds(180))
         guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
@@ -113,6 +120,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else {
             throw OnboardingError.invalidSchoolEmail
+        }
+        // Mirrors the live one-account-per-email guard: any local part starting
+        // with "taken" simulates an email another profile already verified.
+        if normalized.hasPrefix("taken") {
+            throw OnboardingError.schoolEmailInUse
         }
         guard let match = Self.match(for: normalized) else {
             throw OnboardingError.schoolUnsupported
@@ -166,7 +178,10 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             pendingSchoolEmail: nil,
             schoolName: match.schoolName,
             boardId: match.boardId,
-            boardName: match.boardName
+            boardName: match.boardName,
+            referralCode: status.referralCode,
+            verifiedReferralCount: status.verifiedReferralCount,
+            instantInvitesRemaining: status.instantInvitesRemaining
         )
         save(status, for: userID)
         return .waitlist
@@ -178,12 +193,6 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
 
-        // Joining the waitlist does not complete onboarding — only real admission
-        // (setting boardId) does. Mirrors the live join_waitlist() RPC, which used
-        // to mark onboarding_step 'complete' on a bare join and relied entirely on
-        // the client's effectiveOnboardingStep fallback to keep the user parked
-        // here; that fallback being the only thing standing between "joined" and
-        // "treated as fully onboarded" was the bug.
         var status = loadStatus(for: userID)
         status = status.updating(
             onboardingStep: .waitlist,
@@ -191,6 +200,10 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         )
         save(status, for: userID)
         return .waitlist
+    }
+
+    func submitReferralCode(_ code: String) async throws {
+        try await Task.sleep(for: .milliseconds(180))
     }
 
     private func loadStatus(for userID: UUID) -> OnboardingStatus {
@@ -241,7 +254,10 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
                 pendingSchoolEmail: nil,
                 schoolName: "Example University",
                 boardId: SampleBoardID.main,
-                boardName: "On Board"
+                boardName: "On Board",
+                referralCode: "maya123",
+                verifiedReferralCount: 5,
+                instantInvitesRemaining: 3
             )
         }
 
@@ -260,7 +276,10 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             pendingSchoolEmail: nil,
             schoolName: nil,
             boardId: nil,
-            boardName: nil
+            boardName: nil,
+            referralCode: "newuser1",
+            verifiedReferralCount: 0,
+            instantInvitesRemaining: 3
         )
     }
 
@@ -305,7 +324,10 @@ private extension OnboardingStatus {
             pendingSchoolEmail: pendingSchoolEmail ?? self.pendingSchoolEmail,
             schoolName: schoolName ?? self.schoolName,
             boardId: boardId ?? self.boardId,
-            boardName: boardName ?? self.boardName
+            boardName: boardName ?? self.boardName,
+            referralCode: self.referralCode,
+            verifiedReferralCount: self.verifiedReferralCount,
+            instantInvitesRemaining: self.instantInvitesRemaining
         )
     }
 }

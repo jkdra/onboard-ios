@@ -893,6 +893,45 @@ struct MockOnboardingServiceTests {
         #expect(status.isComplete == false)
         #expect(status.waitlistJoinedAt != nil)
     }
+
+    @Test func rejectsSchoolEmailAlreadyLinkedToAnotherAccount() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingEmailInUse")!
+        defaults.removePersistentDomain(forName: "MockOnboardingEmailInUse")
+
+        let auth = MockAuthService(defaults: defaults)
+        _ = try await auth.verifyPhoneOTP(phone: "+15555550102", token: "123456")
+
+        let onboarding = MockOnboardingService(defaults: defaults)
+        await #expect(throws: OnboardingError.schoolEmailInUse) {
+            _ = try await onboarding.beginSchoolEmailVerification("taken@example.edu")
+        }
+
+        // The inline pre-check the school email step uses reports the same email
+        // as taken, and a fresh one as available.
+        #expect(try await onboarding.checkSchoolEmailAvailable("taken@example.edu") == false)
+        #expect(try await onboarding.checkSchoolEmailAvailable("fresh@example.edu") == true)
+    }
+
+    @Test func referralRewardLadderBoundaries() {
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 0) == 0)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 3) == 0)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 4) == 1)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 5) == 3)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 12) == 3)
+        // Clawback consistency: rewards derive from the live count, so a
+        // deleted referred account dropping the count from 5 to 4 also drops
+        // the earned months from 3 to 1 — by design, not by accident.
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 5 - 1) == 1)
+    }
+
+    @Test func firstClassIsProgressivelyDisclosed() {
+        // No First Class mention until the user is one invite from earning it.
+        #expect(ReferralRewards.milestoneText(for: 0) == nil)
+        #expect(ReferralRewards.milestoneText(for: 2) == nil)
+        #expect(ReferralRewards.milestoneText(for: 3)?.contains("1 more invite") == true)
+        #expect(ReferralRewards.milestoneText(for: 4)?.contains("Free month") == true)
+        #expect(ReferralRewards.milestoneText(for: 5)?.contains("3 free months") == true)
+    }
 }
 
 @MainActor
@@ -939,7 +978,10 @@ struct OnboardingStoreTests {
             pendingSchoolEmail: nil,
             schoolName: nil,
             boardId: nil,
-            boardName: nil
+            boardName: nil,
+            referralCode: nil,
+            verifiedReferralCount: nil,
+            instantInvitesRemaining: nil
         )
 
         #expect(status.isComplete)
@@ -985,6 +1027,10 @@ struct OnboardingStalenessTests {
             try await inner.lookupSchool(for: email)
         }
 
+        func checkSchoolEmailAvailable(_ email: String) async throws -> Bool {
+            try await inner.checkSchoolEmailAvailable(email)
+        }
+
         func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
             try await inner.beginSchoolEmailVerification(email)
         }
@@ -995,6 +1041,10 @@ struct OnboardingStalenessTests {
 
         func joinWaitlist() async throws -> OnboardingStep {
             try await inner.joinWaitlist()
+        }
+
+        func submitReferralCode(_ code: String) async throws {
+            try await inner.submitReferralCode(code)
         }
     }
 

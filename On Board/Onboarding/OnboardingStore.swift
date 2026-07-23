@@ -6,6 +6,22 @@
 import Foundation
 import Observation
 
+/// A referral code captured from an invite deep link before the user reaches
+/// the profile step. Lives in UserDefaults (not the store) so it survives the
+/// sign-in flow; cleared on successful submission and on sign-out so it can't
+/// leak into a different account's onboarding on the same device.
+enum PendingReferralCode {
+    static let key = "pendingReferralCode"
+
+    static func store(_ code: String) {
+        UserDefaults.standard.set(code, forKey: key)
+    }
+
+    static func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
 @Observable
 @MainActor
 final class OnboardingStore {
@@ -160,6 +176,27 @@ final class OnboardingStore {
         }
     }
 
+    /// Inline pre-check for the school email step, mirroring
+    /// `checkHandleAvailable`. Unlike the handle check, an indeterminate error
+    /// resolves to `.available` — the guard in begin_school_email_verification
+    /// is authoritative and re-checks at send, so a transient failure here
+    /// shouldn't strand the user behind a disabled button.
+    func checkSchoolEmailAvailable(_ email: String) async -> HandleCheckResult {
+        if requiresNetwork, !network.isConnected {
+            return .networkError
+        }
+
+        do {
+            let isAvailable = try await service.checkSchoolEmailAvailable(email)
+            return isAvailable ? .available : .taken
+        } catch {
+            if NetworkErrorClassifier.isConnectivityFailure(error) {
+                return .networkError
+            }
+            return .available
+        }
+    }
+
     func lookupSchool(for email: String) async -> SchoolLookupResult {
         if requiresNetwork, !network.isConnected {
             return .networkError
@@ -197,13 +234,22 @@ final class OnboardingStore {
     }
 
     @discardableResult
-    func submitProfile(displayName: String, bio: String?, avatarUrl: String? = nil) async -> Bool {
+    func submitProfile(displayName: String, bio: String?, avatarUrl: String? = nil, referralCode: String? = nil) async -> Bool {
         await performSubmit {
+            // Referral code goes first: if it's invalid the user gets the error
+            // while the field is still on screen to fix or clear — a swallowed
+            // failure here would silently never credit the referrer. The RPC is
+            // idempotent for the same code, so a retry after a completeProfile
+            // failure doesn't error on the already-applied code.
+            if let referralCode, !referralCode.isEmpty {
+                try await service.submitReferralCode(referralCode)
+            }
             _ = try await service.completeProfile(
                 displayName: displayName,
                 bio: bio,
                 avatarUrl: avatarUrl
             )
+            PendingReferralCode.clear()
             await refresh(force: true)
             return status?.onboardingStep == .schoolVerify
                 || status?.onboardingStep == .waitlist

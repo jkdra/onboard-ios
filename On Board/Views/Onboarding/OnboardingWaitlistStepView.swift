@@ -141,14 +141,74 @@ struct OnboardingWaitlistStepView: View {
 
     // MARK: - Action
 
+    private var inviteURL: URL? {
+        guard let code = onboarding.status?.referralCode else { return nil }
+        return InviteLink.url(for: code)
+    }
+
+    /// The referral elements as one visual group: pitch, code, count, and the
+    /// share button that acts on them.
+    @ViewBuilder
+    private func referralCard(code: String) -> some View {
+        VStack(spacing: 10) {
+            Text("Skip the line! Invite friends using your code:")
+                .fontStyle(.footnote)
+                .foregroundStyle(.secondary)
+
+            Text(code.uppercased())
+                .fontStyle(.title2)
+                .fontWeight(.black)
+                .monospaced()
+                .foregroundStyle(.primary)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 16)
+                .background(Capsule().fill(.quaternary))
+
+            if let count = onboarding.status?.verifiedReferralCount, count > 0 {
+                Text("🔥 \(count) friend\(count == 1 ? "" : "s") invited!")
+                    .fontStyle(.caption)
+                    .foregroundStyle(.orange)
+            }
+
+            if let milestone = ReferralRewards.milestoneText(for: onboarding.status?.verifiedReferralCount ?? 0) {
+                Text(milestone)
+                    .fontStyle(.caption2)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            if let inviteURL {
+                ShareLink(
+                    item: inviteURL,
+                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: false))
+                ) {
+                    Label("Invite Friends", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.boardPrimary)
+                .tint(.primary)
+                .padding(.top, 4)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.thinMaterial))
+    }
+
     @ViewBuilder
     private var actionArea: some View {
-        if notificationStatus == .authorized || notificationStatus == .provisional {
-            Label("Thanks for enabling notifications!", systemImage: "checkmark.circle.fill")
-                .fontStyle(.subheadline)
-                .foregroundStyle(.secondary)
-        } else {
-            VStack(spacing: 12) {
+        VStack(spacing: 16) {
+            // Sharing is the whole point of the waitlist screen — it's always
+            // available, regardless of notification state.
+            if let code = onboarding.status?.referralCode {
+                referralCard(code: code)
+            }
+
+            if notificationStatus == .authorized || notificationStatus == .provisional {
+                Label("Thanks for enabling notifications!", systemImage: "checkmark.circle.fill")
+                    .fontStyle(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 8)
+            } else {
                 Label("Notifications aren't enabled! Turn on notifications so you don't miss the moment your spot opens up!", systemImage: "exclamationmark.triangle.fill")
                     .fontStyle(.caption)
                     .foregroundStyle(.red)

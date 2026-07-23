@@ -42,3 +42,4 @@ fastlane/test_output
 .agents/
 .mcp.json
 skills-lock.json
+.claude/

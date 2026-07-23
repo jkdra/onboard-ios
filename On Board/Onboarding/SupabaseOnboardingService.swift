@@ -130,6 +130,17 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         return rows.first
     }
 
+    func checkSchoolEmailAvailable(_ email: String) async throws -> Bool {
+        let normalized = EmailNormalizer.normalized(email)
+        guard SchoolEmailRules.isValid(normalized) else { return true }
+
+        let client = try requireClient()
+        return try await client
+            .rpc("check_school_email_available", params: ["p_email": normalized])
+            .execute()
+            .value
+    }
+
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
         let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else {
@@ -147,6 +158,7 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
             if case .httpError(let code, _) = error {
                 switch code {
                 case 400: throw OnboardingError.invalidSchoolEmail
+                case 409: throw OnboardingError.schoolEmailInUse
                 case 422: throw OnboardingError.schoolUnsupported
                 default: break
                 }
@@ -159,14 +171,27 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         let normalized = EmailNormalizer.normalized(email)
         let trimmedToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
         let client = try requireClient()
-        let step: OnboardingStep = try await client
-            .rpc("complete_school_email_verification_v2", params: [
-                "p_email": normalized,
-                "p_token": trimmedToken
-            ])
+        do {
+            let step: OnboardingStep = try await client
+                .rpc("complete_school_email_verification_v2", params: [
+                    "p_email": normalized,
+                    "p_token": trimmedToken
+                ])
+                .execute()
+                .value
+            return step
+        } catch let error as PostgrestError where error.message.contains("already linked") {
+            // Race path: another account verified this email between the OTP
+            // being sent and confirmed.
+            throw OnboardingError.schoolEmailInUse
+        }
+    }
+
+    func submitReferralCode(_ code: String) async throws {
+        let client = try requireClient()
+        try await client
+            .rpc("submit_referral_code", params: ["p_code": code.trimmingCharacters(in: .whitespacesAndNewlines)])
             .execute()
-            .value
-        return step
     }
 
     private func requireClient() throws -> SupabaseClient {

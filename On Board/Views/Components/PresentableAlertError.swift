@@ -153,6 +153,8 @@ extension OnboardingError: PresentableDomainError {
             String(localized: "Use your school-issued .edu address.")
         case .schoolUnsupported:
             String(localized: "Try a different .edu email or contact support.")
+        case .schoolEmailInUse:
+            String(localized: "Each school email can verify only one account. Sign in to the account that used it, or use a different .edu email.")
         case .schoolVerificationIncomplete:
             String(localized: "Enter the code from your verification email.")
         case .profileIncomplete:

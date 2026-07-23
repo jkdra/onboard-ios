@@ -90,6 +90,8 @@ struct SettingsView: View {
 
             accountSection
 
+            inviteSection
+
             Section {
                 NavigationLink {
                     NotificationSettingsView()
@@ -183,6 +185,48 @@ struct SettingsView: View {
         .accessibilityHint("Opens in a web view")
     }
 
+    // MARK: - Invite section
+
+    /// Admitted users keep sharing their code from Settings. While they have
+    /// instant invites left, a signup through their code skips the waitlist
+    /// entirely; at zero the code degrades to a priority referral.
+    @ViewBuilder
+    private var inviteSection: some View {
+        if onboarding.isComplete,
+           let code = onboarding.status?.referralCode,
+           let url = InviteLink.url(for: code) {
+            let instantRemaining = onboarding.status?.instantInvitesRemaining ?? 0
+            Section {
+                LabeledContent {
+                    Text(code.uppercased())
+                        .fontStyle(.body)
+                        .monospaced()
+                        .textSelection(.enabled)
+                } label: {
+                    Text("Your invite code").fontStyle(.body)
+                }
+
+                ShareLink(
+                    item: url,
+                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: instantRemaining > 0))
+                ) {
+                    SettingsRowLabel(title: "Share Invite", systemImage: "square.and.arrow.up.fill")
+                }
+            } header: {
+                Text("Invite Friends")
+                    .fontStyle(.subheadline)
+            } footer: {
+                if instantRemaining > 0 {
+                    Text("Your next \(instantRemaining) invite\(instantRemaining == 1 ? "" : "s") skip the waitlist entirely.")
+                        .fontStyle(.footnote)
+                } else {
+                    Text("Friends who join with your code get bumped up the waitlist.")
+                        .fontStyle(.footnote)
+                }
+            }
+        }
+    }
+
     // MARK: - Account section
 
     @ViewBuilder
@@ -233,4 +277,9 @@ struct SettingsView: View {
     }
     .environment(AuthStore(service: MockAuthService()))
     .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
+    .environment(OnboardingStore(
+        service: MockOnboardingService(),
+        auth: AuthStore(service: MockAuthService()),
+        network: NetworkMonitor()
+    ))
 }

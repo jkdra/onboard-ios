@@ -12,6 +12,7 @@ struct OnboardingProfileStepView: View {
 
     @State private var displayName = ""
     @State private var bio = ""
+    @AppStorage(PendingReferralCode.key) private var referralCode = ""
     @State private var avatarUrl: String?
     @State private var selectedPhotoItem: PhotosPickerItem?
     @State private var selectedPhotoData: Data?
@@ -84,6 +85,14 @@ struct OnboardingProfileStepView: View {
                             .monospacedDigit()
                             .animation(.easeInOut(duration: 0.15), value: bio.count)
                     }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Invite code (optional)", text: $referralCode)
+                        .textFieldStyle(.boardBody)
+                        .fontStyle(.body)
+                        .textInputAutocapitalization(.characters)
+                        .autocorrectionDisabled()
                 }
 
                 Divider()
@@ -178,7 +187,8 @@ struct OnboardingProfileStepView: View {
                         await onboarding.submitProfile(
                             displayName: displayName,
                             bio: bio,
-                            avatarUrl: avatarUrl
+                            avatarUrl: avatarUrl,
+                            referralCode: referralCode.isEmpty ? nil : referralCode
                         )
                     }
                 } label: {
