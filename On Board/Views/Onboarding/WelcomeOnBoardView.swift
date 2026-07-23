@@ -43,6 +43,20 @@ struct WelcomeOnBoardView: View {
     }
 
     @State private var phase: Phase = .hidden
+    /// Talking-sprite frame. The open-notch faces (OBLogo / HostHappy) are
+    /// The Host's IDLE state — the speech-tail variants are the closed-mouth
+    /// frames he flaps through while a bubble lands, then he settles back
+    /// open.
+    @State private var mouthClosed = false
+
+    private var hostImageName: String {
+        switch phase {
+        case .hidden, .greeting:
+            return mouthClosed ? "HostSpeech" : "OBLogo"
+        case .reveal:
+            return mouthClosed ? "HostHappySpeech" : "HostHappy"
+        }
+    }
 
     var body: some View {
         ZStack {
@@ -96,7 +110,7 @@ struct WelcomeOnBoardView: View {
     /// pointing right, about 40% down the glyph — the bubble hangs off it.
     private var hostWithBubble: some View {
         HStack(alignment: .top, spacing: -6) {
-            Image(phase == .reveal ? "HostHappySpeech" : "HostSpeech")
+            Image(hostImageName)
                 .resizable()
                 .scaledToFit()
                 .frame(width: 150)
@@ -158,6 +172,7 @@ struct WelcomeOnBoardView: View {
 
         if reduceMotion {
             phase = .reveal
+            mouthClosed = false
             return
         }
 
@@ -165,11 +180,28 @@ struct WelcomeOnBoardView: View {
             phase = .greeting
         }
 
-        try? await Task.sleep(for: .milliseconds(1400))
+        // He "says" the greeting: flap through the closed-mouth frame, then
+        // settle back to the open-notch idle.
+        await flapMouth(times: 3)
+        try? await Task.sleep(for: .milliseconds(500))
         guard !Task.isCancelled else { return }
 
         withAnimation(.spring(duration: 0.5, bounce: 0.3)) {
             phase = .reveal
+        }
+        await flapMouth(times: 4)
+    }
+
+    /// Two-frame talking sprite: open ↔ closed, ending open (idle). Frame
+    /// swaps are deliberately unanimated — sprite flips, not crossfades.
+    private func flapMouth(times: Int) async {
+        for _ in 0..<times {
+            guard !Task.isCancelled else { return }
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { mouthClosed = true }
+            try? await Task.sleep(for: .milliseconds(120))
+            withTransaction(t) { mouthClosed = false }
+            try? await Task.sleep(for: .milliseconds(140))
         }
     }
 }
