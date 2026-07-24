@@ -218,17 +218,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
         var status = loadStatus(for: userID)
-        status = status.updating(expectedGraduation: Self.monthString(from: month))
+        status = status.updating(expectedGraduation: GraduationMonth.wireString(from: month))
         save(status, for: userID)
-    }
-
-    /// "yyyy-MM-01" — the wire format OnboardingStatus.expectedGraduation uses.
-    static func monthString(from date: Date) -> String {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-01"
-        return f.string(from: date)
     }
 
     /// Dev-only lever for the waitlist screen's "Join Board [DEV]" button:

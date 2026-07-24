@@ -48,7 +48,7 @@ struct InstitutionSettingsView: View {
                     showGraduationEditor = true
                 } label: {
                     LabeledContent {
-                        Text(GraduationFormat.display(status?.expectedGraduation) ?? "Set")
+                        Text(GraduationMonth.display(status?.expectedGraduation) ?? "Set")
                             .foregroundStyle(.secondary)
                     } label: {
                         Text("Expected graduation").fontStyle(.body)
@@ -84,7 +84,7 @@ struct GraduationEditorSheet: View {
 
     init(current: String?) {
         self.current = current
-        let parsed = GraduationFormat.parse(current)
+        let parsed = GraduationMonth.parse(current)
         _month = State(initialValue: parsed?.month ?? 5)
         _year = State(initialValue: parsed?.year ?? Calendar.current.component(.year, from: Date()) + 1)
     }
@@ -147,31 +147,5 @@ struct GraduationEditorSheet: View {
             }
         }
         .presentationDetents([.medium])
-    }
-}
-
-/// Format helpers for the "yyyy-MM-01" wire string used by expected_graduation.
-enum GraduationFormat {
-    static func parse(_ raw: String?) -> (month: Int, year: Int)? {
-        guard let raw else { return nil }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        guard let date = f.date(from: raw) else { return nil }
-        let c = Calendar.current.dateComponents([.month, .year], from: date)
-        guard let m = c.month, let y = c.year else { return nil }
-        return (m, y)
-    }
-
-    /// "May 2027" for display, or nil if unset/unparseable.
-    static func display(_ raw: String?) -> String? {
-        guard let raw else { return nil }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        guard let date = f.date(from: raw) else { return nil }
-        let out = DateFormatter()
-        out.dateFormat = "MMMM yyyy"
-        return out.string(from: date)
     }
 }

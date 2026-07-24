@@ -196,12 +196,8 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
 
     func setExpectedGraduation(_ month: Date) async throws {
         let client = try requireClient()
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-01"
         try await client
-            .rpc("set_expected_graduation", params: ["p_month": formatter.string(from: month)])
+            .rpc("set_expected_graduation", params: ["p_month": GraduationMonth.wireString(from: month)])
             .execute()
     }
 
