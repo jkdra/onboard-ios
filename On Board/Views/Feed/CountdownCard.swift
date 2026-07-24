@@ -10,12 +10,22 @@ struct CountdownCard: View {
     let week: BoardWeek?
     let isArchived: Bool
     var columnWidth: CGFloat = 0
+    /// Set true on the user's birthday to play the one-time greeting: the text
+    /// cross-fades to "Happy Birthday by the way!" while the Host hard-flips to
+    /// his happy face at the midpoint, then it cross-fades back.
+    var celebrateBirthday: Bool = false
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("profanityEnabled") private var profanityEnabled = false
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @State private var triggerShake = 0
+
+    // Birthday greeting choreography (state lives on the stable card so it
+    // survives the TimelineView's per-tick rebuilds of the countdown body).
+    @State private var greetingActive = false      // text shows the greeting
+    @State private var greetingHostHappy = false   // Host mark is the happy face
+    @State private var greetingOpacity: Double = 1 // cross-fade for the TEXT only
 
     private var currentPromptText: String? {
         let activeWeek = week ?? store.activeBoardWeek
@@ -73,6 +83,36 @@ struct CountdownCard: View {
                 UIImpactFeedbackGenerator(style: .soft).impactOccurred()
             }
         }
+        .task(id: celebrateBirthday) {
+            guard celebrateBirthday else { return }
+            await runBirthdayGreeting()
+        }
+    }
+
+    /// Finite there-and-back: fade text out, hard-swap to the greeting + happy
+    /// Host at zero opacity, fade in, hold, then reverse. Reduce Motion collapses
+    /// the fades but keeps the moment.
+    private func runBirthdayGreeting() async {
+        func fade(to value: Double) {
+            withAnimation(.easeInOut(duration: 0.4)) { greetingOpacity = value }
+        }
+        func hardSwap(greeting: Bool) {
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { greetingActive = greeting; greetingHostHappy = greeting }
+        }
+
+        fade(to: 0)
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        hardSwap(greeting: true)                       // Host flips happy at 0 opacity
+        fade(to: 1)
+        try? await Task.sleep(for: .milliseconds(2600)) // hold on the greeting
+        guard !Task.isCancelled else { return }
+        fade(to: 0)
+        try? await Task.sleep(for: .milliseconds(400))
+        guard !Task.isCancelled else { return }
+        hardSwap(greeting: false)
+        fade(to: 1)
     }
 
     private var archivedNotice: some View {
@@ -152,39 +192,55 @@ struct CountdownCard: View {
         let config = countdownConfig(remaining: remaining.totalSeconds)
 
         ZStack(alignment: .bottomTrailing) {
-            Image("OBLogo")
+            // The Host mark — its own layer so it HARD-swaps (idle → happy) at the
+            // greeting midpoint without fading. HostIdle matches OBLogo's footprint;
+            // HostIdle/HostHappy share a canvas height, so the swap doesn't jump.
+            Image(greetingHostHappy ? "HostHappy" : "HostIdle")
                 .resizable()
                 .scaledToFit()
                 .frame(width: 72, height: 72)
-                .opacity(0.12)
+                .opacity(greetingHostHappy ? 0.34 : 0.12)
                 .offset(x: 8, y: 12)
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(config.bodyText)
-                    .fontStyle(.callout)
-                    .fontWeight(config.isPrompt ? .medium : .regular)
-                    .foregroundStyle(.primary) // Higher opacity
-                
-                Spacer(minLength: 0)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(config.caption.uppercased())
-                        .fontStyle(.caption2)
-                        .fontWeight(.bold)
-                        .foregroundStyle(config.showRed ? .red : .secondary)
-                    
-                    HStack(alignment: .bottom, spacing: 10) {
-                        if !is3Hours {
-                            counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
-                        }
-                        counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
-                        counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
-                        if is3Hours {
-                            counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+            Group {
+                if greetingActive {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Happy Birthday by the way!")
+                            .fontStyle(.callout)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+                        Spacer(minLength: 0)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(config.bodyText)
+                            .fontStyle(.callout)
+                            .fontWeight(config.isPrompt ? .medium : .regular)
+                            .foregroundStyle(.primary) // Higher opacity
+
+                        Spacer(minLength: 0)
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(config.caption.uppercased())
+                                .fontStyle(.caption2)
+                                .fontWeight(.bold)
+                                .foregroundStyle(config.showRed ? .red : .secondary)
+
+                            HStack(alignment: .bottom, spacing: 10) {
+                                if !is3Hours {
+                                    counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
+                                }
+                                counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
+                                counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
+                                if is3Hours {
+                                    counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+                                }
+                            }
                         }
                     }
                 }
             }
+            .opacity(greetingOpacity)   // cross-fade the TEXT only; the Host doesn't fade
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }

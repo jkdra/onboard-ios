@@ -23,6 +23,9 @@ struct ContentView: View {
     @State private var alertError: PresentableAlertError?
     @State private var isResolvingPendingProfile = false
     @State private var showWelcomeReplay = false
+    /// Fires the once-a-year birthday celebration (fireworks + the countdown
+    /// card's greeting) when the current user's birthday is today.
+    @State private var birthdayCelebrating = false
     // DEV-only: refine the Signal Lost image placeholder against a real load.
     @State private var devShowLoadedImage = false
     @State private var devPlaceholderTint: PostTone?
@@ -211,7 +214,8 @@ struct ContentView: View {
                 BoardFeedView(
                     items: feedItems,
                     onNewPost: { showNewPost = true },
-                    isResetting: boardIsResetting
+                    isResetting: boardIsResetting,
+                    celebrateBirthday: birthdayCelebrating
                 )
 
                 if store.isLive, !store.isLoading, !store.hasFeedPosts {
@@ -229,6 +233,14 @@ struct ContentView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
             }
+        }
+        .fireworks(isActive: birthdayCelebrating)
+        .task(id: store.currentUser?.id) {
+            guard let user = store.currentUser,
+                  BirthdayCelebration.isToday(user.birthday),
+                  !BirthdayCelebration.feedShown(for: user.id) else { return }
+            BirthdayCelebration.markFeedShown(for: user.id)
+            birthdayCelebrating = true
         }
         .background {
             if clearingSoon {

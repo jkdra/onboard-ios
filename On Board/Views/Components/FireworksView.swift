@@ -23,6 +23,27 @@
 
 import SwiftUI
 
+/// Where the fireworks sit relative to the content they celebrate.
+enum FireworksPlacement {
+    /// Over the content (use when the content is opaque, e.g. the feed).
+    case above
+    /// Behind the content (use when the content is transparent and should be
+    /// framed by the burst, e.g. the welcome cover).
+    case behind
+}
+
+extension View {
+    /// The modular way to add a celebration: flip a Bool, no hand-placed canvas.
+    /// The fireworks are finite and idle-safe (see `FireworksView`).
+    @ViewBuilder
+    func fireworks(isActive: Bool, placement: FireworksPlacement = .above) -> some View {
+        switch placement {
+        case .above:  overlay { FireworksView(isActive: isActive) }
+        case .behind: background { FireworksView(isActive: isActive) }
+        }
+    }
+}
+
 struct FireworksView: View {
     /// Flip to true to fire the show once.
     var isActive: Bool

@@ -29,6 +29,7 @@ struct ProfileReadContent: View {
     let onEditProfile: () -> Void
     let onAvatarTap: () -> Void
     let onUnblock: () -> Void
+    var celebrateBirthday: Bool = false
 
     @Environment(BoardStore.self) private var store
 
@@ -50,7 +51,7 @@ struct ProfileReadContent: View {
                     .matchedGeometryEffect(id: ProfileGeometryID.bio, in: namespace, anchor: .leading)
             }
 
-            ProfileMetaRow(profile: profile, showsBirthday: !isBlockedByMe)
+            ProfileMetaRow(profile: profile, showsBirthday: !isBlockedByMe, celebrateBirthday: celebrateBirthday)
 
             if !isBlockedByMe {
                 if let popScore = store.popScore(for: profile.id) {
@@ -175,6 +176,12 @@ struct ProfileReadContent: View {
 struct ProfileMetaRow: View {
     let profile: Profile
     let showsBirthday: Bool
+    /// When it's their birthday (and they share it), the birthday line
+    /// cross-fades to "Happy Birthday!" and back once.
+    var celebrateBirthday: Bool = false
+
+    @State private var greetingActive = false
+    @State private var greetingOpacity: Double = 1
 
     private static let joinedFormatter: Date.FormatStyle = .dateTime
         .month(.wide)
@@ -197,10 +204,31 @@ struct ProfileMetaRow: View {
             )
             if showsBirthday, profile.showBirthday, let birthday = formattedBirthday {
                 Text("•")
-                Label(birthday.lowercased(), systemImage: "birthday.cake")
+                Label(greetingActive ? "Happy Birthday!" : birthday.lowercased(), systemImage: "birthday.cake")
+                    .opacity(greetingOpacity)
             }
         }
         .fontStyle(.footnote)
         .foregroundStyle(.secondary)
+        .task(id: celebrateBirthday) {
+            guard celebrateBirthday else { return }
+            await runBirthdayGreeting()
+        }
+    }
+
+    /// Finite there-and-back: "august 12" → 0 → "Happy Birthday!" → hold → 0 → back.
+    private func runBirthdayGreeting() async {
+        func fade(to value: Double) { withAnimation(.easeInOut(duration: 0.4)) { greetingOpacity = value } }
+        func swap(_ on: Bool) {
+            var t = Transaction(); t.disablesAnimations = true
+            withTransaction(t) { greetingActive = on }
+        }
+        fade(to: 0)
+        try? await Task.sleep(for: .milliseconds(400)); guard !Task.isCancelled else { return }
+        swap(true); fade(to: 1)
+        try? await Task.sleep(for: .milliseconds(2600)); guard !Task.isCancelled else { return }
+        fade(to: 0)
+        try? await Task.sleep(for: .milliseconds(400)); guard !Task.isCancelled else { return }
+        swap(false); fade(to: 1)
     }
 }

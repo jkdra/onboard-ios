@@ -89,9 +89,6 @@ struct WelcomeOnBoardView: View {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
 
-                // Monochrome fireworks burst behind the message on the reveal.
-                FireworksView(isActive: fireworksActive)
-
                 VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Spacer()
@@ -145,6 +142,8 @@ struct WelcomeOnBoardView: View {
                 }
                 .safeAreaPadding()
                 .padding(.horizontal, 8)
+                // Fireworks burst behind the message on the reveal.
+                .fireworks(isActive: fireworksActive, placement: .behind)
             }
             // Tap anywhere (game-style) to skip the typewriter to the reveal.
             .contentShape(.rect)
