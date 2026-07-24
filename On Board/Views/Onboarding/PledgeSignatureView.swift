@@ -23,11 +23,15 @@ struct PledgeSignatureView: View {
     /// Called when the user signs — the parent dismisses the whole cover.
     let onSigned: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     @State private var strokes: [SignatureStroke] = []
     @State private var currentStroke = SignatureStroke()
     /// Latches on the first sign tap so a rapid double-tap can't fire
     /// `onSigned()` (and the parent's `dismiss()`) twice.
     @State private var hasSigned = false
+    /// Flips true on appear to drive the pledges' staggered fade-in-up.
+    @State private var pledgesRevealed = false
 
     private var hasSignature: Bool {
         strokes.contains { $0.points.count > 1 }
@@ -49,22 +53,26 @@ struct PledgeSignatureView: View {
 
                     VStack(alignment: .leading, spacing: 18) {
                         pledgeItem(
-                            icon: "hand.wave.fill",
+                            index: 0,
+                            icon: "person.3.fill",
                             lead: "Keep the board welcoming",
                             detail: "No harassment, hate, or tearing people down."
                         )
                         pledgeItem(
+                            index: 1,
                             icon: "hand.raised.fill",
-                            lead: "Keep it clean",
+                            lead: "Keep it safe",
                             detail: "Nothing crude, harmful, or illegal."
                         )
                         pledgeItem(
+                            index: 2,
                             icon: "doc.text.fill",
                             lead: "Play by the rules",
                             detail: "I agree to the Terms of Service & Privacy Policy."
                         )
                     }
                     .padding(.top, 2)
+                    .onAppear { pledgesRevealed = true }
 
                     HStack(spacing: 6) {
                         NavigationLink("Terms of Service") { PolicyView(type: .terms) }
@@ -103,8 +111,9 @@ struct PledgeSignatureView: View {
     }
 
     /// A prominent pledge row: a glass-chip icon that speaks to the promise,
-    /// a bold lead, and a quieter detail line.
-    private func pledgeItem(icon: String, lead: String, detail: String) -> some View {
+    /// a bold lead, and a quieter detail line. Rows fade in and rise into place
+    /// one after another (`index` staggers the delay) as the screen arrives.
+    private func pledgeItem(index: Int, icon: String, lead: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Image(systemName: icon)
                 .font(.system(size: 16, weight: .bold))
@@ -130,6 +139,12 @@ struct PledgeSignatureView: View {
             .padding(.top, 1)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .opacity(pledgesRevealed ? 1 : 0)
+        .offset(y: pledgesRevealed ? 0 : 14)
+        .animation(
+            reduceMotion ? nil : .smooth(duration: 0.45).delay(0.1 + Double(index) * 0.12),
+            value: pledgesRevealed
+        )
     }
 
     // MARK: - Signature canvas
@@ -189,7 +204,7 @@ struct PledgeSignatureView: View {
             // on top of the line the way it would on paper.
             signatureLine
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.22), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                .strokeBorder(Color.primary.opacity(0.22), lineWidth: 1.5)
         }
         .overlay(alignment: .topTrailing) {
             Button {
@@ -215,7 +230,7 @@ struct PledgeSignatureView: View {
     /// form marks where a signature lands. The rule stays under the ink, like
     /// pen on paper.
     private var signatureLine: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 9) {
             Image(systemName: "xmark")
                 .font(.system(size: 17, weight: .heavy))
                 .foregroundStyle(.secondary.opacity(0.6))

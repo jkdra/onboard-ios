@@ -37,6 +37,9 @@ enum WelcomeCelebration {
 struct WelcomeOnBoardView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The Host's voice preference — shared with the global Settings picker.
+    /// The in-cover mute button toggles this same key.
+    @AppStorage("soundEffectsMode") private var soundMode: SoundEffectsMode = .unlessSilenced
 
     let boardName: String?
 
@@ -54,6 +57,13 @@ struct WelcomeOnBoardView: View {
     @State private var visibleCharacters = 0
     @State private var revealDone = false
     @State private var showPledge = false
+    /// Fires the fireworks on the reveal. Off under Reduce Motion and disabled
+    /// in UI tests (a running animation would stall XCUITest's idle wait).
+    @State private var fireworksActive = false
+
+    private var celebrationFXEnabled: Bool {
+        !ProcessInfo.processInfo.arguments.contains("-disableCelebrationFX")
+    }
 
     private var script: String {
         switch phase {
@@ -77,7 +87,15 @@ struct WelcomeOnBoardView: View {
             ZStack {
                 Color(.systemBackground).ignoresSafeArea()
 
+                // Monochrome fireworks burst behind the message on the reveal.
+                FireworksView(isActive: fireworksActive)
+
                 VStack(spacing: 0) {
+                    HStack {
+                        Spacer()
+                        muteButton
+                    }
+
                     Spacer()
 
                     hostWithBubble
@@ -113,6 +131,7 @@ struct WelcomeOnBoardView: View {
                     Spacer()
 
                     Button {
+                        fireworksActive = false      // stop the show on the way out
                         showPledge = true
                     } label: {
                         LoadingButtonLabel("Continue", systemImage: "arrow.forward", isLoading: false)
@@ -133,16 +152,41 @@ struct WelcomeOnBoardView: View {
             }
         }
         .task { await runSequence() }
+        .onChange(of: soundMode) { _, mode in
+            if mode.isOn { HostVoice.shared.prepare(playsWhenSilenced: mode.playsWhenSilenced) }
+        }
+        .onDisappear { HostVoice.shared.stop() }
+    }
+
+    /// Quick in-cover mute. Flips between off and "on unless silenced"; the
+    /// full three-way control (respect vs. override the silent switch) lives in
+    /// Settings, bound to the same `soundEffectsMode` key.
+    private var muteButton: some View {
+        Button {
+            soundMode = soundMode.isOn ? .off : .unlessSilenced
+        } label: {
+            Image(systemName: soundMode.isOn ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 38, height: 38)
+                .background {
+                    GlassBackground(shape: Circle(), fallback: AnyShapeStyle(.thinMaterial))
+                    Circle().stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                }
+                .contentTransition(.symbolEffect(.replace))
+        }
+        .opacity(phase == .hidden ? 0 : 1)
+        .accessibilityLabel(soundMode.isOn ? "Mute the Host" : "Unmute the Host")
     }
 
     // MARK: - The Host
 
     private var hostWithBubble: some View {
-        VStack(spacing: 0) {
+        HStack(alignment: .center, spacing: 4) {
             Image(hostImageName)
                 .resizable()
                 .scaledToFit()
-                .frame(height: 116)
+                .frame(height: 104)
                 .foregroundStyle(.primary)
                 .rotationEffect(.degrees(phase == .hidden ? -14 : 0))
                 .background {
@@ -150,15 +194,17 @@ struct WelcomeOnBoardView: View {
                     // it floating in a flat void.
                     Circle()
                         .fill(Color.primary.opacity(0.12))
-                        .frame(width: 190, height: 190)
+                        .frame(width: 180, height: 180)
                         .blur(radius: 48)
                         .opacity(phase == .hidden ? 0 : 1)
                 }
                 .accessibilityLabel("The Host")
 
+            // The bubble sits BESIDE The Host now, its tail reaching left toward
+            // his mouth. It grows out of him from the leading edge on entrance.
             speechBubble
                 .opacity(phase == .hidden ? 0 : 1)
-                .scaleEffect(phase == .hidden ? 0.4 : 1, anchor: .top)
+                .scaleEffect(phase == .hidden ? 0.4 : 1, anchor: .leading)
         }
         .scaleEffect(phase == .hidden ? 0.6 : 1)
         .opacity(phase == .hidden ? 0 : 1)
@@ -189,18 +235,18 @@ struct WelcomeOnBoardView: View {
         // of which scale freely.
         .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         .fixedSize()
-        .padding(.horizontal, 22)
-        .padding(.top, 16 + SpeechBubbleShape.tailHeight)
-        .padding(.bottom, 16)
+        .padding(.leading, 18 + SpeechBubbleShape.tailSize)
+        .padding(.trailing, 18)
+        .padding(.vertical, 14)
         .background {
             // Clean, solid "game dialogue" bubble: an elevated surface lifted
             // by a soft shadow, with a hairline edge for definition in light
             // mode — no heavy comic outline (that read as clip-art). The Host
             // mascot carries the character; the bubble stays quiet and native.
-            SpeechBubbleShape(tailOffsetX: 52)
+            SpeechBubbleShape()
                 .fill(Color(.secondarySystemBackground))
                 .shadow(color: .black.opacity(0.28), radius: 20, x: 0, y: 12)
-            SpeechBubbleShape(tailOffsetX: 52)
+            SpeechBubbleShape()
                 .stroke(Color.primary.opacity(0.08), lineWidth: 1)
         }
         // Expose the whole line to VoiceOver, not the mid-typewriter prefix —
@@ -223,6 +269,11 @@ struct WelcomeOnBoardView: View {
             return
         }
 
+        // Warm the voice engine so the first chirp lands without setup latency.
+        if soundMode.isOn {
+            HostVoice.shared.prepare(playsWhenSilenced: soundMode.playsWhenSilenced)
+        }
+
         withAnimation(.spring(duration: 0.5, bounce: 0.35)) {
             phase = .greeting
         }
@@ -231,10 +282,15 @@ struct WelcomeOnBoardView: View {
         try? await Task.sleep(for: .milliseconds(450))
         guard !Task.isCancelled else { return }
 
-        withAnimation(.spring(duration: 0.4, bounce: 0.25)) {
+        // Swap neutral → happy as a hard sprite flip, not a crossfade: animating
+        // the phase change here cross-dissolved the two face frames (a brief
+        // ghosted blend). The face pops; only the info card/CTA below animate.
+        var flip = Transaction(); flip.disablesAnimations = true
+        withTransaction(flip) {
             phase = .reveal
             visibleCharacters = 0
         }
+        if celebrationFXEnabled { fireworksActive = true }   // celebrate as the line lands
         await speak(script)
 
         withAnimation(.spring(duration: 0.4, bounce: 0.2)) {
@@ -247,12 +303,19 @@ struct WelcomeOnBoardView: View {
     /// open (idle) when the line lands. Frame swaps and character steps are
     /// unanimated — sprite flips, not crossfades.
     private func speak(_ line: String) async {
+        let chars = Array(line)
         for index in 1...max(line.count, 1) {
             guard !Task.isCancelled else { return }
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) {
                 visibleCharacters = index
                 mouthClosed = (index / 3) % 2 == 1
+            }
+            // The Host's voice: a soft chirp on every other character, skipping
+            // whitespace — dense enough to read as speech, sparse enough not to
+            // machine-gun. Pitch lifts a touch on the happy reveal beat.
+            if soundMode.isOn, index % 2 == 0, index <= chars.count, !chars[index - 1].isWhitespace {
+                HostVoice.shared.chirp(bright: phase == .reveal, seed: index)
             }
             try? await Task.sleep(for: .milliseconds(28))
         }
@@ -261,54 +324,41 @@ struct WelcomeOnBoardView: View {
     }
 }
 
-/// Rounded-rect speech bubble with a curved tail on its top edge, drawn as
-/// one continuous outline so the stroke has no seam where the tail meets the
-/// body.
-/// Rounded-rect bubble with a smooth, tapered tail on its top edge — one
-/// continuous outline so a stroke has no seam where the tail meets the body.
-/// The tail curves out of the top edge and narrows to a soft, rounded tip
-/// (like a modern chat tail), not the old convex nub.
+/// Rounded-rect bubble with a smooth, tapered tail on its LEADING (left) edge —
+/// one continuous outline so a stroke has no seam where the tail meets the body.
+/// The tail curves out of the left edge and narrows to a soft, rounded tip
+/// (like a modern chat tail), pointing back toward The Host beside it.
 nonisolated struct SpeechBubbleShape: Shape {
-    static let tailHeight: CGFloat = 20
+    /// How far the tail pokes left, beyond the bubble body.
+    static let tailSize: CGFloat = 18
 
-    var cornerRadius: CGFloat = 22
-    var tailWidth: CGFloat = 28
-    /// Tail tip x, relative to the bubble's horizontal center — positive
-    /// pushes it toward The Host's mouth side.
-    var tailOffsetX: CGFloat = 0
+    var cornerRadius: CGFloat = 20
+    /// Vertical span of the tail's base on the left edge.
+    var tailWidth: CGFloat = 26
+    /// Tail tip y, relative to the bubble's vertical center — negative aims it
+    /// higher (toward The Host's face).
+    var tailOffsetY: CGFloat = 0
 
     func path(in rect: CGRect) -> Path {
-        let tailHeight = Self.tailHeight
+        let tail = Self.tailSize
         let body = CGRect(
-            x: rect.minX, y: rect.minY + tailHeight,
-            width: rect.width, height: rect.height - tailHeight
+            x: rect.minX + tail, y: rect.minY,
+            width: rect.width - tail, height: rect.height
         )
         let r = min(cornerRadius, min(body.width, body.height) / 2)
 
-        // Keep the tail's base on the straight part of the top edge.
+        // Keep the tail's base on the straight part of the left edge.
         let half = tailWidth / 2
-        let tipX = min(max(rect.midX + tailOffsetX, body.minX + r + half + 2),
-                       body.maxX - r - half - 2)
-        let baseLeft = CGPoint(x: tipX - half, y: body.minY)
-        let baseRight = CGPoint(x: tipX + half, y: body.minY)
-        // Tip leans slightly toward the mouth side and rounds over softly.
-        let tip = CGPoint(x: tipX + tailWidth * 0.16, y: rect.minY)
+        let tipY = min(max(rect.midY + tailOffsetY, body.minY + r + half + 2),
+                       body.maxY - r - half - 2)
+        let baseBottom = CGPoint(x: body.minX, y: tipY + half)
+        let baseTop = CGPoint(x: body.minX, y: tipY - half)
+        // Tip pokes straight left and rounds over softly (symmetric taper).
+        let tip = CGPoint(x: rect.minX, y: tipY)
 
         var p = Path()
+        // Top edge, left→right, then clockwise around body to the bottom-left.
         p.move(to: CGPoint(x: body.minX + r, y: body.minY))
-        p.addLine(to: baseLeft)
-        // Left flank sweeps up and tapers into the rounded tip.
-        p.addCurve(
-            to: tip,
-            control1: CGPoint(x: baseLeft.x + tailWidth * 0.34, y: body.minY - tailHeight * 0.34),
-            control2: CGPoint(x: tip.x - tailWidth * 0.24, y: tip.y + tailHeight * 0.30)
-        )
-        // Right flank comes back down to the top edge.
-        p.addCurve(
-            to: baseRight,
-            control1: CGPoint(x: tip.x + tailWidth * 0.22, y: tip.y + tailHeight * 0.26),
-            control2: CGPoint(x: baseRight.x + tailWidth * 0.04, y: body.minY - tailHeight * 0.40)
-        )
         p.addLine(to: CGPoint(x: body.maxX - r, y: body.minY))
         p.addArc(center: CGPoint(x: body.maxX - r, y: body.minY + r), radius: r,
                  startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
@@ -318,6 +368,18 @@ nonisolated struct SpeechBubbleShape: Shape {
         p.addLine(to: CGPoint(x: body.minX + r, y: body.maxY))
         p.addArc(center: CGPoint(x: body.minX + r, y: body.maxY - r), radius: r,
                  startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        // Up the left edge to the tail base, out to the tip, back to the edge.
+        p.addLine(to: baseBottom)
+        p.addCurve(
+            to: tip,
+            control1: CGPoint(x: body.minX - tail * 0.45, y: tipY + half * 0.55),
+            control2: CGPoint(x: tip.x + tail * 0.18, y: tipY + half * 0.20)
+        )
+        p.addCurve(
+            to: baseTop,
+            control1: CGPoint(x: tip.x + tail * 0.18, y: tipY - half * 0.20),
+            control2: CGPoint(x: body.minX - tail * 0.45, y: tipY - half * 0.55)
+        )
         p.addLine(to: CGPoint(x: body.minX, y: body.minY + r))
         p.addArc(center: CGPoint(x: body.minX + r, y: body.minY + r), radius: r,
                  startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)

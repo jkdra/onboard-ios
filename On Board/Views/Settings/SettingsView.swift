@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
+    @AppStorage("soundEffectsMode") private var soundEffectsMode: SoundEffectsMode = .unlessSilenced
     @AppStorage("profanityEnabled") private var profanityEnabled: Bool = false
     @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.7
     @Environment(\.dismiss) private var dismiss
@@ -58,7 +59,15 @@ struct SettingsView: View {
                     Text("Haptics").fontStyle(.body)
                 }
                 .tint(.primary)
-                
+
+                Picker(selection: $soundEffectsMode) {
+                    ForEach(SoundEffectsMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                } label: {
+                    Text("Sound Effects").fontStyle(.body)
+                }
+
                 Toggle(isOn: $profanityEnabled) {
                     HStack(spacing: 6) {
                         Text("Profanity").fontStyle(.body)
