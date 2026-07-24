@@ -24,9 +24,13 @@ struct Profile: Identifiable, Hashable, Codable {
     let birthday: String?
     let showBirthday: Bool
     let joinedAt: Date
+    /// Timestamps of recent handle changes (server-maintained). Drives the
+    /// client's "2 changes per 14 days" gate so the username field can gray out
+    /// *before* the user tries — the same rule is enforced in `update_profile`.
+    let handleChangeHistory: [Date]?
 
     enum CodingKeys: CodingKey {
-        case id, handle, displayName, bio, avatarUrl, joinedAt, createdAt, birthday, showBirthday
+        case id, handle, displayName, bio, avatarUrl, joinedAt, createdAt, birthday, showBirthday, handleChangeHistory
     }
 
     nonisolated init(
@@ -37,7 +41,8 @@ struct Profile: Identifiable, Hashable, Codable {
         avatarUrl: String? = nil,
         birthday: String? = nil,
         showBirthday: Bool = false,
-        joinedAt: Date = .now
+        joinedAt: Date = .now,
+        handleChangeHistory: [Date]? = nil
     ) {
         self.id = id
         self.handle = handle
@@ -47,6 +52,7 @@ struct Profile: Identifiable, Hashable, Codable {
         self.birthday = birthday
         self.showBirthday = showBirthday
         self.joinedAt = joinedAt
+        self.handleChangeHistory = handleChangeHistory
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -73,6 +79,11 @@ struct Profile: Identifiable, Hashable, Codable {
         joinedAt = try container.decodeIfPresent(Date.self, forKey: .joinedAt)
             ?? container.decodeIfPresent(Date.self, forKey: .createdAt)
             ?? .now
+
+        // `try?`: a malformed/absent array must never break the whole profile
+        // decode — worst case we treat the handle as freely changeable and the
+        // server still enforces the real limit.
+        handleChangeHistory = (try? container.decodeIfPresent([Date].self, forKey: .handleChangeHistory)) ?? nil
     }
 
     nonisolated func encode(to encoder: Encoder) throws {
@@ -85,6 +96,7 @@ struct Profile: Identifiable, Hashable, Codable {
         try container.encodeIfPresent(birthday, forKey: .birthday)
         try container.encode(showBirthday, forKey: .showBirthday)
         try container.encode(joinedAt, forKey: .joinedAt)
+        try container.encodeIfPresent(handleChangeHistory, forKey: .handleChangeHistory)
     }
 
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }
@@ -96,5 +108,23 @@ struct Profile: Identifiable, Hashable, Codable {
     /// display name falls back to `@handle` consistently everywhere.
     var displayNameOrHandle: String {
         displayName.isEmpty ? handle : displayName
+    }
+
+    // MARK: - Handle change limit (2 per rolling 14 days)
+
+    /// When the user may next change their username, or nil if they can change
+    /// it right now. Mirrors the server rule so the UI can gate proactively.
+    var handleChangeAvailableAt: Date? {
+        let window: TimeInterval = 14 * 24 * 60 * 60
+        let cutoff = Date().addingTimeInterval(-window)
+        let recent = (handleChangeHistory ?? []).filter { $0 > cutoff }
+        guard recent.count >= 2, let oldest = recent.min() else { return nil }
+        return oldest.addingTimeInterval(window)
+    }
+
+    /// True when the username may be changed now.
+    var canChangeHandle: Bool {
+        guard let available = handleChangeAvailableAt else { return true }
+        return available <= .now
     }
 }

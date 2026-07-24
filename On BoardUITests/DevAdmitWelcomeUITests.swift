@@ -52,6 +52,11 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         yearWheel.adjust(toPickerWheelValue: "2000")
         tapContinue(app)
 
+        // Birthday is locked after onboarding, so Continue confirms the age.
+        let ageConfirm = app.buttons["Yep, looks good."]
+        XCTAssertTrue(ageConfirm.waitForExistence(timeout: 5), "age confirmation did not appear")
+        ageConfirm.tap()
+
         // ── Username ──────────────────────────────────────────────────────
         let usernameField = app.textFields.firstMatch
         XCTAssertTrue(usernameField.waitForExistence(timeout: 8), "username step did not appear")

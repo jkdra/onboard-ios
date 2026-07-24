@@ -141,9 +141,22 @@ enum ReferralRewards {
 enum HandleRules {
     private static let pattern = "^[a-zA-Z0-9._]{2,32}$"
 
+    /// Impersonation-prone handles blocked for everyone. Mirrors the server list
+    /// in `check_handle_available` so the client can reject them instantly.
+    static let reserved: Set<String> = [
+        "admin", "administrator", "mod", "moderator", "support", "staff",
+        "official", "onboard", "onboardapp", "help", "team", "root", "system",
+        "everyone", "here", "anonymous", "deleted", "moderation", "security"
+    ]
+
+    static func isReserved(_ handle: String) -> Bool {
+        reserved.contains(handle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+
     static func isValid(_ handle: String) -> Bool {
         let trimmed = handle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 2, trimmed.count <= 32 else { return false }
+        guard !isReserved(trimmed) else { return false }
         return trimmed.range(of: pattern, options: .regularExpression) != nil
     }
 
