@@ -15,7 +15,7 @@ struct Comment: Identifiable, Hashable, Codable {
     var id: UUID
 
     /// Foreign key into `profiles` once auth is wired. Nullable so
-    /// legacy / anonymous comments still decode cleanly.
+    /// legacy / author-less rows (no attached author) still decode cleanly.
     let authorId: UUID?
 
     /// Denormalized display name copy for fast rendering.

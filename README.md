@@ -17,7 +17,7 @@ Every week, a fresh board opens for a school campus. Anyone who's joined can pos
 **Core loop:**
 - Sign in with phone, email, Apple, or Google
 - Complete a one-time onboarding: pick a handle, verify your school email, join the waitlist if your campus isn't live yet
-- Post anonymously to the active board — your handle is visible, but nothing else ties back to you
+- Post to the active board under your handle — feed cards show just a timestamp, but opening a post shows who wrote it and links to their profile
 - React (like, hug, laugh, or spark) and comment in threaded replies
 - Watch the countdown — when it hits zero, everything resets
 

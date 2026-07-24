@@ -22,7 +22,7 @@ struct Post: Identifiable, Hashable, Codable {
     var id: UUID
 
     /// Foreign key into `profiles` once auth is wired. Nullable so
-    /// legacy / anonymous posts still decode cleanly.
+    /// legacy / author-less rows (no attached author) still decode cleanly.
     let authorId: UUID?
 
     /// The board week this post belongs to (`board_weeks.id` in Supabase).

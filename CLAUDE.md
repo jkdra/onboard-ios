@@ -4,7 +4,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-On Board is a campus bulletin board iOS app built with SwiftUI + Supabase. Students join a weekly board, post anonymously, react, and comment. New boards open every Monday at midnight.
+On Board is a campus bulletin board iOS app built with SwiftUI + Supabase. Students join a weekly board and post under their handle, react, and comment. It is **not** an anonymous app: posts are authored by a handle with a profile, avatar, and follow graph. Authorship is merely quiet on the feed grid — cards show a timestamp, not a name — but the opened post shows who wrote it and links to their profile. New boards open every Monday at midnight.
+
+**Core functions:** per-campus weekly boards (open Monday, cleared at the next reset) shown as a tone-colored masonry feed; handle + profile identity with avatars, following, and a "Pop Score"; posts with optional images and tags; four reactions (like / hug / laugh / spark) and threaded comments; campus-email verification; an invite-gated waitlist with a viral referral ladder (instant invites skip it); push notifications; a weekly archive; and expected-graduation collection (alumni-only boards are planned, not yet built). A mascot, **The Host** (the app icon with a face), narrates the post-admission welcome + pledge.
+
+## Associated Projects
+
+On Board spans several sibling repos under `On Board/` (this one is `onboard-ios/`, the feature-complete reference client). Each sibling has its own CLAUDE.md — read it before working across the boundary.
+
+- **`../onboard-android/`** — the Android port (Kotlin, Material 3, monochrome brand). Tracks this iOS app as the spec; a port, not a replica.
+- **`../onboard-web/`** — the marketing site (Next.js + Tailwind + Supabase) at onboardapp.org: landing/waitlist, changelog (auto-pulled from the App Store), and the public privacy/terms pages.
+- **`../onboard-admin/`** — the admin / moderation portal (Next.js 16, deployed via OpenNext on Cloudflare).
+- **`../supabase/`** — the shared Supabase backend (Postgres migrations + edge functions) every client talks to. The `supabase/` folder inside this repo is a gitignored working copy of the same schema; the sibling is the canonical home.
+- **`../host-chat/`** — an early React + Vite prototype (name-associated with The Host); not yet documented.
 
 ## Build & Test Commands
 

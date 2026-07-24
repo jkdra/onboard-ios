@@ -275,8 +275,8 @@ struct GridCard: View {
             .clipShape(Capsule())
     }
 
-    // Feed cards show a timestamp instead of the author — anonymous at a glance. The
-    // opened post detail still shows the author + profile link.
+    // Feed cards show a timestamp instead of the author — authorship is quiet on the
+    // grid (not hidden). The opened post detail still shows the author + profile link.
     private var cardAuthorRow: some View {
         HStack(spacing: 4) {
             Text(post.createdAt.boardRelativeAge)
