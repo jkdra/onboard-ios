@@ -57,6 +57,8 @@ struct WelcomeOnBoardView: View {
     @State private var visibleCharacters = 0
     @State private var revealDone = false
     @State private var showPledge = false
+    /// Tap-to-skip: jumps the typewriter to the finished reveal (game-style).
+    @State private var skipRequested = false
     /// Fires the fireworks on the reveal. Off under Reduce Motion and disabled
     /// in UI tests (a running animation would stall XCUITest's idle wait).
     @State private var fireworksActive = false
@@ -90,7 +92,7 @@ struct WelcomeOnBoardView: View {
                 // Monochrome fireworks burst behind the message on the reveal.
                 FireworksView(isActive: fireworksActive)
 
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     HStack {
                         Spacer()
                         muteButton
@@ -101,7 +103,7 @@ struct WelcomeOnBoardView: View {
                     hostWithBubble
 
                     if revealDone {
-                        VStack(spacing: 6) {
+                        VStack(alignment: .leading, spacing: 6) {
                             if let boardName {
                                 Label(boardName, systemImage: "building.columns.fill")
                                     .fontStyle(.subheadline)
@@ -111,7 +113,7 @@ struct WelcomeOnBoardView: View {
                             Text("Your board is live. New week every Monday.")
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
+                                .multilineTextAlignment(.leading)
                         }
                         .padding(.horizontal, 22)
                         .padding(.vertical, 14)
@@ -144,6 +146,9 @@ struct WelcomeOnBoardView: View {
                 .safeAreaPadding()
                 .padding(.horizontal, 8)
             }
+            // Tap anywhere (game-style) to skip the typewriter to the reveal.
+            .contentShape(.rect)
+            .onTapGesture { if !revealDone { skipRequested = true } }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showPledge) {
                 PledgeSignatureView {
@@ -279,7 +284,10 @@ struct WelcomeOnBoardView: View {
         }
         await speak(script)
 
-        try? await Task.sleep(for: .milliseconds(450))
+        // Let "Guess what?" linger long enough to register before the reveal.
+        if !skipRequested {
+            try? await Task.sleep(for: .milliseconds(1200))
+        }
         guard !Task.isCancelled else { return }
 
         // Swap neutral → happy as a hard sprite flip, not a crossfade: animating
@@ -306,21 +314,39 @@ struct WelcomeOnBoardView: View {
         let chars = Array(line)
         for index in 1...max(line.count, 1) {
             guard !Task.isCancelled else { return }
+            // Tap-to-skip: snap the whole line in and bail.
+            if skipRequested {
+                var t = Transaction(); t.disablesAnimations = true
+                withTransaction(t) { visibleCharacters = chars.count; mouthClosed = false }
+                return
+            }
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) {
                 visibleCharacters = index
                 mouthClosed = (index / 3) % 2 == 1
             }
+            let ch = index <= chars.count ? chars[index - 1] : " "
             // The Host's voice: a soft chirp on every other character, skipping
             // whitespace — dense enough to read as speech, sparse enough not to
             // machine-gun. Pitch lifts a touch on the happy reveal beat.
-            if soundMode.isOn, index % 2 == 0, index <= chars.count, !chars[index - 1].isWhitespace {
+            if soundMode.isOn, index % 2 == 0, !ch.isWhitespace {
                 HostVoice.shared.chirp(bright: phase == .reveal, seed: index)
             }
-            try? await Task.sleep(for: .milliseconds(28))
+            // Natural cadence: a real beat after punctuation, a hair slower per
+            // character than a flat machine-gun typewriter.
+            try? await Task.sleep(for: .milliseconds(Self.pause(after: ch)))
         }
         var t = Transaction(); t.disablesAnimations = true
         withTransaction(t) { mouthClosed = false }
+    }
+
+    private static func pause(after ch: Character) -> Int {
+        switch ch {
+        case ".", "!", "?": return 300
+        case ",", ";", ":": return 175
+        case "\n":          return 240
+        default:            return 45
+        }
     }
 }
 
