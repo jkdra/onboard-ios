@@ -120,6 +120,17 @@ struct ProfileView: View {
             .presentableErrorAlert(error: $alertError)
     }
 
+    /// Mock-only: replay the birthday celebration for ~10s, retriggerable.
+    private func triggerBirthdayTest() {
+        birthdayCelebrating = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            birthdayCelebrating = true
+            try? await Task.sleep(for: .seconds(10))
+            birthdayCelebrating = false
+        }
+    }
+
     private var profileScroll: some View {
         ScrollView {
             Group {
@@ -145,7 +156,8 @@ struct ProfileView: View {
                             }
                         },
                         onUnblock: { Task { await unblockUser() } },
-                        celebrateBirthday: birthdayCelebrating
+                        celebrateBirthday: birthdayCelebrating,
+                        onTestBirthday: triggerBirthdayTest
                     )
                 }
             }

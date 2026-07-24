@@ -30,6 +30,7 @@ struct ProfileReadContent: View {
     let onAvatarTap: () -> Void
     let onUnblock: () -> Void
     var celebrateBirthday: Bool = false
+    var onTestBirthday: (() -> Void)? = nil
 
     @Environment(BoardStore.self) private var store
 
@@ -52,6 +53,13 @@ struct ProfileReadContent: View {
             }
 
             ProfileMetaRow(profile: profile, showsBirthday: !isBlockedByMe, celebrateBirthday: celebrateBirthday)
+
+            // Mock-only: preview the birthday celebration on demand.
+            if !AppConfiguration.current.isSupabaseConfigured, let onTestBirthday {
+                Button("Test Birthday 🎂 [DEV]", action: onTestBirthday)
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             if !isBlockedByMe {
                 if let popScore = store.popScore(for: profile.id) {

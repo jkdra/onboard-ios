@@ -70,6 +70,11 @@ struct FireworksView: View {
         .allowsHitTesting(false)
         .accessibilityHidden(true)
         .ignoresSafeArea()
+        .onChange(of: isActive) { _, active in
+            // Re-arm on each activation so the show can be replayed (e.g. a DEV
+            // trigger, or a second birthday visit).
+            if active { engine.reset(); finished = false }
+        }
     }
 }
 
@@ -102,6 +107,15 @@ final class FireworksEngine {
 
     var isComplete: Bool {
         started && schedule.isEmpty && shells.isEmpty && sparks.isEmpty && flashes.isEmpty
+    }
+
+    /// Clear everything so the next activation starts a fresh show.
+    func reset() {
+        shells.removeAll(); sparks.removeAll(); flashes.removeAll(); schedule.removeAll()
+        started = false
+        startTime = nil
+        lastTime = nil
+        accumulator = 0
     }
 
     // MARK: Drive
