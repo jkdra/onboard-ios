@@ -20,10 +20,13 @@ enum PhotoType: Sendable {
         }
     }
 
-    nonisolated var bucket: String {
+    /// The `kind` the `sign-image-upload` Edge Function expects. The function
+    /// maps it to the R2 key prefix (`profile-pictures/` or `post-images/`),
+    /// so the folder layout is server-side config, not hardcoded here.
+    nonisolated var uploadKind: String {
         switch self {
-        case .profilePicture: return "avatars"
-        case .postPhoto: return "post-images"
+        case .profilePicture: return "profile"
+        case .postPhoto: return "post"
         }
     }
 }

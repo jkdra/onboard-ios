@@ -98,6 +98,28 @@ struct On_BoardApp: App {
                         }
                     }
 
+                    // Deep-link referral code
+                    // Universal Link: https://onboardapp.org/invite/XXX (canonical —
+                    // matches the web landing route) or /invite?code=XXX
+                    // Custom Scheme: onboard://invite/XXX or onboard://invite?code=XXX
+                    let isInviteUniversalLink = url.host == "onboardapp.org" && url.pathComponents.count >= 2 && url.pathComponents[1] == "invite"
+                    let isInviteCustomScheme = url.scheme == "onboard" && url.host == "invite"
+
+                    if isInviteUniversalLink || isInviteCustomScheme {
+                        let queryCode = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                            .queryItems?.first(where: { $0.name == "code" })?.value
+                        let pathCode: String? = {
+                            if isInviteUniversalLink, url.pathComponents.count >= 3 { return url.pathComponents[2] }
+                            if isInviteCustomScheme, url.pathComponents.count >= 2 { return url.pathComponents[1] }
+                            return nil
+                        }()
+                        if let code = (queryCode ?? pathCode)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                           !code.isEmpty {
+                            PendingReferralCode.store(code)
+                        }
+                        return
+                    }
+
                     // Deep-link OAuth callbacks (linkIdentity's default URL opener, web
                     // OAuth fallback) resolve via UIApplication.open, not an in-app
                     // ASWebAuthenticationSession — per the SDK's own docs, the app must

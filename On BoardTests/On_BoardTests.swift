@@ -893,6 +893,93 @@ struct MockOnboardingServiceTests {
         #expect(status.isComplete == false)
         #expect(status.waitlistJoinedAt != nil)
     }
+
+    @Test @MainActor func vipEmailInstantAdmissionThroughStore() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingVIPStore")!
+        defaults.removePersistentDomain(forName: "MockOnboardingVIPStore")
+
+        let authService = MockAuthService(defaults: defaults)
+        let auth = AuthStore(service: authService)
+        await auth.verifyPhoneOTP(phone: "+15555550104", token: "123456")
+
+        let store = OnboardingStore(
+            service: MockOnboardingService(defaults: defaults),
+            auth: auth,
+            network: NetworkMonitor()
+        )
+        await store.refresh()
+
+        // Full device sequence, through the store like the UI drives it.
+        #expect(await store.submitBirthday(birthday: Calendar.current.date(byAdding: .year, value: -20, to: .now)!, showBirthday: false))
+        #expect(await store.submitUsername("vip.store.tester"))
+        #expect(await store.submitProfile(displayName: "VIP", bio: nil))
+        #expect(await store.sendSchoolVerificationCode(to: "vip@example.edu"))
+        let verified = await store.verifySchoolEmail("vip@example.edu", code: "123456")
+        #expect(verified, "verify failed: \(store.lastError ?? "no error")")
+        #expect(store.isComplete)
+    }
+
+    @Test func vipEmailSimulatesInstantAdmission() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingVIP")!
+        defaults.removePersistentDomain(forName: "MockOnboardingVIP")
+
+        let auth = MockAuthService(defaults: defaults)
+        _ = try await auth.verifyPhoneOTP(phone: "+15555550103", token: "123456")
+
+        let onboarding = MockOnboardingService(defaults: defaults)
+        _ = try await onboarding.completeBirthday(
+            birthday: Calendar.current.date(byAdding: .year, value: -20, to: .now)!,
+            showBirthday: false
+        )
+        _ = try await onboarding.completeUsername("vip.tester")
+        _ = try await onboarding.completeProfile(displayName: "VIP", bio: nil, avatarUrl: nil)
+        _ = try await onboarding.beginSchoolEmailVerification("vip@example.edu")
+        let step = try await onboarding.completeSchoolEmailVerification("vip@example.edu", token: "123456")
+        #expect(step == .complete)
+
+        let status = try await onboarding.fetchStatus()
+        #expect(status.effectiveOnboardingStep == .complete)
+        #expect(!status.needsOnboarding)
+    }
+
+    @Test func rejectsSchoolEmailAlreadyLinkedToAnotherAccount() async throws {
+        let defaults = UserDefaults(suiteName: "MockOnboardingEmailInUse")!
+        defaults.removePersistentDomain(forName: "MockOnboardingEmailInUse")
+
+        let auth = MockAuthService(defaults: defaults)
+        _ = try await auth.verifyPhoneOTP(phone: "+15555550102", token: "123456")
+
+        let onboarding = MockOnboardingService(defaults: defaults)
+        await #expect(throws: OnboardingError.schoolEmailInUse) {
+            _ = try await onboarding.beginSchoolEmailVerification("taken@example.edu")
+        }
+
+        // The inline pre-check the school email step uses reports the same email
+        // as taken, and a fresh one as available.
+        #expect(try await onboarding.checkSchoolEmailAvailable("taken@example.edu") == false)
+        #expect(try await onboarding.checkSchoolEmailAvailable("fresh@example.edu") == true)
+    }
+
+    @Test func referralRewardLadderBoundaries() {
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 0) == 0)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 3) == 0)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 4) == 1)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 5) == 3)
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 12) == 3)
+        // Clawback consistency: rewards derive from the live count, so a
+        // deleted referred account dropping the count from 5 to 4 also drops
+        // the earned months from 3 to 1 — by design, not by accident.
+        #expect(ReferralRewards.earnedFirstClassMonths(for: 5 - 1) == 1)
+    }
+
+    @Test func firstClassIsProgressivelyDisclosed() {
+        // No First Class mention until the user is one invite from earning it.
+        #expect(ReferralRewards.milestoneText(for: 0) == nil)
+        #expect(ReferralRewards.milestoneText(for: 2) == nil)
+        #expect(ReferralRewards.milestoneText(for: 3)?.contains("1 more invite") == true)
+        #expect(ReferralRewards.milestoneText(for: 4)?.contains("Free month") == true)
+        #expect(ReferralRewards.milestoneText(for: 5)?.contains("3 free months") == true)
+    }
 }
 
 @MainActor
@@ -939,12 +1026,47 @@ struct OnboardingStoreTests {
             pendingSchoolEmail: nil,
             schoolName: nil,
             boardId: nil,
-            boardName: nil
+            boardName: nil,
+            referralCode: nil,
+            verifiedReferralCount: nil,
+            instantInvitesRemaining: nil,
+            expectedGraduation: nil
         )
 
         #expect(status.isComplete)
         #expect(status.needsOnboarding)
         #expect(status.effectiveOnboardingStep == .username)
+    }
+
+    /// Display name is optional by design — an admitted user who skipped it
+    /// must read as complete. The old empty-displayName gate trapped these
+    /// users in an inescapable profile-step loop (found via a real device's
+    /// stuck mock state, 2026-07-22).
+    @Test @MainActor func emptyDisplayNameDoesNotBlockAdmittedUser() {
+        let status = OnboardingStatus(
+            id: UUID(),
+            handle: "real.handle",
+            displayName: "",
+            bio: nil,
+            avatarUrl: nil,
+            birthday: "2000-01-01",
+            showBirthday: false,
+            onboardingStep: .complete,
+            onboardingCompletedAt: .now,
+            waitlistJoinedAt: .now,
+            verifiedSchoolEmail: "student@example.edu",
+            pendingSchoolEmail: nil,
+            schoolName: "Example University",
+            boardId: SampleBoardID.main,
+            boardName: "On Board",
+            referralCode: "abc123",
+            verifiedReferralCount: 0,
+            instantInvitesRemaining: 3,
+            expectedGraduation: nil
+        )
+
+        #expect(status.effectiveOnboardingStep == .complete)
+        #expect(!status.needsOnboarding)
     }
 }
 
@@ -985,6 +1107,10 @@ struct OnboardingStalenessTests {
             try await inner.lookupSchool(for: email)
         }
 
+        func checkSchoolEmailAvailable(_ email: String) async throws -> Bool {
+            try await inner.checkSchoolEmailAvailable(email)
+        }
+
         func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
             try await inner.beginSchoolEmailVerification(email)
         }
@@ -995,6 +1121,14 @@ struct OnboardingStalenessTests {
 
         func joinWaitlist() async throws -> OnboardingStep {
             try await inner.joinWaitlist()
+        }
+
+        func submitReferralCode(_ code: String) async throws {
+            try await inner.submitReferralCode(code)
+        }
+
+        func setExpectedGraduation(_ month: Date) async throws {
+            try await inner.setExpectedGraduation(month)
         }
     }
 
@@ -1037,7 +1171,7 @@ struct OnboardingCoordinatorTargetPathTests {
     @Test func waitlistStepProducesFullPath() {
         #expect(
             OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
-                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .waitlist]
+                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
         )
     }
 

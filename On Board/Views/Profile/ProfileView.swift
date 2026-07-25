@@ -37,6 +37,9 @@ struct ProfileView: View {
     @State private var reportTarget: ReportTarget?
     @State private var blockCandidate: BlockCandidate?
     @State private var isUpdatingBlock = false
+    /// On this profile's birthday (if they share it), fireworks + a "Happy
+    /// Birthday!" cross-fade — shown to any visitor, finite each visit.
+    @State private var birthdayCelebrating = false
 
     private var displayedProfile: Profile {
         store.profile(id: profile.id) ?? profile
@@ -108,7 +111,24 @@ struct ProfileView: View {
             .task(id: profile.id) {
                 await store.refreshPopScore(for: profile.id)
             }
+            .task(id: profile.id) {
+                // Their birthday, shared publicly → celebrate for whoever's viewing.
+                birthdayCelebrating = displayedProfile.showBirthday
+                    && BirthdayCelebration.isToday(displayedProfile.birthday)
+            }
+            .fireworks(isActive: birthdayCelebrating)
             .presentableErrorAlert(error: $alertError)
+    }
+
+    /// Mock-only: replay the birthday celebration for ~10s, retriggerable.
+    private func triggerBirthdayTest() {
+        birthdayCelebrating = false
+        Task {
+            try? await Task.sleep(for: .milliseconds(50))
+            birthdayCelebrating = true
+            try? await Task.sleep(for: .seconds(10))
+            birthdayCelebrating = false
+        }
     }
 
     private var profileScroll: some View {
@@ -135,7 +155,9 @@ struct ProfileView: View {
                                 }
                             }
                         },
-                        onUnblock: { Task { await unblockUser() } }
+                        onUnblock: { Task { await unblockUser() } },
+                        celebrateBirthday: birthdayCelebrating,
+                        onTestBirthday: triggerBirthdayTest
                     )
                 }
             }

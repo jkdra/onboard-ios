@@ -6,6 +6,7 @@
 //  Persists the mock session in UserDefaults so restore can be tested.
 //
 
+import CryptoKit
 import Foundation
 
 final class MockAuthService: AuthService, @unchecked Sendable {
@@ -54,10 +55,40 @@ final class MockAuthService: AuthService, @unchecked Sendable {
     }
 
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession {
-        _ = phone
         _ = token
         try await Task.sleep(for: .milliseconds(350))
-        return try await signIn(with: .phone)
+
+        // Each distinct number is its own account, mirroring live semantics:
+        // signing out and back in with the same number resumes that user,
+        // while any NEW number starts a brand-new user at fresh onboarding
+        // (previously every phone sign-in collapsed onto SampleProfileID.phone,
+        // making it impossible to demo a second first-time flow after the
+        // first admission). The sample placeholder number keeps the
+        // well-known sample id.
+        let userId: UUID = phone == "+15555550100"
+            ? SampleProfileID.phone
+            : Self.deterministicUserID(forPhone: phone)
+
+        let session = makeSession(
+            userId: userId,
+            primaryProvider: .phone,
+            email: nil,
+            phone: phone,
+            linkedProviders: []
+        )
+        persist(session)
+        return session
+    }
+
+    /// Stable UUID derived from the phone number (v4-shaped so it reads like
+    /// any other user id).
+    private static func deterministicUserID(forPhone phone: String) -> UUID {
+        let digest = SHA256.hash(data: Data(phone.utf8))
+        var b = Array(digest.prefix(16))
+        b[6] = (b[6] & 0x0F) | 0x40
+        b[8] = (b[8] & 0x3F) | 0x80
+        return UUID(uuid: (b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7],
+                           b[8], b[9], b[10], b[11], b[12], b[13], b[14], b[15]))
     }
 
     func sendEmailOTP(email: String) async throws {

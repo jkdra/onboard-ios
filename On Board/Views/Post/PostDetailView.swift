@@ -256,6 +256,9 @@ struct PostDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .navigationBarBackButtonHidden(editMode || showImageViewer)
             .interactiveDismissDisabled(editMode || showImageViewer)
+            // Keep the single-finger interactive pop (governed above), but drop the
+            // zoom transition's two-finger pinch-to-dismiss — it reads as accidental.
+            .disableZoomPinchToDismiss()
             .toolbar { toolbarContent }
             .overlay {
                 ImageViewerView(

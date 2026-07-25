@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
@@ -12,12 +13,12 @@ struct SettingsView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
+    @AppStorage("soundEffectsMode") private var soundEffectsMode: SoundEffectsMode = .unlessSilenced
     @AppStorage("profanityEnabled") private var profanityEnabled: Bool = false
     @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.7
     @Environment(\.dismiss) private var dismiss
 
     @State private var showProfanityInfo = false
-    @State private var webDocument: WebDocument?
 
     var body: some View {
         // No wrapping NavigationStack — this is pushed as a BoardRoute.settings
@@ -29,13 +30,6 @@ struct SettingsView: View {
             SettingsHapticsPreview()
 
             Section {
-                Picker(selection: $appearance) {
-                    ForEach(AppearancePreference.allCases) { value in
-                        Text(value.label).tag(value)
-                    }
-                } label: {
-                    Text("Theme").fontStyle(.body)
-                }
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Card rotation").fontStyle(.body)
@@ -55,11 +49,27 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, 4)
 
+                Picker(selection: $appearance) {
+                    ForEach(AppearancePreference.allCases) { value in
+                        Text(value.label).tag(value)
+                    }
+                } label: {
+                    Text("Theme").fontStyle(.body)
+                }
+
+                Picker(selection: $soundEffectsMode) {
+                    ForEach(SoundEffectsMode.allCases) { mode in
+                        Text(mode.label).tag(mode)
+                    }
+                } label: {
+                    Text("Sound Effects").fontStyle(.body)
+                }
+
                 Toggle(isOn: $hapticsEnabled) {
                     Text("Haptics").fontStyle(.body)
                 }
                 .tint(.primary)
-                
+
                 Toggle(isOn: $profanityEnabled) {
                     HStack(spacing: 6) {
                         Text("Profanity").fontStyle(.body)
@@ -92,6 +102,18 @@ struct SettingsView: View {
 
             Section {
                 NavigationLink {
+                    InstitutionSettingsView()
+                } label: {
+                    SettingsRowLabel(title: "Institution Settings", systemImage: "graduationcap.fill")
+                }
+            } header: {
+                Text("Campus").fontStyle(.subheadline)
+            }
+
+            inviteSection
+
+            Section {
+                NavigationLink {
                     NotificationSettingsView()
                 } label: {
                     SettingsRowLabel(title: "Notification Settings", systemImage: "bell.badge.fill")
@@ -120,12 +142,12 @@ struct SettingsView: View {
                 legalLinkRow(
                     title: "Privacy Policy",
                     systemImage: "hand.raised.fill",
-                    url: AppLinks.privacyPolicyURL
+                    type: .privacy
                 )
                 legalLinkRow(
                     title: "Terms of Service",
                     systemImage: "doc.text.fill",
-                    url: AppLinks.termsOfServiceURL
+                    type: .terms
                 )
             } header: {
                 Text("Legal")
@@ -153,34 +175,73 @@ struct SettingsView: View {
             guard !isSignedIn else { return }
             dismiss()
         }
-        .sheet(item: $webDocument) { document in
-            WebContentSheet(document: document)
-        }
     }
 
     // MARK: - Legal links
 
-    private func legalLinkRow(title: String, systemImage: String, url: URL) -> some View {
-        Button {
-            webDocument = WebDocument(title: title, url: url)
+    private func legalLinkRow(title: String, systemImage: String, type: LegalDocumentType) -> some View {
+        // Native in-app policy page (fetches the canonical text from the
+        // backend), not a web view — a NavigationLink pushes PolicyView.
+        NavigationLink {
+            PolicyView(type: type)
         } label: {
             HStack(spacing: 12) {
                 SettingsIconBadge(systemImage: systemImage)
                 Text(title).fontStyle(.body)
-                Spacer(minLength: 8)
-                // Signals this row shows external (web) content, even though
-                // it opens in-app rather than handing off to Safari.
-                Image(systemName: "arrow.up.right")
-                    .fontStyle(.footnote)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
             }
             .contentShape(.rect)
         }
-        .buttonStyle(.plain)
         .foregroundStyle(.primary)
-        .accessibilityHint("Opens in a web view")
+    }
+
+    // MARK: - Invite section
+
+    /// Admitted users keep sharing their code from Settings. While they have
+    /// instant invites left, a signup through their code skips the waitlist
+    /// entirely; at zero the code degrades to a priority referral.
+    @ViewBuilder
+    private var inviteSection: some View {
+        if onboarding.isComplete,
+           let code = onboarding.status?.referralCode,
+           let url = InviteLink.url(for: code) {
+            let instantRemaining = onboarding.status?.instantInvitesRemaining ?? 0
+            Section {
+                LabeledContent {
+                    // Long-press → a single "Copy" action, instead of the full
+                    // system text-selection menu.
+                    Text(code.uppercased())
+                        .fontStyle(.body)
+                        .monospaced()
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = code.uppercased()
+                            } label: {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                        }
+                } label: {
+                    Text("Your invite code").fontStyle(.body)
+                }
+
+                ShareLink(
+                    item: url,
+                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: instantRemaining > 0))
+                ) {
+                    SettingsRowLabel(title: "Share Invite", systemImage: "square.and.arrow.up.fill")
+                }
+            } header: {
+                Text("Invite Friends")
+                    .fontStyle(.subheadline)
+            } footer: {
+                if instantRemaining > 0 {
+                    Text("Your next \(instantRemaining) invite\(instantRemaining == 1 ? "" : "s") skip the waitlist entirely.")
+                        .fontStyle(.footnote)
+                } else {
+                    Text("Friends who join with your code get bumped up the waitlist.")
+                        .fontStyle(.footnote)
+                }
+            }
+        }
     }
 
     // MARK: - Account section
@@ -233,4 +294,9 @@ struct SettingsView: View {
     }
     .environment(AuthStore(service: MockAuthService()))
     .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
+    .environment(OnboardingStore(
+        service: MockOnboardingService(),
+        auth: AuthStore(service: MockAuthService()),
+        network: NetworkMonitor()
+    ))
 }

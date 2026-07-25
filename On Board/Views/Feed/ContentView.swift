@@ -11,6 +11,7 @@ struct ContentView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(AuthStore.self) private var auth
+    @Environment(OnboardingStore.self) private var onboarding
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
@@ -21,6 +22,15 @@ struct ContentView: View {
     @State private var pulseLowOpacity = false
     @State private var alertError: PresentableAlertError?
     @State private var isResolvingPendingProfile = false
+    @State private var showWelcomeReplay = false
+    /// Fires the once-a-year birthday celebration (fireworks + the countdown
+    /// card's greeting) when the current user's birthday is today.
+    @State private var birthdayCelebrating = false
+    // DEV-only: refine the Signal Lost image placeholder against a real load.
+    @State private var devShowLoadedImage = false
+    @State private var devPlaceholderTint: PostTone?
+    /// Preview aspect ratio (width / height), matching post.imageAspectRatio.
+    @State private var devAspect: Double = 0.8
     @Namespace private var cardNamespace
 
     private var clearingSoon: Bool {
@@ -149,10 +159,63 @@ struct ContentView: View {
         let feedItems = store.feedItems
         return ZStack {
             ScrollView {
+                if onboarding.supportsDevAdmission {
+                    VStack(alignment: .leading, spacing: 12) {
+                        // DEV (mock builds): flip between the Signal Lost
+                        // placeholder and a real loaded image to refine the
+                        // placeholder's look at post-image proportions.
+                        Group {
+                            if devShowLoadedImage {
+                                BoardAsyncImage(
+                                    url: URL(string: "https://picsum.photos/seed/onboard/\(max(1, Int(1000 * devAspect)))/1000"),
+                                    tone: devPlaceholderTint ?? .blue
+                                )
+                            } else {
+                                SignalLostPlaceholder(tint: devPlaceholderTint?.color)
+                            }
+                        }
+                        // Frame to the chosen aspect ratio — the same thing
+                        // GridCard does with post.imageAspectRatio, so the
+                        // placeholder sits in the exact frame the image will.
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(devAspect, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                        Toggle("Show loaded image", isOn: $devShowLoadedImage)
+                            .tint(.primary)
+
+                        Picker("Placeholder tint", selection: $devPlaceholderTint) {
+                            Text("Monochrome").tag(PostTone?.none)
+                            ForEach(PostTone.allCases) { tone in
+                                Text(tone.displayName).tag(PostTone?.some(tone))
+                            }
+                        }
+                        .pickerStyle(.menu)
+
+                        Picker("Aspect ratio", selection: $devAspect) {
+                            Text("Portrait 4:5").tag(0.8)
+                            Text("Tall 3:4").tag(0.75)
+                            Text("Square 1:1").tag(1.0)
+                            Text("Photo 3:2").tag(1.5)
+                            Text("Landscape 16:9").tag(16.0 / 9.0)
+                        }
+                        .pickerStyle(.menu)
+
+                        Button("Replay Welcome [DEV]") {
+                            showWelcomeReplay = true
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    .fontStyle(.footnote)
+                    .padding(.horizontal)
+                    .padding(.top, 4)
+                }
+
                 BoardFeedView(
                     items: feedItems,
                     onNewPost: { showNewPost = true },
-                    isResetting: boardIsResetting
+                    isResetting: boardIsResetting,
+                    celebrateBirthday: birthdayCelebrating
                 )
 
                 if store.isLive, !store.isLoading, !store.hasFeedPosts {
@@ -170,6 +233,14 @@ struct ContentView: View {
                 .allowsHitTesting(false)
                 .transition(.opacity)
             }
+        }
+        .fireworks(isActive: birthdayCelebrating)
+        .task(id: store.currentUser?.id) {
+            guard let user = store.currentUser,
+                  BirthdayCelebration.isToday(user.birthday),
+                  !BirthdayCelebration.feedShown(for: user.id) else { return }
+            BirthdayCelebration.markFeedShown(for: user.id)
+            birthdayCelebrating = true
         }
         .background {
             if clearingSoon {
@@ -204,6 +275,9 @@ struct ContentView: View {
         }
         .refreshable {
             await store.refresh(for: store.currentUserID)
+        }
+        .fullScreenCover(isPresented: $showWelcomeReplay) {
+            WelcomeOnBoardView(boardName: onboarding.status?.boardName)
         }
         .navigationTitle("This Week")
         .task {

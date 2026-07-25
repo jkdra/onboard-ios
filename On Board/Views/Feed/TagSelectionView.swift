@@ -26,6 +26,7 @@ struct TagSelectionView: View {
                                     selectedTags.removeAll(where: { $0 == tag })
                                 } label: {
                                     Image(systemName: "minus.circle.fill").foregroundStyle(.red)
+                                        .accessibilityLabel("Remove #\(tag)")
                                 }
                             }
                         }

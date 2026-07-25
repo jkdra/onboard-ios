@@ -15,11 +15,13 @@ struct OnboardingSchoolEmailStepView: View {
     @State private var lookupState: LookupState = .idle
     @State private var lookupTask: Task<Void, Never>?
     @State private var resendCooldown = OTPCooldown()
+    @State private var showNiceTryAlert = false
 
     private enum LookupState: Equatable {
         case idle
         case checking
         case unsupported
+        case inUse
         case networkError
     }
 
@@ -33,7 +35,7 @@ struct OnboardingSchoolEmailStepView: View {
 
     var body: some View {
         ScrollView {
-            OnboardingProgressBar(step: 5, totalSteps: 6)
+            OnboardingProgressBar(step: 5, totalSteps: 7)
                 .safeAreaPadding(.horizontal)
             VStack(alignment: .leading, spacing: 20) {
 
@@ -134,6 +136,11 @@ struct OnboardingSchoolEmailStepView: View {
                 lookupState = .idle
             }
         }
+        .alert("Nice Try.", isPresented: $showNiceTryAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Impressive. You should be on our dev team, but rules are rules. Please put your actual school email.")
+        }
     }
 
     @ViewBuilder
@@ -153,6 +160,10 @@ struct OnboardingSchoolEmailStepView: View {
                     .foregroundStyle(.secondary)
             case .unsupported:
                 Label(OnboardingError.schoolUnsupported.localizedDescription, systemImage: "xmark.circle.fill")
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.red)
+            case .inUse:
+                Label("Email already registered & verified.", systemImage: "xmark.circle.fill")
                     .fontStyle(.footnote)
                     .foregroundStyle(.red)
             case .networkError:
@@ -188,8 +199,22 @@ struct OnboardingSchoolEmailStepView: View {
             guard !Task.isCancelled, normalizedEmail == candidate else { return }
             switch result {
             case .matched(let match):
-                matchedSchool = match
-                lookupState = .idle
+                // School is supported — now make sure no other account has
+                // already verified this exact email (same live-check pattern
+                // as the username step).
+                let availability = await onboarding.checkSchoolEmailAvailable(candidate)
+                guard !Task.isCancelled, normalizedEmail == candidate else { return }
+                switch availability {
+                case .taken:
+                    matchedSchool = nil
+                    lookupState = .inUse
+                case .available, .networkError:
+                    // networkError here means the school lookup succeeded but
+                    // the availability check flaked — don't strand the user;
+                    // begin_school_email_verification re-checks server-side.
+                    matchedSchool = match
+                    lookupState = .idle
+                }
             case .unsupported:
                 matchedSchool = nil
                 lookupState = .unsupported
@@ -201,23 +226,25 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private func sendCode() async {
+        if normalizedEmail.contains("+") {
+            showNiceTryAlert = true
+            return
+        }
+
         // Same email, window still open: the code already sent is still valid —
         // reopen the entry UI without burning it. A different email sends fresh.
         guard resendCooldown.canSend(to: normalizedEmail) else {
             codeSent = true
             return
         }
+        // matchedSchool is already set by the debounced lookup (sending is
+        // gated on it) — no fallback reconstruction here. The old fallback
+        // rebuilt it from onboarding.status, whose school/board names only
+        // resolve AFTER verification, so it always rendered the placeholders
+        // ("Your school · On Board").
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
             codeSent = true
-            matchedSchool = onboarding.status.map {
-                SchoolMatch(
-                    domain: normalizedEmail.split(separator: "@").last.map(String.init) ?? "",
-                    schoolName: $0.schoolName ?? "Your school",
-                    boardId: $0.boardId ?? SampleBoardID.main,
-                    boardName: $0.boardName ?? "On Board"
-                )
-            } ?? matchedSchool
             resendCooldown.start(duration: 30, destination: normalizedEmail)
         }
     }

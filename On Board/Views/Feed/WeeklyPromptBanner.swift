@@ -2,61 +2,47 @@
 //  WeeklyPromptBanner.swift
 //  On Board
 //
+//  The board's weekly prompt shown quietly at the top of the composer — a
+//  conversation starter, never a required field. Deliberately styled as info
+//  (a hairline chip), NOT as one of the glass input fields, so it doesn't read
+//  as something to tap or fill, and it stays cohesive with the final-hour
+//  notice that shares the top of the composer. The caller resolves the prompt
+//  string (profanity-gated) and only mounts this when a prompt exists, so there
+//  is no "no prompt this week" filler in the composer.
+//
 
 import SwiftUI
 
 struct WeeklyPromptBanner: View {
-    @Environment(BoardStore.self) private var store
-    @AppStorage("profanityEnabled") private var profanityEnabled = false
-
-    private var currentPromptText: String {
-        guard let week = store.activeBoardWeek else {
-            return "No prompt this week! Get creative!"
-        }
-        if profanityEnabled, let profane = week.promptProfane, !profane.trimmed.isEmpty {
-            return profane
-        } else if let clean = week.promptClean, !clean.trimmed.isEmpty {
-            return clean
-        }
-        return "No prompt this week! Get creative!"
-    }
+    let prompt: String
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 14) {
-            Image("OBLogo")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 50, height: 50)
-                // Removed the circle clipping so the raw PDF character is shown.
+        VStack(alignment: .leading, spacing: 4) {
+            Label("This week", systemImage: "quote.bubble.fill")
+                .fontStyle(.caption2)
+                .fontWeight(.semibold)
+                .textCase(.uppercase)
+                .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("The Host")
-                    .fontStyle(.caption2)
-                    .fontWeight(.black)
-                    .foregroundStyle(.primary)
-                    .textCase(.uppercase)
-                
-                Text(currentPromptText)
-                    .fontStyle(.callout)
-                    .foregroundStyle(.primary)
-            }
-            .padding(14)
-            .background {
-                let bubbleShape = UnevenRoundedRectangle(
-                    topLeadingRadius: 16,
-                    bottomLeadingRadius: 4,
-                    bottomTrailingRadius: 16,
-                    topTrailingRadius: 16
-                )
-                
-                bubbleShape
-                    .fill(Color(uiColor: .systemBackground))
-                    .shadow(color: .primary.opacity(0.15), radius: 0, x: 4, y: 4) // Hard comic-style shadow
-                    .overlay(
-                        bubbleShape.stroke(Color.primary, lineWidth: 2.5) // Thick outline matching the logo
-                    )
-            }
+            Text(prompt)
+                .fontStyle(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08), lineWidth: 0.8))
+        // Read as one unit to VoiceOver: "This week, <prompt>".
+        .accessibilityElement(children: .combine)
     }
+}
+
+#Preview {
+    VStack {
+        WeeklyPromptBanner(prompt: "What's the best album you've listened to this week?")
+        Spacer()
+    }
+    .padding()
 }
