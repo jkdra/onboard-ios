@@ -303,15 +303,11 @@ struct SignInView: View {
                         Button {
                             Task { await signUpWithPassword() }
                         } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "person.badge.plus")
-                                Text("Sign Up")
-                                    .fontStyle(.headline)
-                                Spacer()
-                                if isSigningInCredential || isResolving(.email) {
-                                    ProgressView().tint(Color(.systemBackground))
-                                }
-                            }
+                            LoadingButtonLabel(
+                                "Sign Up",
+                                systemImage: "person.badge.plus",
+                                isLoading: isSigningInCredential || isResolving(.email)
+                            )
                         }
                         .buttonStyle(.boardPrimary)
                         .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty || password != confirmPassword)
@@ -320,15 +316,11 @@ struct SignInView: View {
                         Button {
                             Task { await signInWithPassword() }
                         } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "key.fill")
-                                Text("Sign In")
-                                    .fontStyle(.headline)
-                                Spacer()
-                                if isSigningInCredential || isResolving(.email) {
-                                    ProgressView().tint(Color(.systemBackground))
-                                }
-                            }
+                            LoadingButtonLabel(
+                                "Sign In",
+                                systemImage: "key.fill",
+                                isLoading: isSigningInCredential || isResolving(.email)
+                            )
                         }
                         .buttonStyle(.boardPrimary)
                         .disabled(isSigningInCredential || isResolving(.email) || password.isEmpty)
@@ -353,17 +345,13 @@ struct SignInView: View {
                 Button {
                     Task { await verifyOTP() }
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: credentialMode == .phone
-                              ? AuthProvider.phone.systemImage
-                              : AuthProvider.email.systemImage)
-                        Text("Verify Code")
-                            .fontStyle(.headline)
-                        Spacer()
-                        if isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) {
-                            ProgressView().tint(Color(.systemBackground))
-                        }
-                    }
+                    LoadingButtonLabel(
+                        "Verify Code",
+                        systemImage: credentialMode == .phone
+                            ? AuthProvider.phone.systemImage
+                            : AuthProvider.email.systemImage,
+                        isLoading: isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider)
+                    )
                 }
                 .buttonStyle(.boardPrimary)
                 .disabled(isSigningInCredential || isVerifyingOTP || isResolving(credentialProvider) || !OTPCodeInput.isComplete(otpCode))

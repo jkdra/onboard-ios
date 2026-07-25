@@ -185,7 +185,7 @@ struct OnboardingWaitlistStepView: View {
                     item: inviteURL,
                     message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: false))
                 ) {
-                    Label("Invite Friends", systemImage: "square.and.arrow.up")
+                    LoadingButtonLabel("Invite Friends", systemImage: "square.and.arrow.up", isLoading: false)
                 }
                 .buttonStyle(.boardPrimary)
                 .tint(.primary)
@@ -233,9 +233,10 @@ struct OnboardingWaitlistStepView: View {
                         }
                     }
                 } label: {
-                    Label(
+                    LoadingButtonLabel(
                         notificationStatus == .notDetermined ? "Enable Notifications" : "Open Settings",
-                        systemImage: "bell.badge.fill"
+                        systemImage: "bell.badge.fill",
+                        isLoading: false
                     )
                 }
                 .buttonStyle(.boardPrimary)

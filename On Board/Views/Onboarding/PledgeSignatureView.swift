@@ -100,7 +100,7 @@ struct PledgeSignatureView: View {
                     hasSigned = true
                     onSigned()
                 } label: {
-                    Label("Sign & step on board", systemImage: "signature")
+                    LoadingButtonLabel("Sign & step on board", systemImage: "signature", isLoading: false)
                 }
                 .buttonStyle(.boardPrimary)
                 .tint(.primary)
