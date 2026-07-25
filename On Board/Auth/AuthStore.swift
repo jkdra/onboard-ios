@@ -233,6 +233,11 @@ final class AuthStore {
             // Local session is cleared best-effort by the service; never strand
             // the user in a failed state over a network blip during sign-out.
         }
+        // Intentional sign-out only (not the generic signed-out state sync,
+        // which also runs on a fresh install that just captured an invite
+        // link): a deep-linked code must not carry into someone else's
+        // sign-in on the same device.
+        PendingReferralCode.clear()
         state = .signedOut
     }
 
@@ -240,6 +245,7 @@ final class AuthStore {
         isPerformingIntentionalSignOut = true
         defer { isPerformingIntentionalSignOut = false }
         try await service.deleteAccount()
+        PendingReferralCode.clear()
         state = .signedOut
     }
 }

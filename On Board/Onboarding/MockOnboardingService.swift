@@ -104,6 +104,13 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return Self.match(for: email)
     }
 
+    func checkSchoolEmailAvailable(_ email: String) async throws -> Bool {
+        try await Task.sleep(for: .milliseconds(120))
+        // Same convention as beginSchoolEmailVerification's in-use guard: a
+        // local part starting with "taken" simulates a registered email.
+        return !EmailNormalizer.normalized(email).hasPrefix("taken")
+    }
+
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch {
         try await Task.sleep(for: .milliseconds(180))
         guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
@@ -113,6 +120,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized) else {
             throw OnboardingError.invalidSchoolEmail
+        }
+        // Mirrors the live one-account-per-email guard: any local part starting
+        // with "taken" simulates an email another profile already verified.
+        if normalized.hasPrefix("taken") {
+            throw OnboardingError.schoolEmailInUse
         }
         guard let match = Self.match(for: normalized) else {
             throw OnboardingError.schoolUnsupported
@@ -147,6 +159,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.schoolVerificationIncomplete
         }
 
+        // A local part starting with "vip" simulates a golden-ticket instant
+        // admission (live complete_v2 admits instantly when the referrer is
+        // admitted with quota) — lands on the board, fires the welcome flow.
+        let instantlyAdmitted = normalized.hasPrefix("vip")
+
         status = OnboardingStatus(
             id: status.id,
             handle: status.handle,
@@ -155,8 +172,8 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             avatarUrl: status.avatarUrl,
             birthday: status.birthday,
             showBirthday: status.showBirthday,
-            onboardingStep: .waitlist,
-            onboardingCompletedAt: status.onboardingCompletedAt,
+            onboardingStep: instantlyAdmitted ? .complete : .waitlist,
+            onboardingCompletedAt: instantlyAdmitted ? .now : status.onboardingCompletedAt,
             // Verifying your .edu is what puts you on the waitlist — mirrors the live
             // complete_school_email_verification_v2 RPC, which inserts the waitlist
             // row here. So waitlistJoinedAt is set at verify time, not on a separate
@@ -166,10 +183,14 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             pendingSchoolEmail: nil,
             schoolName: match.schoolName,
             boardId: match.boardId,
-            boardName: match.boardName
+            boardName: match.boardName,
+            referralCode: status.referralCode,
+            verifiedReferralCount: status.verifiedReferralCount,
+            instantInvitesRemaining: status.instantInvitesRemaining,
+            expectedGraduation: status.expectedGraduation
         )
         save(status, for: userID)
-        return .waitlist
+        return instantlyAdmitted ? .complete : .waitlist
     }
 
     func joinWaitlist() async throws -> OnboardingStep {
@@ -178,12 +199,6 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             throw OnboardingError.notAuthenticated
         }
 
-        // Joining the waitlist does not complete onboarding — only real admission
-        // (setting boardId) does. Mirrors the live join_waitlist() RPC, which used
-        // to mark onboarding_step 'complete' on a bare join and relied entirely on
-        // the client's effectiveOnboardingStep fallback to keep the user parked
-        // here; that fallback being the only thing standing between "joined" and
-        // "treated as fully onboarded" was the bug.
         var status = loadStatus(for: userID)
         status = status.updating(
             onboardingStep: .waitlist,
@@ -191,6 +206,36 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         )
         save(status, for: userID)
         return .waitlist
+    }
+
+    func submitReferralCode(_ code: String) async throws {
+        try await Task.sleep(for: .milliseconds(180))
+    }
+
+    func setExpectedGraduation(_ month: Date) async throws {
+        try await Task.sleep(for: .milliseconds(150))
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
+            throw OnboardingError.notAuthenticated
+        }
+        var status = loadStatus(for: userID)
+        status = status.updating(expectedGraduation: GraduationMonth.wireString(from: month))
+        save(status, for: userID)
+    }
+
+    /// Dev-only lever for the waitlist screen's "Join Board [DEV]" button:
+    /// admits the current mock user on the spot, mirroring what an admin
+    /// approval does to the live status. Exercises the first-time welcome flow
+    /// without needing the vip@ email convention.
+    func devAdmitCurrentUser() {
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else { return }
+        var status = loadStatus(for: userID)
+        status = status.updating(
+            onboardingStep: .complete,
+            onboardingCompletedAt: .now,
+            boardId: SampleBoardID.main,
+            boardName: "On Board"
+        )
+        save(status, for: userID)
     }
 
     private func loadStatus(for userID: UUID) -> OnboardingStatus {
@@ -241,7 +286,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
                 pendingSchoolEmail: nil,
                 schoolName: "Example University",
                 boardId: SampleBoardID.main,
-                boardName: "On Board"
+                boardName: "On Board",
+                referralCode: "maya123",
+                verifiedReferralCount: 5,
+                instantInvitesRemaining: 3,
+                expectedGraduation: "2027-05-01"
             )
         }
 
@@ -260,7 +309,11 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
             pendingSchoolEmail: nil,
             schoolName: nil,
             boardId: nil,
-            boardName: nil
+            boardName: nil,
+            referralCode: "newuser1",
+            verifiedReferralCount: 0,
+            instantInvitesRemaining: 3,
+            expectedGraduation: nil
         )
     }
 
@@ -288,7 +341,8 @@ private extension OnboardingStatus {
         pendingSchoolEmail: String?? = nil,
         schoolName: String?? = nil,
         boardId: UUID?? = nil,
-        boardName: String?? = nil
+        boardName: String?? = nil,
+        expectedGraduation: String?? = nil
     ) -> OnboardingStatus {
         OnboardingStatus(
             id: id,
@@ -305,7 +359,11 @@ private extension OnboardingStatus {
             pendingSchoolEmail: pendingSchoolEmail ?? self.pendingSchoolEmail,
             schoolName: schoolName ?? self.schoolName,
             boardId: boardId ?? self.boardId,
-            boardName: boardName ?? self.boardName
+            boardName: boardName ?? self.boardName,
+            referralCode: self.referralCode,
+            verifiedReferralCount: self.verifiedReferralCount,
+            instantInvitesRemaining: self.instantInvitesRemaining,
+            expectedGraduation: expectedGraduation ?? self.expectedGraduation
         )
     }
 }

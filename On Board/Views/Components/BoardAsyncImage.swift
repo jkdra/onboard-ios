@@ -64,12 +64,13 @@ struct BoardAsyncImage: View {
     }
 
     private var loadingPlaceholder: some View {
-        // Shimmer skeleton rather than a spinner: an in-feed image reads as
-        // "arriving" instead of "waiting", and matches the feed's cold-load
-        // FeedSkeletonView. Tinted faintly toward the post's tone.
-        SkeletonShape(shape: Rectangle())
+        // "Signal Lost" test-pattern rather than a spinner: an in-feed image
+        // reads as "arriving" instead of "waiting", and the broadcast motif
+        // fits the app's ephemeral, weekly-wipe brand. Shades of the post's
+        // tone (monochrome fallback), drifting via TimelineView — not a
+        // repeatForever animation (which breaks UI-test idle timing).
+        SignalLostPlaceholder(tint: tone.color)
             .frame(minHeight: 100)
-            .overlay(tone.color.opacity(0.05))
     }
 }
 

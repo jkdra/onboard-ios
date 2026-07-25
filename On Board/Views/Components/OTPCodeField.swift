@@ -42,10 +42,17 @@ struct OTPCodeField: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .frame(height: 42)
                 .contentShape(Rectangle())
-                .opacity(0)
+                // 0.015, not 0: fully transparent views are dropped from the
+                // accessibility tree, which makes the field unreachable for
+                // UI tests and VoiceOver. This stays visually invisible while
+                // remaining focusable through accessibility.
+                .opacity(0.015)
                 .disabled(!isEnabled)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // The real TextField is opacity(0), which UI tests can't address —
+        // this identifier gives them the tappable digit row instead.
+        .accessibilityIdentifier("OTPCodeField")
         .onTapGesture { if isEnabled { isFocused = true } }
         .onChange(of: code) { _, newValue in
             let sanitized = OTPCodeInput.sanitized(newValue)

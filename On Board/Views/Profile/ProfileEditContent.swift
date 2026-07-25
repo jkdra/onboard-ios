@@ -17,8 +17,14 @@ struct ProfileEditContent: View {
     @Bindable var draft: ProfileDraft
     var onCameraCapture: (UIImage) -> Void
 
-    private var minBirthdayAgeDate: Date {
-        Calendar.current.date(byAdding: .year, value: -16, to: Date()) ?? Date()
+    @State private var showHandleLockedAlert = false
+
+    /// Friendly "in 6 days" for when the username may next be changed.
+    private var handleUnlockText: String {
+        guard let at = profile.handleChangeAvailableAt else { return "soon" }
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f.localizedString(for: at, relativeTo: .now)
     }
 
     var body: some View {
@@ -36,6 +42,11 @@ struct ProfileEditContent: View {
             birthdaySection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .alert("Username locked", isPresented: $showHandleLockedAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("You can change your username twice every 14 days. You'll be able to change it again \(handleUnlockText).")
+        }
     }
 
     // MARK: - Identity
@@ -54,23 +65,51 @@ struct ProfileEditContent: View {
                 .textInputAutocapitalization(.words)
                 .matchedFieldText(id: ProfileGeometryID.displayName, in: namespace, variant: .title)
             FieldLimitCaption(count: draft.displayName.count, limit: ProfileDraft.displayNameLimit)
-            TextField("username", text: $draft.handle)
-                .textFieldStyle(.boardUsername)
-                .lineLimit(1)
-                // Edits a size up from its subheadline display — a precision
-                // target at caption scale is miserable.
-                .fontStyle(.body)
-                .foregroundStyle(.secondary)
-                .keyboardType(.asciiCapable)
-                .textContentType(.username)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .matchedFieldText(id: ProfileGeometryID.username, in: namespace, variant: .username)
-                .onChange(of: draft.handle) { _, _ in
-                    draft.scheduleHandleAvailabilityCheck()
-                }
-            handleAvailabilityLabel
+
+            if profile.canChangeHandle {
+                TextField("username", text: $draft.handle)
+                    .textFieldStyle(.boardUsername)
+                    .lineLimit(1)
+                    // Edits a size up from its subheadline display — a precision
+                    // target at caption scale is miserable.
+                    .fontStyle(.body)
+                    .foregroundStyle(.secondary)
+                    .keyboardType(.asciiCapable)
+                    .textContentType(.username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .matchedFieldText(id: ProfileGeometryID.username, in: namespace, variant: .username)
+                    .onChange(of: draft.handle) { _, _ in
+                        draft.scheduleHandleAvailabilityCheck()
+                    }
+                handleAvailabilityLabel
+            } else {
+                lockedHandleField
+            }
         }
+    }
+
+    /// Username can only change twice per 14 days. When the limit's hit, the
+    /// field grays out and becomes a button that explains why.
+    private var lockedHandleField: some View {
+        Button {
+            showHandleLockedAlert = true
+        } label: {
+            HStack(spacing: 6) {
+                Text("@\(profile.handle)")
+                    .fontStyle(.body)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Image(systemName: "lock.fill")
+                    .fontStyle(.caption2)
+                    .foregroundStyle(.tertiary)
+                Spacer(minLength: 0)
+            }
+            .contentShape(.rect)
+            .opacity(0.7)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Username locked. Tap to learn why.")
     }
 
     @ViewBuilder
@@ -116,19 +155,22 @@ struct ProfileEditContent: View {
 
     // MARK: - Birthday
 
+    /// Birthday is set once during onboarding and locked after — it's the age
+    /// gate, so it's read-only here. Only the visibility toggle is editable.
     private var birthdaySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            DatePicker(
-                "Birthday",
-                selection: Binding(
-                    get: { draft.birthday ?? minBirthdayAgeDate },
-                    set: { draft.birthday = $0 }
-                ),
-                in: ...minBirthdayAgeDate,
-                displayedComponents: .date
-            )
-            .datePickerStyle(.compact)
-            .fontStyle(.body)
+            if let birthday = draft.birthday {
+                HStack(spacing: 6) {
+                    Text("Birthday").fontStyle(.body)
+                    Spacer()
+                    Text(birthday, format: .dateTime.month(.wide).day().year())
+                        .fontStyle(.body)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "lock.fill")
+                        .fontStyle(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
             Toggle("Show month and day on my profile", isOn: $draft.showBirthday)
                 .fontStyle(.body)
                 .tint(.primary)

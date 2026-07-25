@@ -16,7 +16,7 @@ extension Profile {
             bio: "second year CS. perpetually one assignment behind.",
             avatarUrl: "https://randomuser.me/api/portraits/women/44.jpg",
             birthday: "2003-05-14",
-            showBirthday: false,
+            showBirthday: true,
             joinedAt: Date(timeIntervalSince1970: 1_725_148_800)
         ),
         Profile(id: SampleProfileID.leo,    handle: "leokp",    displayName: "Leo Park",       bio: "design + caffeine.",                                    avatarUrl: "https://randomuser.me/api/portraits/men/4.jpg", birthday: "2002-11-02", showBirthday: false),

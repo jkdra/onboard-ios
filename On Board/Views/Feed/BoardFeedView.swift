@@ -15,6 +15,8 @@ struct BoardFeedView: View {
     var onNewPost: (() -> Void)?
     var isResetting: Bool = false
     var originatingProfileID: UUID? = nil
+    /// Plays the countdown card's one-time birthday greeting (feed only).
+    var celebrateBirthday: Bool = false
 
     // Read from the environment rather than taken as a parameter: the zoom
     // destination lives in ContentView, so every card must register its source in
@@ -190,7 +192,7 @@ struct BoardFeedView: View {
             }
             .buttonStyle(.plain)
         case .countdown(let week, let isArchived):
-            CountdownCard(week: week, isArchived: isArchived, columnWidth: columnWidth)
+            CountdownCard(week: week, isArchived: isArchived, columnWidth: columnWidth, celebrateBirthday: celebrateBirthday)
                 .rotationEffect(.degrees(cardRotation))
         case .newPost:
             if let onNewPost {

@@ -39,12 +39,19 @@ struct OnboardingCoordinator: View {
     @State private var interactiveSignIn = false
 
     private var effectiveStep: OnboardingStep {
-        guard let backendStep = onboarding.status?.effectiveOnboardingStep else { return .birthday }
+        guard let status = onboarding.status else { return .birthday }
+        let backendStep = status.effectiveOnboardingStep
         // .contentPreferences has no backing DB state, so it can't come back from
         // effectiveOnboardingStep — insert it locally once profile is behind the
         // user and it hasn't been shown yet.
         if !hasCompletedProfanityStep, Self.rank(backendStep) > Self.rank(.profile) {
             return .contentPreferences
+        }
+        // .graduation is also client-inserted: shown right after school
+        // verification while `expected_graduation` is still null. Existing users
+        // were backfilled to a value, so they never see it.
+        if status.verifiedSchoolEmail != nil, status.expectedGraduation == nil {
+            return .graduation
         }
         return backendStep
     }
@@ -74,6 +81,8 @@ struct OnboardingCoordinator: View {
                             OnboardingContentPreferencesStepView()
                         case .schoolVerify:
                             OnboardingSchoolEmailStepView()
+                        case .graduation:
+                            OnboardingGraduationStepView()
                         case .waitlist:
                             OnboardingWaitlistStepView()
                         default:
@@ -187,7 +196,8 @@ struct OnboardingCoordinator: View {
         case .profile:             return [.birthday, .username, .profile]
         case .contentPreferences:  return [.birthday, .username, .profile, .contentPreferences]
         case .schoolVerify:        return [.birthday, .username, .profile, .contentPreferences, .schoolVerify]
-        case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .waitlist]
+        case .graduation:          return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation]
+        case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
         }
     }
 }
