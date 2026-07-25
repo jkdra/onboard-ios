@@ -55,11 +55,6 @@ struct SettingsView: View {
                 }
                 .padding(.vertical, 4)
 
-                Toggle(isOn: $hapticsEnabled) {
-                    Text("Haptics").fontStyle(.body)
-                }
-                .tint(.primary)
-
                 Picker(selection: $soundEffectsMode) {
                     ForEach(SoundEffectsMode.allCases) { mode in
                         Text(mode.label).tag(mode)
@@ -67,6 +62,11 @@ struct SettingsView: View {
                 } label: {
                     Text("Sound Effects").fontStyle(.body)
                 }
+
+                Toggle(isOn: $hapticsEnabled) {
+                    Text("Haptics").fontStyle(.body)
+                }
+                .tint(.primary)
 
                 Toggle(isOn: $profanityEnabled) {
                     HStack(spacing: 6) {

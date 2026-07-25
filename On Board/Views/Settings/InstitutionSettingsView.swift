@@ -40,6 +40,7 @@ struct InstitutionSettingsView: View {
             } footer: {
                 if status?.verifiedSchoolEmail == nil {
                     Text("Verify your campus email during onboarding to join your board.")
+                        .fontStyle(.footnote)
                 }
             }
 
@@ -60,6 +61,7 @@ struct InstitutionSettingsView: View {
                 Text("Graduation").fontStyle(.subheadline)
             } footer: {
                 Text("We use this to keep your board with you when you become an alum. Month and year only.")
+                    .fontStyle(.footnote)
             }
         }
         .navigationTitle("Institution Settings")
@@ -142,7 +144,12 @@ struct GraduationEditorSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }.disabled(onboarding.isSubmitting)
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark")
+                    }
+                    .disabled(onboarding.isSubmitting)
                 }
             }
         }

@@ -15,6 +15,7 @@ struct NewPostView: View {
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    @AppStorage("profanityEnabled") private var profanityEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var title = ""
@@ -47,6 +48,19 @@ struct NewPostView: View {
 
     private var previewTone: PostTone? { selectedTone }
 
+    /// The board's weekly prompt, profanity-gated exactly like `CountdownCard`.
+    /// `nil` when the week has no prompt — the banner is then hidden entirely.
+    private var weeklyPrompt: String? {
+        let week = store.activeBoardWeek
+        if profanityEnabled, let profane = week?.promptProfane, !profane.trimmed.isEmpty {
+            return profane
+        }
+        if let clean = week?.promptClean, !clean.trimmed.isEmpty {
+            return clean
+        }
+        return nil
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -69,7 +83,9 @@ struct NewPostView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
 
-//                    WeeklyPromptBanner()
+                    if let weeklyPrompt {
+                        WeeklyPromptBanner(prompt: weeklyPrompt)
+                    }
 
                     // Glass fields — the same "you can touch this" chrome and
                     // context-matched typography as the post/profile editors,

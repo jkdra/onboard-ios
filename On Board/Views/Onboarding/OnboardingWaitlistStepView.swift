@@ -170,12 +170,15 @@ struct OnboardingWaitlistStepView: View {
                     .foregroundStyle(.orange)
             }
 
-            if let milestone = ReferralRewards.milestoneText(for: onboarding.status?.verifiedReferralCount ?? 0) {
-                Text(milestone)
-                    .fontStyle(.caption2)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
+            // TODO(launch): First Class isn't fulfilled server-side yet, so its
+            // referral reward is hidden. Uncomment to re-enable when the
+            // subscription ships (ReferralRewards.milestoneText is left intact).
+            //            if let milestone = ReferralRewards.milestoneText(for: onboarding.status?.verifiedReferralCount ?? 0) {
+            //                Text(milestone)
+            //                    .fontStyle(.caption2)
+            //                    .foregroundStyle(.secondary)
+            //                    .multilineTextAlignment(.center)
+            //            }
 
             if let inviteURL {
                 ShareLink(
