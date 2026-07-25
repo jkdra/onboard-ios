@@ -213,6 +213,13 @@ struct OnboardingProfileStepView: View {
             }
             avatarUrl = onboarding.status?.avatarUrl
         }
+        .task {
+            // Deferred deep link: if this user tapped an invite link before the
+            // app was installed, the web invite page stashed the code on the
+            // clipboard — recover it so the field below is pre-filled. No-ops if
+            // a code was already captured (installed-app universal link).
+            await PendingReferralCode.hydrateFromPasteboardIfNeeded()
+        }
         .fullScreenCover(item: Binding<UIImage?>(
             get: { uncroppedImage },
             set: { uncroppedImage = $0 }
