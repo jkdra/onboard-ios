@@ -16,13 +16,22 @@
 
 import SwiftUI
 
-/// Per-user "has seen the welcome" flag. The welcome fires only on an
-/// in-session transition from needs-onboarding → complete (so returning users
-/// signing in on a new device never see it); this flag additionally guards
-/// re-triggers within a session lifecycle.
+/// Per-user welcome-celebration bookkeeping.
+///
+/// The welcome must fire the first time a user reaches `complete`, but NOT for a
+/// returning, already-complete user signing in on a fresh device. The signal
+/// that distinguishes them is "did THIS install ever see this user mid-onboarding
+/// (incomplete / waitlisted)". `markSeenIncomplete` records that persistently, so
+/// the celebration still fires on a cold launch after an admission that happened
+/// while the app was closed — the common admin-admit → "You're On Board!" push
+/// path — which an in-session-only flag would miss. `hasShown` then guards
+/// against ever repeating it.
 enum WelcomeCelebration {
     private static func key(for userID: UUID) -> String {
         "welcomeShown.\(userID.uuidString)"
+    }
+    private static func incompleteKey(for userID: UUID) -> String {
+        "sawIncompleteOnboarding.\(userID.uuidString)"
     }
 
     static func hasShown(for userID: UUID) -> Bool {
@@ -32,11 +41,21 @@ enum WelcomeCelebration {
     static func markShown(for userID: UUID) {
         UserDefaults.standard.set(true, forKey: key(for: userID))
     }
+
+    /// Whether this install has ever observed this user needing onboarding.
+    static func wasSeenIncomplete(for userID: UUID) -> Bool {
+        UserDefaults.standard.bool(forKey: incompleteKey(for: userID))
+    }
+
+    static func markSeenIncomplete(for userID: UUID) {
+        UserDefaults.standard.set(true, forKey: incompleteKey(for: userID))
+    }
 }
 
 struct WelcomeOnBoardView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var scheme
     /// The Host's voice preference — shared with the global Settings picker.
     /// The in-cover mute button toggles this same key.
     @AppStorage("soundEffectsMode") private var soundMode: SoundEffectsMode = .unlessSilenced
@@ -62,6 +81,12 @@ struct WelcomeOnBoardView: View {
     /// Fires the fireworks on the reveal. Off under Reduce Motion and disabled
     /// in UI tests (a running animation would stall XCUITest's idle wait).
     @State private var fireworksActive = false
+    /// Whether the Host's voice plays in THIS welcome. Seeded from the global
+    /// `soundEffectsMode` (muted up front if the device is silenced and the mode
+    /// respects the silent switch), but the in-cover button toggles only this —
+    /// it never writes back to the global setting. Pressing it to unmute forces
+    /// the voice audible even when silenced (a per-playing override).
+    @State private var voiceOn = false
 
     private var celebrationFXEnabled: Bool {
         !ProcessInfo.processInfo.arguments.contains("-disableCelebrationFX")
@@ -98,9 +123,14 @@ struct WelcomeOnBoardView: View {
                     Spacer()
 
                     hostWithBubble
+                        .frame(maxWidth: .infinity, alignment: .center)  // Host + bubble centered as a unit
 
-                    if revealDone {
-                        VStack(alignment: .leading, spacing: 6) {
+                    Spacer()
+
+                    // The campus line sits directly above the CTA (no card of its
+                    // own) and the two rise into place together on the reveal.
+                    VStack(spacing: 14) {
+                        VStack(spacing: 6) {
                             if let boardName {
                                 Label(boardName, systemImage: "building.columns.fill")
                                     .fontStyle(.subheadline)
@@ -110,34 +140,21 @@ struct WelcomeOnBoardView: View {
                             Text("Your board is live. New week every Monday.")
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.leading)
+                                .multilineTextAlignment(.center)
                         }
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 14)
-                        .background {
-                            // Liquid-glass info card — the app's Aero-modern material.
-                            GlassBackground(
-                                shape: RoundedRectangle(cornerRadius: 20, style: .continuous),
-                                fallback: AnyShapeStyle(.thinMaterial)
-                            )
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+
+                        Button {
+                            fireworksActive = false      // stop the show on the way out
+                            showPledge = true
+                        } label: {
+                            LoadingButtonLabel("Continue", systemImage: "arrow.forward", isLoading: false)
                         }
-                        .padding(.top, 30)
-                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        .buttonStyle(.boardPrimary)
+                        .tint(.primary)
                     }
-
-                    Spacer()
-
-                    Button {
-                        fireworksActive = false      // stop the show on the way out
-                        showPledge = true
-                    } label: {
-                        LoadingButtonLabel("Continue", systemImage: "arrow.forward", isLoading: false)
-                    }
-                    .buttonStyle(.boardPrimary)
-                    .tint(.primary)
+                    .frame(maxWidth: .infinity, alignment: .center)
                     .opacity(revealDone ? 1 : 0)
+                    .offset(y: revealDone ? 0 : 24)
                     .disabled(!revealDone)
                 }
                 .safeAreaPadding()
@@ -156,20 +173,19 @@ struct WelcomeOnBoardView: View {
             }
         }
         .task { await runSequence() }
-        .onChange(of: soundMode) { _, mode in
-            if mode.isOn { HostVoice.shared.prepare(playsWhenSilenced: mode.playsWhenSilenced) }
-        }
         .onDisappear { HostVoice.shared.stop() }
     }
 
-    /// Quick in-cover mute. Flips between off and "on unless silenced"; the
-    /// full three-way control (respect vs. override the silent switch) lives in
-    /// Settings, bound to the same `soundEffectsMode` key.
+    /// Per-playing mute for the Host's voice. It flips ONLY this welcome's
+    /// `voiceOn` — it never changes the global `soundEffectsMode` (that lives in
+    /// Settings). Unmuting forces the voice audible even if the device is
+    /// silenced: an override that lasts just for this playing.
     private var muteButton: some View {
         Button {
-            soundMode = soundMode.isOn ? .off : .unlessSilenced
+            voiceOn.toggle()
+            if voiceOn { HostVoice.shared.prepare(playsWhenSilenced: true) }
         } label: {
-            Image(systemName: soundMode.isOn ? "speaker.wave.2.fill" : "speaker.slash.fill")
+            Image(systemName: voiceOn ? "speaker.wave.2.fill" : "speaker.slash.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .frame(width: 38, height: 38)
@@ -180,7 +196,7 @@ struct WelcomeOnBoardView: View {
                 .contentTransition(.symbolEffect(.replace))
         }
         .opacity(phase == .hidden ? 0 : 1)
-        .accessibilityLabel(soundMode.isOn ? "Mute the Host" : "Unmute the Host")
+        .accessibilityLabel(voiceOn ? "Mute the Host" : "Unmute the Host")
     }
 
     // MARK: - The Host
@@ -191,7 +207,10 @@ struct WelcomeOnBoardView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 104)
-                .foregroundStyle(.primary)
+                // Solid color-art sprites (black on white). Invert for dark mode
+                // so he's white on black. He's opaque, so he naturally occludes
+                // the fireworks behind him — no background patch needed.
+                .colorInverted(scheme == .dark)
                 .rotationEffect(.degrees(phase == .hidden ? -14 : 0))
                 .background {
                     // Soft glow anchors The Host in space rather than leaving
@@ -221,49 +240,43 @@ struct WelcomeOnBoardView: View {
         }
     }
 
-    /// The bubble hangs UNDER The Host, its tail reaching up toward his
-    /// mouth (right side of the glyph). Sized against the full line so it
-    /// doesn't jitter while the typewriter fills it in.
+    /// The Host's dialogue. Sized against the full line (via a hidden copy) so
+    /// it doesn't jitter while the typewriter fills it in. The reusable
+    /// `HostSpeechBubble` provides the glass balloon + centered tail.
     private var speechBubble: some View {
-        ZStack(alignment: .topLeading) {
-            Text(script).hidden()
-            Text(String(script.prefix(visibleCharacters)))
+        HostSpeechBubble {
+            ZStack(alignment: .topLeading) {
+                Text(script).hidden()
+                Text(String(script.prefix(visibleCharacters)))
+            }
+            .fontStyle(.title3)
+            .fontWeight(.heavy)
+            .multilineTextAlignment(.leading)
+            // The bubble is a hard-sized graphic (`fixedSize` keeps it from
+            // jittering as the typewriter fills). Bound its Dynamic Type growth
+            // so it can't overflow the screen at accessibility sizes — the same
+            // message is announced to VoiceOver and echoed by the info card,
+            // both of which scale freely.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .fixedSize()
+            // Expose the whole line to VoiceOver, not the mid-typewriter prefix
+            // — otherwise assistive tech reads a changing fragment on every
+            // character step. Each phase change re-announces (mirrors the two
+            // spoken beats).
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(script.replacingOccurrences(of: "\n", with: " ")))
         }
-        .fontStyle(.title3)
-        .fontWeight(.heavy)
-        .multilineTextAlignment(.leading)
-        // The bubble is a hard-sized graphic (`fixedSize` keeps it from
-        // jittering as the typewriter fills). Bound its Dynamic Type growth so
-        // it can't overflow the screen at accessibility sizes — the same
-        // message is announced to VoiceOver and echoed by the info card, both
-        // of which scale freely.
-        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-        .fixedSize()
-        .padding(.leading, 18 + SpeechBubbleShape.tailSize)
-        .padding(.trailing, 18)
-        .padding(.vertical, 14)
-        .background {
-            // Clean, solid "game dialogue" bubble: an elevated surface lifted
-            // by a soft shadow, with a hairline edge for definition in light
-            // mode — no heavy comic outline (that read as clip-art). The Host
-            // mascot carries the character; the bubble stays quiet and native.
-            SpeechBubbleShape()
-                .fill(Color(.secondarySystemBackground))
-                .shadow(color: .black.opacity(0.28), radius: 20, x: 0, y: 12)
-            SpeechBubbleShape()
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        }
-        // Expose the whole line to VoiceOver, not the mid-typewriter prefix —
-        // otherwise assistive tech reads a changing fragment on every character
-        // step. Each phase change re-announces (mirrors the two spoken beats).
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text(script.replacingOccurrences(of: "\n", with: " ")))
     }
 
     // MARK: - Sequence
 
     private func runSequence() async {
         guard phase == .hidden else { return }
+
+        // Seed this playing's voice from the global setting. The in-cover button
+        // then toggles only this `voiceOn` (never the global setting), and
+        // unmuting forces the voice audible even when the device is silenced.
+        voiceOn = soundMode.isOn
 
         if reduceMotion {
             phase = .reveal
@@ -273,8 +286,8 @@ struct WelcomeOnBoardView: View {
             return
         }
 
-        // Warm the voice engine so the first chirp lands without setup latency.
-        if soundMode.isOn {
+        // Warm the voice engine so the first blip lands without setup latency.
+        if voiceOn {
             HostVoice.shared.prepare(playsWhenSilenced: soundMode.playsWhenSilenced)
         }
 
@@ -322,14 +335,16 @@ struct WelcomeOnBoardView: View {
             var t = Transaction(); t.disablesAnimations = true
             withTransaction(t) {
                 visibleCharacters = index
-                mouthClosed = (index / 3) % 2 == 1
+                // Flap every 2 characters — a quicker mouth than every 3, which
+                // read as slightly sluggish next to the typing cadence.
+                mouthClosed = (index / 2) % 2 == 1
             }
             let ch = index <= chars.count ? chars[index - 1] : " "
-            // The Host's voice: a soft chirp on every other character, skipping
-            // whitespace — dense enough to read as speech, sparse enough not to
-            // machine-gun. Pitch lifts a touch on the happy reveal beat.
-            if soundMode.isOn, index % 2 == 0, !ch.isWhitespace {
-                HostVoice.shared.chirp(bright: phase == .reveal, seed: index)
+            // The Host's voice: an Animalese-style blip per letter, driven by the
+            // text itself (see HostVoice). Letters sound; spaces/punctuation are
+            // the pauses. The happy set + higher pitch land on the reveal beat.
+            if voiceOn {
+                HostVoice.shared.speak(ch, at: index - 1, in: line, bright: phase == .reveal)
             }
             // Natural cadence: a real beat after punctuation, a hair slower per
             // character than a flat machine-gun typewriter.
@@ -344,72 +359,19 @@ struct WelcomeOnBoardView: View {
         case ".", "!", "?": return 300
         case ",", ";", ":": return 175
         case "\n":          return 240
-        default:            return 45
+        // ~62ms/letter matches the voice cadence tuned in the offline render.
+        default:            return 62
         }
     }
 }
 
-/// Rounded-rect bubble with a smooth, tapered tail on its LEADING (left) edge —
-/// one continuous outline so a stroke has no seam where the tail meets the body.
-/// The tail curves out of the left edge and narrows to a soft, rounded tip
-/// (like a modern chat tail), pointing back toward The Host beside it.
-nonisolated struct SpeechBubbleShape: Shape {
-    /// How far the tail pokes left, beyond the bubble body.
-    static let tailSize: CGFloat = 18
-
-    var cornerRadius: CGFloat = 20
-    /// Vertical span of the tail's base on the left edge.
-    var tailWidth: CGFloat = 26
-    /// Tail tip y, relative to the bubble's vertical center — negative aims it
-    /// higher (toward The Host's face).
-    var tailOffsetY: CGFloat = 0
-
-    func path(in rect: CGRect) -> Path {
-        let tail = Self.tailSize
-        let body = CGRect(
-            x: rect.minX + tail, y: rect.minY,
-            width: rect.width - tail, height: rect.height
-        )
-        let r = min(cornerRadius, min(body.width, body.height) / 2)
-
-        // Keep the tail's base on the straight part of the left edge.
-        let half = tailWidth / 2
-        let tipY = min(max(rect.midY + tailOffsetY, body.minY + r + half + 2),
-                       body.maxY - r - half - 2)
-        let baseBottom = CGPoint(x: body.minX, y: tipY + half)
-        let baseTop = CGPoint(x: body.minX, y: tipY - half)
-        // Tip pokes straight left and rounds over softly (symmetric taper).
-        let tip = CGPoint(x: rect.minX, y: tipY)
-
-        var p = Path()
-        // Top edge, left→right, then clockwise around body to the bottom-left.
-        p.move(to: CGPoint(x: body.minX + r, y: body.minY))
-        p.addLine(to: CGPoint(x: body.maxX - r, y: body.minY))
-        p.addArc(center: CGPoint(x: body.maxX - r, y: body.minY + r), radius: r,
-                 startAngle: .degrees(-90), endAngle: .degrees(0), clockwise: false)
-        p.addLine(to: CGPoint(x: body.maxX, y: body.maxY - r))
-        p.addArc(center: CGPoint(x: body.maxX - r, y: body.maxY - r), radius: r,
-                 startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        p.addLine(to: CGPoint(x: body.minX + r, y: body.maxY))
-        p.addArc(center: CGPoint(x: body.minX + r, y: body.maxY - r), radius: r,
-                 startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
-        // Up the left edge to the tail base, out to the tip, back to the edge.
-        p.addLine(to: baseBottom)
-        p.addCurve(
-            to: tip,
-            control1: CGPoint(x: body.minX - tail * 0.45, y: tipY + half * 0.55),
-            control2: CGPoint(x: tip.x + tail * 0.18, y: tipY + half * 0.20)
-        )
-        p.addCurve(
-            to: baseTop,
-            control1: CGPoint(x: tip.x + tail * 0.18, y: tipY - half * 0.20),
-            control2: CGPoint(x: body.minX - tail * 0.45, y: tipY - half * 0.55)
-        )
-        p.addLine(to: CGPoint(x: body.minX, y: body.minY + r))
-        p.addArc(center: CGPoint(x: body.minX + r, y: body.minY + r), radius: r,
-                 startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
-        p.closeSubpath()
-        return p
+extension View {
+    /// Inverts colors only when `on` — used to flip the black-on-white Host art
+    /// to white-on-black for dark mode. The Host sprites are solid color art
+    /// (render intent "original"), so tinting won't work; this does.
+    @ViewBuilder
+    func colorInverted(_ on: Bool) -> some View {
+        if on { colorInvert() } else { self }
     }
 }
 

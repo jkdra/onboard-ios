@@ -116,7 +116,7 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         continueButton.tap()
 
         // ── Pledge ────────────────────────────────────────────────────────
-        XCTAssertTrue(app.staticTexts["One more thing."].waitForExistence(timeout: 6), "pledge screen did not appear")
+        XCTAssertTrue(app.navigationBars["One more thing!"].waitForExistence(timeout: 6), "pledge screen did not appear")
 
         let signButton = app.buttons["Sign & step on board"]
         XCTAssertTrue(signButton.waitForExistence(timeout: 4))
@@ -132,7 +132,7 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         signButton.tap()
 
         // Signing dismisses the whole cover back to the feed.
-        XCTAssertTrue(app.staticTexts["One more thing."].waitForNonExistence(timeout: 6))
+        XCTAssertTrue(app.navigationBars["One more thing!"].waitForNonExistence(timeout: 6))
     }
 
     @MainActor

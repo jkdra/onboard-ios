@@ -77,11 +77,20 @@ struct RootView: View {
             Task { await onboarding.refreshOnForeground() }
         }
         .onChange(of: onboarding.needsOnboarding) { _, needsOnboarding in
-            if needsOnboarding { sawIncompleteOnboarding = true }
+            if needsOnboarding {
+                sawIncompleteOnboarding = true
+                // Persist it per-user so a cold launch after an away-admission
+                // (admin admit → "You're On Board!" push, app killed in between)
+                // still fires the welcome — the in-session flag alone would miss it.
+                if let userID = auth.session?.userId {
+                    WelcomeCelebration.markSeenIncomplete(for: userID)
+                }
+            }
         }
         .onChange(of: onboarding.isComplete) { _, isComplete in
-            guard isComplete, sawIncompleteOnboarding,
+            guard isComplete,
                   let userID = auth.session?.userId,
+                  sawIncompleteOnboarding || WelcomeCelebration.wasSeenIncomplete(for: userID),
                   !WelcomeCelebration.hasShown(for: userID) else { return }
             WelcomeCelebration.markShown(for: userID)
             showWelcome = true

@@ -17,6 +17,7 @@ struct CountdownCard: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.colorScheme) private var scheme
     @AppStorage("profanityEnabled") private var profanityEnabled = false
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @State private var triggerShake = 0
@@ -199,6 +200,10 @@ struct CountdownCard: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: 72, height: 72)
+                // Host sprites render "original" (solid color art), so they don't
+                // tint — flip the black art to white in dark mode so the watermark
+                // stays visible on the dark card instead of vanishing into it.
+                .colorInverted(scheme == .dark)
                 .opacity(greetingHostHappy ? 0.34 : 0.12)
                 .offset(x: 8, y: 12)
 

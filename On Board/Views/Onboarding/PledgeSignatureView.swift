@@ -27,6 +27,9 @@ struct PledgeSignatureView: View {
 
     @State private var strokes: [SignatureStroke] = []
     @State private var currentStroke = SignatureStroke()
+    /// Live canvas size, so the accessibility "Sign" action can lay a stroke
+    /// that actually spans the box (VoiceOver/Switch Control users can't draw).
+    @State private var canvasSize: CGSize = .zero
     /// Latches on the first sign tap so a rapid double-tap can't fire
     /// `onSigned()` (and the parent's `dismiss()`) twice.
     @State private var hasSigned = false
@@ -43,10 +46,6 @@ struct PledgeSignatureView: View {
             // to the bottom of the screen with breathing room above them.
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
-                    Text("One more thing.")
-                        .fontStyle(.largeTitle)
-                        .fontWeight(.heavy)
-
                     Text("Every member makes the same promise. Sign below to pledge:")
                         .fontStyle(.subheadline)
                         .foregroundStyle(.secondary)
@@ -80,6 +79,13 @@ struct PledgeSignatureView: View {
                         NavigationLink("Privacy Policy") { PolicyView(type: .privacy) }
                     }
                     .fontStyle(.footnote)
+                    // Fourth in the staggered fade-in, after the three pledges.
+                    .opacity(pledgesRevealed ? 1 : 0)
+                    .offset(y: pledgesRevealed ? 0 : 14)
+                    .animation(
+                        reduceMotion ? nil : .smooth(duration: 0.45).delay(0.1 + 3 * 0.12),
+                        value: pledgesRevealed
+                    )
                 }
                 .safeAreaPadding(.horizontal)
                 .padding(.top, 8)
@@ -105,8 +111,8 @@ struct PledgeSignatureView: View {
             .padding(.bottom, 4)
         }
         .background(Color(.systemBackground))
-        .navigationTitle("The Pledge")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("One more thing!")
+        .navigationBarTitleDisplayMode(.large)
         .navigationBarBackButtonHidden(true)
     }
 
@@ -182,6 +188,7 @@ struct PledgeSignatureView: View {
             }
         }
         .frame(height: 170)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { canvasSize = $0 }
         .contentShape(Rectangle())
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -221,8 +228,34 @@ struct PledgeSignatureView: View {
             .accessibilityLabel("Clear signature")
         }
         .accessibilityIdentifier("SignatureCanvas")
-        .accessibilityLabel("Signature area")
-        .accessibilityHint("Draw your signature to sign the pledge")
+        .accessibilityLabel("Signature")
+        .accessibilityAddTraits(.isButton)
+        // A drawing gesture is unreachable for VoiceOver / Switch Control, so
+        // the box doubles as a button: activating it lays down the signature,
+        // then "Sign & step on board" enables like it does after a real draw.
+        .accessibilityValue(hasSignature ? "Signed" : "Not signed")
+        .accessibilityHint(hasSignature ? "Double-tap to clear" : "Double-tap to sign, or trace your signature")
+        .accessibilityAction {
+            if hasSignature {
+                strokes = []
+                currentStroke = SignatureStroke()
+            } else {
+                strokes = [SignatureStroke(points: syntheticSignaturePoints())]
+            }
+        }
+    }
+
+    /// A simple left-to-right squiggle spanning the current canvas — the stroke
+    /// laid down when an assistive-tech user activates the signature box, so
+    /// `hasSignature` flips true exactly as a hand-drawn stroke would.
+    private func syntheticSignaturePoints() -> [CGPoint] {
+        let size = canvasSize == .zero ? CGSize(width: 300, height: 170) : canvasSize
+        let midY = size.height / 2
+        let left = size.width * 0.12, right = size.width * 0.88
+        let span = right - left
+        return stride(from: 0.0, through: 1.0, by: 0.04).map { t in
+            CGPoint(x: left + span * t, y: midY - sin(t * .pi * 3) * size.height * 0.18)
+        }
     }
 
     /// The sign-here rule near the bottom of the box: a rounded-tip line with
