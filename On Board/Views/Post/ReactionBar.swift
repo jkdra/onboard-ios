@@ -72,6 +72,17 @@ struct ReactionBar: View {
                         .opacity(0.75)
                 }
                 .foregroundStyle(.primary)
+                // Archived (read-only) week: mark the viewer's own reaction with
+                // a subtle underline under just that reaction's emoji+count. An
+                // overlay, so it never shifts the row's spacing/alignment.
+                .overlay(alignment: .bottom) {
+                    if selected == reaction {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.5))
+                            .frame(height: 2)
+                            .offset(y: 5)
+                    }
+                }
                 .frame(maxWidth: .infinity)
 
                 if index < Reaction.defaultOrder.count - 1 {

@@ -189,6 +189,11 @@ extension PostDetailView {
 
         if let urlString = livePost.imageUrl, let url = URL(string: urlString) {
             BoardAsyncImage(url: url, tone: tone, contentMode: .fit)
+                // Reserve the photo's real aspect ratio up front so the
+                // "signal lost" placeholder occupies the same box the loaded
+                // image will — no height jump when it finishes. Older posts
+                // may lack the ratio (nil) → fall back to self-sizing.
+                .aspectRatio(livePost.imageAspectRatio.map { CGFloat($0) }, contentMode: .fit)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay {

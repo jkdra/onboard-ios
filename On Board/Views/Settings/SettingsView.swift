@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
@@ -29,13 +30,6 @@ struct SettingsView: View {
             SettingsHapticsPreview()
 
             Section {
-                Picker(selection: $appearance) {
-                    ForEach(AppearancePreference.allCases) { value in
-                        Text(value.label).tag(value)
-                    }
-                } label: {
-                    Text("Theme").fontStyle(.body)
-                }
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("Card rotation").fontStyle(.body)
@@ -54,6 +48,14 @@ struct SettingsView: View {
                     }
                 }
                 .padding(.vertical, 4)
+
+                Picker(selection: $appearance) {
+                    ForEach(AppearancePreference.allCases) { value in
+                        Text(value.label).tag(value)
+                    }
+                } label: {
+                    Text("Theme").fontStyle(.body)
+                }
 
                 Picker(selection: $soundEffectsMode) {
                     ForEach(SoundEffectsMode.allCases) { mode in
@@ -205,10 +207,18 @@ struct SettingsView: View {
             let instantRemaining = onboarding.status?.instantInvitesRemaining ?? 0
             Section {
                 LabeledContent {
+                    // Long-press → a single "Copy" action, instead of the full
+                    // system text-selection menu.
                     Text(code.uppercased())
                         .fontStyle(.body)
                         .monospaced()
-                        .textSelection(.enabled)
+                        .contextMenu {
+                            Button {
+                                UIPasteboard.general.string = code.uppercased()
+                            } label: {
+                                Label("Copy", systemImage: "doc.on.doc")
+                            }
+                        }
                 } label: {
                     Text("Your invite code").fontStyle(.body)
                 }

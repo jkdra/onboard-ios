@@ -124,20 +124,6 @@ struct GraduationEditorSheet: View {
                     .pickerStyle(.wheel)
                     .frame(maxWidth: .infinity)
                 }
-
-                Button {
-                    guard let date = selectedDate else { return }
-                    Task {
-                        let ok = await onboarding.submitGraduation(date)
-                        if ok { dismiss() }
-                    }
-                } label: {
-                    LoadingButtonLabel("Save", systemImage: "checkmark", isLoading: onboarding.isSubmitting)
-                }
-                .buttonStyle(.boardPrimary)
-                .disabled(onboarding.isSubmitting)
-                .safeAreaPadding(.horizontal)
-                .padding(.bottom, 8)
             }
             .disabled(onboarding.isSubmitting)
             .navigationTitle("Expected graduation")
@@ -149,6 +135,28 @@ struct GraduationEditorSheet: View {
                     } label: {
                         Label("Cancel", systemImage: "xmark")
                     }
+                    .disabled(onboarding.isSubmitting)
+                }
+                // Confirm lives in the top-trailing slot as a prominent checkmark
+                // — the `.boardPrimary` bottom button rendered grayed (a SwiftUI
+                // tint quirk on that style inside a sheet), so this reads as the
+                // clear, always-tinted primary action instead.
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        guard let date = selectedDate else { return }
+                        Task {
+                            let ok = await onboarding.submitGraduation(date)
+                            if ok { dismiss() }
+                        }
+                    } label: {
+                        if onboarding.isSubmitting {
+                            ProgressView()
+                        } else {
+                            Label("Save", systemImage: "checkmark")
+                                .labelStyle(.iconOnly)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
                     .disabled(onboarding.isSubmitting)
                 }
             }
