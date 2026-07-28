@@ -15,9 +15,11 @@ extension BoardStore {
         tags: [String] = []
     ) async -> Bool {
         guard canInteractWithBoard, let user = currentUser else { return false }
-        // Backstop for the final-hour posting freeze (the UI hides the entry, this blocks any
-        // composer left open from before the cutoff).
-        guard !BoardSchedule.isWithinFinalHour(weekEnd: activeBoardWeek?.endsAt) else {
+        // Backstop for the posting freeze (the UI disables the entry, this blocks any
+        // composer left open from before the cutoff). Covers expiry too: `allowsPosting`
+        // is false once the deadline passes, so a stale composer can't write into a week
+        // that has already ended while the client waits on the rollover.
+        guard BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt).allowsPosting else {
             loadError = "Posting is closed for the final hour before the board clears."
             return false
         }

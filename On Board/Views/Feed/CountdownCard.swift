@@ -117,7 +117,7 @@ struct CountdownCard: View {
     }
 
     private var archivedNotice: some View {
-        let text = currentPromptText ?? "There was no pompt that week! Let's see what people shared..."
+        let text = currentPromptText ?? "There was no prompt that week! Let's see what people shared..."
         
         return ZStack(alignment: .bottomTrailing) {
             Image("OBLogo")
@@ -161,12 +161,18 @@ struct CountdownCard: View {
     }
 
     private func countdownConfig(remaining: TimeInterval) -> (bodyText: String, caption: String, showRed: Bool, isPrompt: Bool) {
+        let hasEnded = remaining <= 0
         let is24Hours = remaining <= 86400
         let is3Hours = remaining <= 10800
-        
+
         let caption: String
         let showRed: Bool
-        if is3Hours {
+        if hasEnded {
+            // The deadline passed and the new week hasn't landed yet. Without this the
+            // card sat frozen on "CLEARS SOON! 00h 00m 00s" indefinitely.
+            caption = "Clearing the board"
+            showRed = true
+        } else if is3Hours {
             caption = "Clears soon!"
             showRed = true
         } else if is24Hours {
@@ -176,7 +182,7 @@ struct CountdownCard: View {
             caption = "Clears Monday"
             showRed = false
         }
-        
+
         if let prompt = currentPromptText {
             return (prompt, caption, showRed, true)
         } else {
@@ -189,6 +195,7 @@ struct CountdownCard: View {
     private func activeCountdown(now: Date) -> some View {
         let weekEnd = week?.endsAt ?? store.activeBoardWeek?.endsAt
         let remaining = BoardSchedule.timeRemaining(weekEnd: weekEnd, from: now)
+        let hasEnded = remaining.totalSeconds <= 0
         let is3Hours = remaining.totalSeconds <= 10800
         let config = countdownConfig(remaining: remaining.totalSeconds)
 
@@ -231,14 +238,23 @@ struct CountdownCard: View {
                                 .fontWeight(.bold)
                                 .foregroundStyle(config.showRed ? .red : .secondary)
 
-                            HStack(alignment: .bottom, spacing: 10) {
-                                if !is3Hours {
-                                    counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
-                                }
-                                counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
-                                counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
-                                if is3Hours {
-                                    counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+                            if hasEnded {
+                                // A row of zeroes reads as a stuck clock. Say what's
+                                // actually happening while the rollover is in flight.
+                                Text("Making room for this week")
+                                    .fontStyle(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.red)
+                            } else {
+                                HStack(alignment: .bottom, spacing: 10) {
+                                    if !is3Hours {
+                                        counterColumn(value: remaining.days, label: "d", showRed: config.showRed)
+                                    }
+                                    counterColumn(value: remaining.hours, label: "h", showRed: config.showRed)
+                                    counterColumn(value: remaining.minutes, label: "m", showRed: config.showRed)
+                                    if is3Hours {
+                                        counterColumn(value: remaining.seconds, label: "s", showRed: config.showRed)
+                                    }
                                 }
                             }
                         }

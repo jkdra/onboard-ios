@@ -97,6 +97,10 @@ final class NotificationService {
     // MARK: - Private
 
     private func requestPermissionAndRegister() async {
+        // UI-test runs pass `-dev.skipPushPrompt`: the system permission alert lands on
+        // an unpredictable frame (it waits on the first APNs touch, not launch), and a
+        // springboard alert that appears mid-walkthrough swallows the taps under it.
+        guard !ProcessInfo.processInfo.arguments.contains("-dev.skipPushPrompt") else { return }
         let center = UNUserNotificationCenter.current()
         guard let granted = try? await center.requestAuthorization(options: [.alert, .sound, .badge]),
               granted else { return }

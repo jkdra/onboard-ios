@@ -13,9 +13,22 @@ struct RootView: View {
     @Environment(BoardStore.self) private var store
     @Environment(NetworkMonitor.self) private var network
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
     @State private var didBootstrap = false
+    /// Flips the launch mark from the idle Host to the happy one just before the
+    /// hand-off to the app. Separate from `didBootstrap` because the smile has to land
+    /// while the launch view is still on screen.
+    @State private var bootstrapHostHappy = false
+
+    /// How long the smile holds before the fade. `-dev.bootstrapHold <secs>`
+    /// stretches it for inspection — the shipped beat is far too short to catch with a
+    /// screenshot loop, and a simulator recording only samples on screen *change*.
+    private static let bootstrapHoldSeconds: Double = {
+        let override = UserDefaults.standard.double(forKey: "dev.bootstrapHold")
+        return override > 0 ? override : 0.20
+    }()
 
     /// Welcome celebration: set while this session has shown an incomplete
     /// onboarding status, so the flip to complete is a real live admission
@@ -45,7 +58,15 @@ struct RootView: View {
             } else if !didBootstrap {
                 ZStack {
                     Color(.systemBackground).ignoresSafeArea()
-                    BrandLogo(size: 72, renderingMode: scheme == .dark ? .template : .original)
+                    // Hard swap, no cross-fade: the two sprites share a canvas, so
+                    // the expression changes without the mark shifting or ghosting.
+                    Image(bootstrapHostHappy ? "HostHappy" : "HostIdle")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 72, height: 72)
+                        // Host sprites are solid black art and don't tint, so they'd
+                        // disappear into a dark launch background without this.
+                        .colorInverted(scheme == .dark)
                 }
             } else {
                 mainContent
@@ -58,6 +79,21 @@ struct RootView: View {
             store.configure(configuration: AppConfiguration.current)
             await auth.restoreSession()
             await syncSessionState()
+            // Smile, hold briefly, then hand off. This deliberately adds ~0.33s to
+            // launch — the beat only exists to be seen, so it can't overlap the work
+            // it's celebrating. Skipped entirely under Reduce Motion, where it would
+            // be a pause with nothing to show for it.
+            if !reduceMotion {
+                // Hard cut. `auth.isSignedIn` / `onboarding.isComplete` both settle
+                // during bootstrap and carry `.smooth` animations on the Group below,
+                // and that ambient transaction was cross-fading the sprite swap — the
+                // two expressions blended into a smeared eye. Only the hand-off into
+                // the app should be smooth.
+                var instant = Transaction()
+                instant.disablesAnimations = true
+                withTransaction(instant) { bootstrapHostHappy = true }
+                try? await Task.sleep(for: .seconds(Self.bootstrapHoldSeconds))
+            }
             withAnimation(.easeInOut(duration: 0.35)) {
                 didBootstrap = true
             }
