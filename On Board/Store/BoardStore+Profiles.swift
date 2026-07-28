@@ -55,27 +55,44 @@ extension BoardStore {
     // refresh whose fetch began before this write committed can land afterwards
     // and clobber the optimistic change. Re-asserting the confirmed state after
     // the await settles it regardless of which request finishes last.
-    func followUser(id: UUID) async {
+    //
+    // Also supersedes any in-flight follow/unfollow sync for this user — the
+    // same guard `setReaction` uses — so a rapid follow→unfollow→follow can't
+    // let an earlier request's confirmation/rollback complete after a newer
+    // one and invert state that's already moved on.
+    func followUser(id: UUID) {
         guard let boardService else { return }
         followedUserIDs.insert(id)
-        do {
-            try await boardService.followUser(id: id)
-            followedUserIDs.insert(id)
-        } catch {
-            followedUserIDs.remove(id)
-            loadError = Self.mapLoadError(error)
+        followSyncTasks[id]?.cancel()
+        followSyncTasks[id] = Task {
+            defer { followSyncTasks[id] = nil }
+            do {
+                try await boardService.followUser(id: id)
+                guard !Task.isCancelled else { return }
+                followedUserIDs.insert(id)
+            } catch {
+                guard !Task.isCancelled else { return }
+                followedUserIDs.remove(id)
+                loadError = Self.mapLoadError(error)
+            }
         }
     }
 
-    func unfollowUser(id: UUID) async {
+    func unfollowUser(id: UUID) {
         guard let boardService else { return }
         followedUserIDs.remove(id)
-        do {
-            try await boardService.unfollowUser(id: id)
-            followedUserIDs.remove(id)
-        } catch {
-            followedUserIDs.insert(id)
-            loadError = Self.mapLoadError(error)
+        followSyncTasks[id]?.cancel()
+        followSyncTasks[id] = Task {
+            defer { followSyncTasks[id] = nil }
+            do {
+                try await boardService.unfollowUser(id: id)
+                guard !Task.isCancelled else { return }
+                followedUserIDs.remove(id)
+            } catch {
+                guard !Task.isCancelled else { return }
+                followedUserIDs.insert(id)
+                loadError = Self.mapLoadError(error)
+            }
         }
     }
 
@@ -90,6 +107,10 @@ extension BoardStore {
     /// whatever was cached before, if anything, matching the read-vs-write
     /// failure rule (reads that revalidate fail silently; only writes alert).
     func refreshPopScore(for userID: UUID) async {
+        // Called on every post open (see prefetchPopScore below) — most of the
+        // time this just reconfirms an already-cached score, so only pay for
+        // the full-envelope disk write when the fetch actually changed it.
+        let previous = popScores[userID]
         if let boardService {
             guard let fetched = try? await boardService.fetchUserReactionCounts(for: userID) else { return }
             popScores[userID] = fetched
@@ -104,6 +125,7 @@ extension BoardStore {
                     }
                 }
         }
+        guard popScores[userID] != previous else { return }
         persistToDisk()
     }
 

@@ -127,7 +127,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Link(destination: URL(string: "mailto:\(AppLinks.supportEmail)")!) {
+                Link(destination: AppLinks.contactSupportMailURL) {
                     SettingsRowLabel(title: "Contact Support", systemImage: "envelope.fill")
                 }
                 Link(destination: AppLinks.reportMailURL) {
@@ -163,7 +163,7 @@ struct SettingsView: View {
                         Text("Version").fontStyle(.body)
                     }
                 }
-                Text("Made with love by @jawadalkhadra")
+                Text("Made with love by IVC students")
                     .fontStyle(.footnote)
                     .frame(maxWidth: .infinity)
             }

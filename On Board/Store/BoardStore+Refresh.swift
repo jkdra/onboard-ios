@@ -183,12 +183,20 @@ extension BoardStore {
 
         do {
             let thread = try await boardService.fetchComments(for: postID)
+            // A background revalidation lands here on every post open, even
+            // one already fully cached — only pay for the disk write when the
+            // fetch actually turned up something new to persist.
+            let previousComments = commentsByPostID[postID]
+            var votesChanged = false
             commentsByPostID[postID] = thread.comments
             for (commentID, vote) in thread.userVotes {
+                if userCommentVotes[commentID] != vote { votesChanged = true }
                 userCommentVotes[commentID] = vote
             }
             await loadMissingCommentAuthorProfiles(in: thread.comments)
-            persistToDisk()
+            if previousComments != thread.comments || votesChanged {
+                persistToDisk()
+            }
         } catch {
             guard !isRevalidation else { return }
             loadError = Self.mapLoadError(error)
@@ -208,9 +216,7 @@ extension BoardStore {
         guard !missingIDs.isEmpty else { return }
 
         guard let fetched = try? await boardService.fetchProfiles(ids: Array(missingIDs)) else { return }
-        for profile in fetched {
-            upsertProfile(profile)
-        }
+        upsertProfiles(fetched)
     }
 
     /// Archived-week posts arrive with only the author's handle denormalized on
@@ -226,9 +232,7 @@ extension BoardStore {
         guard !missingIDs.isEmpty else { return }
 
         guard let fetched = try? await boardService.fetchProfiles(ids: Array(missingIDs)) else { return }
-        for profile in fetched {
-            upsertProfile(profile)
-        }
+        upsertProfiles(fetched)
     }
 
     private func commentAuthorIDs(from comment: Comment) -> [UUID] {
