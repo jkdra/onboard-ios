@@ -71,18 +71,6 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
             .value
     }
 
-    @discardableResult
-    func mapAuthErrors<T>(_ work: () async throws -> T) async throws -> T {
-        do {
-            return try await work()
-        } catch {
-            if SessionErrorClassifier.isSessionExpired(error) {
-                throw BoardServiceError.sessionExpired
-            }
-            throw error
-        }
-    }
-
     /// `fetched` covers the common case (a real profile row exists). Posts whose
     /// author has no matching row — an account deleted after posting — fall back
     /// to a stub built from the post's denormalized author handle, same as before.

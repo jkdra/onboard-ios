@@ -26,6 +26,9 @@ extension BoardStore {
             return false
         }
 
+        // Captured for the boundary check below — a comment posted in the last
+        // seconds of the week resolves after the archive and always fails.
+        let weekIDAtSend = activeBoardWeek?.id
         let tempID = UUID()
         let optimistic = Comment(
             id: tempID,
@@ -43,19 +46,28 @@ extension BoardStore {
         }
 
         do {
-            try await boardService.createComment(
+            // Patch the confirmed comment (real id/timestamp) into the local
+            // tree in place — a full `loadComments` reload here used to cost
+            // two more RPCs and rebuild the whole thread for what's really
+            // just swapping one node's id.
+            let confirmed = try await boardService.createComment(
                 postID: postID,
                 authorID: user.id,
                 authorHandle: user.handle,
                 body: trimmed,
                 parentCommentID: parentCommentID
             )
-            await loadComments(for: postID)
+            _ = mutateComments(for: postID) { comments in
+                replaceComment(tempID: tempID, with: confirmed, in: &comments)
+            }
             return true
         } catch {
             _ = mutateComments(for: postID) { comments in
                 removeComment(commentID: tempID, from: &comments)
             }
+            // The rollover killed it, not the user. The post this belonged to is
+            // already being dismissed; an error alert here just lands on the way out.
+            guard !isWeeklyBoundaryFailure(weekIDAtSend: weekIDAtSend) else { return false }
             loadError = Self.mapLoadError(error)
             return false
         }
@@ -169,6 +181,20 @@ extension BoardStore {
                 loadError = Self.mapLoadError(error)
             }
         }
+    }
+
+    @discardableResult
+    private func replaceComment(tempID: UUID, with confirmed: Comment, in comments: inout [Comment]) -> Bool {
+        if let index = comments.firstIndex(where: { $0.id == tempID }) {
+            comments[index] = confirmed
+            return true
+        }
+        for index in comments.indices {
+            if replaceComment(tempID: tempID, with: confirmed, in: &comments[index].replies) {
+                return true
+            }
+        }
+        return false
     }
 
     @discardableResult

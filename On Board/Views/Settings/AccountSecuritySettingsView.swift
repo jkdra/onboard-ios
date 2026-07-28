@@ -297,36 +297,38 @@ struct AccountSecuritySettingsView: View {
     }
 
     private var linkAppleRow: some View {
-        Button {
-            Task { await linkApple() }
-        } label: {
-            HStack(spacing: 12) {
-                SettingsIconBadge(systemImage: AuthProvider.apple.systemImage)
-                Text("Apple")
-                    .fontStyle(.body)
-                Spacer()
-                if isLinkingApple {
-                    ProgressView()
-                } else {
-                    Text("Link")
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(Color.primary)
-                }
-            }
-        }
-        .disabled(isLinkingApple)
+        oauthLinkRow(
+            icon: { SettingsIconBadge(systemImage: AuthProvider.apple.systemImage) },
+            label: "Apple",
+            isLinking: isLinkingApple,
+            action: linkApple
+        )
     }
 
     private var linkGoogleRow: some View {
+        oauthLinkRow(
+            icon: { GoogleIconBadge() },
+            label: "Google",
+            isLinking: isLinkingGoogle,
+            action: linkGoogle
+        )
+    }
+
+    private func oauthLinkRow<Icon: View>(
+        @ViewBuilder icon: () -> Icon,
+        label: String,
+        isLinking: Bool,
+        action: @escaping () async -> Void
+    ) -> some View {
         Button {
-            Task { await linkGoogle() }
+            Task { await action() }
         } label: {
             HStack(spacing: 12) {
-                GoogleIconBadge()
-                Text("Google")
+                icon()
+                Text(label)
                     .fontStyle(.body)
                 Spacer()
-                if isLinkingGoogle {
+                if isLinking {
                     ProgressView()
                 } else {
                     Text("Link")
@@ -335,7 +337,7 @@ struct AccountSecuritySettingsView: View {
                 }
             }
         }
-        .disabled(isLinkingGoogle)
+        .disabled(isLinking)
     }
 
     private func unavailableOAuthRow(provider: AuthProvider) -> some View {

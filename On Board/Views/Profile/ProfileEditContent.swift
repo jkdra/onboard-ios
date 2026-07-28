@@ -183,13 +183,13 @@ struct ProfileEditContent: View {
         // Captured before the PhotosPicker label closure: that closure isn't
         // main-actor-isolated, so touching the @MainActor draft inside it
         // trips isolation warnings. (Same dance the pre-split code did.)
-        let photoData = draft.selectedPhotoData
-        let uploading = draft.isUploadingPhoto
+        let photoData = draft.photo.selectedPhotoData
+        let uploading = draft.photo.isUploading
         let draftUrl = draft.avatarUrl
         let currentProfile = profile
         let uiImage = photoData.flatMap { PhotoPreviewCache.image(for: $0) }
 
-        return PhotoSourceButton(selection: $draft.selectedPhotoItem, onCapture: onCameraCapture) {
+        return PhotoSourceButton(selection: $draft.photo.selectedPhotoItem, onCapture: onCameraCapture) {
             ZStack(alignment: .bottomTrailing) {
                 ZStack {
                     if let uiImage {
@@ -231,7 +231,7 @@ struct ProfileEditContent: View {
             }
         }
         .buttonStyle(.plain)
-        .disabled(draft.isUploadingPhoto)
+        .disabled(draft.photo.isUploading)
         .accessibilityLabel("Change avatar")
     }
 }

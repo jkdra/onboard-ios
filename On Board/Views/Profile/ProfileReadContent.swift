@@ -147,12 +147,10 @@ struct ProfileReadContent: View {
     private var followButton: some View {
         let isFollowing = store.followedUserIDs.contains(profile.id)
         return Button {
-            Task {
-                if isFollowing {
-                    await store.unfollowUser(id: profile.id)
-                } else {
-                    await store.followUser(id: profile.id)
-                }
+            if isFollowing {
+                store.unfollowUser(id: profile.id)
+            } else {
+                store.followUser(id: profile.id)
             }
         } label: {
             Label(

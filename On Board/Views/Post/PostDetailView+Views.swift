@@ -34,6 +34,13 @@ extension PostDetailView {
                     .foregroundStyle(.secondary)
                     .labelStyle(.titleAndIcon)
             }
+        } else if let weekEnd = clearingSoonWeekEnd {
+            // Clears-soon: a live ticking countdown rides the nav bar's principal
+            // slot instead of a separate top banner. Mutually exclusive with the
+            // archived principal above (a live post is never read-only).
+            ToolbarItem(placement: .principal) {
+                ClearingSoonPrincipal(weekEnd: weekEnd)
+            }
         }
 
         if showImageViewer, imageViewerScale <= 1.0 {
@@ -301,9 +308,9 @@ extension PostDetailView {
                         comment: comment,
                         tone: tone,
                         isInteractive: !isReadOnly,
-                        editingCommentID: editingCommentID,
+                        editingCommentID: commentEdit.editingCommentID,
                         replyTargetID: composer.target?.replyParentID,
-                        draftCommentBody: $draftCommentBody,
+                        draftCommentBody: $commentEdit.draftCommentBody,
                         onBeginEdit: beginCommentEditing,
                         onConfirmEdit: confirmCommentEditing,
                         onReply: { comment in
@@ -393,88 +400,18 @@ extension PostDetailView {
 
     @ViewBuilder
     var editImageSection: some View {
-        let hasImage = selectedEditPhotoData != nil || draftImageUrl != nil
-
-        if editImageUploadFailed {
+        if editPhoto.uploadFailed {
             Label("Image couldn't be uploaded — the previous one is kept.", systemImage: "exclamationmark.triangle")
                 .fontStyle(.caption)
                 .foregroundStyle(.secondary)
         }
 
-        if hasImage {
-            // ── Image preview with overlaid controls ───────────────────────
-            Group {
-                if let data = selectedEditPhotoData, let uiImage = PhotoPreviewCache.image(for: data) {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFit()
-                } else if let urlString = draftImageUrl, let url = URL(string: urlString) {
-                    BoardAsyncImage(url: url, tone: tone, contentMode: .fit)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: 220)
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            // Upload dimming overlay
-            .overlay {
-                if isUploadingEditImage {
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.black.opacity(0.45))
-                        ProgressView().tint(.white)
-                    }
-                }
-            }
-            // Remove button — top-trailing corner
-            .overlay(alignment: .topTrailing) {
-                Button(role: .destructive) {
-                    withAnimation(.smooth(duration: 0.25)) { removeEditImage() }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .fontStyle(.title2)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.white, Color.black.opacity(0.55))
-                        .shadow(color: .black.opacity(0.25), radius: 4)
-                }
-                .buttonStyle(.plain)
-                .disabled(isUploadingEditImage)
-                .padding(10)
-            }
-            // Change photo — bottom-trailing pill
-            .overlay(alignment: .bottomTrailing) {
-                PhotoSourceButton(selection: $selectedEditPhotoItem, onCapture: { uncroppedEditImage = $0 }) {
-                    Label("Change", systemImage: "camera.fill")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(.thinMaterial, in: Capsule())
-                }
-                .disabled(isUploadingEditImage)
-                .padding(10)
-            }
-            .transition(.scale(scale: 0.97).combined(with: .opacity))
-        } else {
-            // ── No image — dashed add-photo target ────────────────────────
-            PhotoSourceButton(selection: $selectedEditPhotoItem, onCapture: { uncroppedEditImage = $0 }) {
-                HStack(spacing: 10) {
-                    Image(systemName: "photo.badge.plus")
-                        .font(.title3)
-                    Text("Add a photo")
-                        .font(.subheadline)
-                    Spacer()
-                }
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(
-                            Color.secondary.opacity(0.35),
-                            style: StrokeStyle(lineWidth: 1.5, dash: [6])
-                        )
-                }
-            }
-            .buttonStyle(.plain)
-            .transition(.opacity)
-        }
+        PhotoAttachmentTile(
+            controller: editPhoto,
+            onCapture: { editPhoto.uncroppedImage = $0 },
+            existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
+            tone: tone,
+            onRemove: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
+        )
     }
 }

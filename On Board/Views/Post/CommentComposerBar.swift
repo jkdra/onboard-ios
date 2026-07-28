@@ -180,11 +180,7 @@ struct CommentComposerBar: View {
                 fieldHeight = height
             }
             .padding(.vertical, 6)
-            .onChange(of: composer.draft) { _, newValue in
-                if newValue.count > 280 {
-                    composer.draft = String(newValue.prefix(280))
-                }
-            }
+            .characterLimited($composer.draft, to: CommentComposerState.maxLength)
 
             VStack(spacing: 6) {
                 if showExpandButton {

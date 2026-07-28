@@ -166,11 +166,7 @@ struct CommentView: View {
                             .textFieldStyle(.plain)
                             .lineLimit(1...8)
                             .focused($isEditorFocused)
-                            .onChange(of: draftCommentBody) { _, newValue in
-                                if newValue.count > 280 {
-                                    draftCommentBody = String(newValue.prefix(280))
-                                }
-                            }
+                            .characterLimited($draftCommentBody, to: CommentComposerState.maxLength)
                             // Multi-line editing: confirmed via the toolbar "Save" button. Return
                             // inserts a newline instead of submitting, so a pasted line break or a
                             // deliberate paragraph no longer silently ends the edit.

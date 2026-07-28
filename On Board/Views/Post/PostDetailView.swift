@@ -5,6 +5,7 @@
 
 import SwiftUI
 import PhotosUI
+import Nuke
 
 struct PostDetailView: View {
     let post: Post
@@ -24,21 +25,17 @@ struct PostDetailView: View {
     @State var showingTagSelection = false
 
     // Comment editing / composing
-    @State var editingCommentID: UUID?
-    @State var draftCommentBody = ""
+    @State var commentEdit = CommentEditState()
     @State var composer = CommentComposerState()
     @State var showExpandedComposer = false
 
-    // Image editing
-    @State var selectedEditPhotoItem: PhotosPickerItem?
-    @State var selectedEditPhotoData: Data?
+    // Image editing. `draftImageUrl`/`draftImageAspectRatio` are the post's
+    // *existing* image (pre-populated on `beginEditing`, cleared only once a
+    // new upload this session succeeds) — everything about a newly-picked
+    // replacement lives in `editPhoto`.
+    @State var editPhoto = PhotoAttachmentController(type: .postPhoto)
     @State var draftImageUrl: String?
     @State var draftImageAspectRatio: Double?
-    @State var isUploadingEditImage = false
-    @State var uploadedEditImageUrl: String?
-    @State var uploadedEditAspectRatio: Double?
-    @State var editImageUploadFailed = false
-    @State var uncroppedEditImage: UIImage?
 
     // UI
     @State var showDeleteConfirmation = false
@@ -87,8 +84,20 @@ struct PostDetailView: View {
         livePost.isReadOnly || !store.canInteract(with: livePost)
     }
 
+    /// The active week's end while a *live* post's board is in the clears-soon
+    /// window — drives the ticking countdown in the toolbar principal. Exposed here
+    /// (not read from `store` in the +Views extension) so it clears the `private`
+    /// store's file scope. Nil once read-only, so an archived post keeps the
+    /// "Archived Post" principal instead.
+    var clearingSoonWeekEnd: Date? {
+        guard !isReadOnly,
+              let endsAt = store.activeBoardWeek?.endsAt,
+              BoardSchedule.isClearingSoon(weekEnd: endsAt) else { return nil }
+        return endsAt
+    }
+
     var isCommentEditing: Bool {
-        editingCommentID != nil
+        commentEdit.isEditing
     }
 
     var authorProfile: Profile {
@@ -122,7 +131,7 @@ struct PostDetailView: View {
                 .safeAreaPadding(.top, 12)
                 .safeAreaPadding(.bottom, 32)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.smooth(duration: 0.3), value: editingCommentID)
+                .animation(.smooth(duration: 0.3), value: commentEdit.editingCommentID)
             }
             .scrollDismissesKeyboard(.interactively)
             .interactiveDismissDisabled(editMode)
@@ -142,7 +151,27 @@ struct PostDetailView: View {
             .task(id: livePost.id) {
                 isLoadingComments = true
                 await store.loadComments(for: livePost.id)
+                // `.task(id:)` cancels cooperatively — the awaited call above can
+                // still return after a second post-switch already started a newer
+                // task. Without this guard, this stale completion's `= false`
+                // could hide the new task's loading skeleton while its fetch is
+                // still in flight.
+                guard !Task.isCancelled else { return }
                 isLoadingComments = false
+            }
+            .task(id: livePost.imageUrl) {
+                // ImageViewerView loads this same URL via a plain, unprocessed
+                // ImageRequest (full resolution, so pinch-zoom stays sharp) —
+                // a different Nuke cache key than BoardAsyncImage's downsampled
+                // thumbnail request just above, so opening the viewer forced a
+                // cold decode of a full-size (up to 2048px) photo right as the
+                // tap-to-open spring animation started, competing with it for
+                // frame time and reading as choppy/low-framerate mid-transition.
+                // Warming that exact request here — while the post is just
+                // sitting on screen, well before any tap — means it's already
+                // decoded and cached by the time the user actually opens it.
+                guard let urlString = livePost.imageUrl, let url = URL(string: urlString) else { return }
+                _ = try? await ImagePipeline.shared.imageTask(with: url).response
             }
             .task(id: livePost.id) {
                 guard let authorId = livePost.authorId else { return }
@@ -178,29 +207,30 @@ struct PostDetailView: View {
                     alertError: $alertError
                 )
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if let text = store.clearingBannerText {
-                    HStack(spacing: 8) {
-                        Image(systemName: "clock.badge.exclamationmark.fill")
-                            .foregroundStyle(.red)
-                        Text(text)
-                            .fontStyle(.footnote)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 10)
-                    .background(.regularMaterial)
-                    .overlay(Rectangle().frame(height: 0.5).foregroundStyle(.red.opacity(0.4)), alignment: .bottom)
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.smooth(duration: 0.3), value: store.clearingBannerText != nil)
             .onChange(of: composer.target) { _, target in
                 guard let parentID = target?.replyParentID else { return }
                 withAnimation(.smooth(duration: 0.35)) {
                     proxy.scrollTo(parentID, anchor: .center)
                 }
+            }
+            .task(id: store.activeBoardWeek?.endsAt) {
+                // Auto-dismiss a live post to the feed the instant its board clears, so
+                // no now-invalid reactions/comments are possible. Driven from the post's
+                // OWN lifecycle — the feed's reset task doesn't reliably fire while the
+                // post covers it, so we can't lean on ContentView's path reset here.
+                // Mirrors that task: sleep until endsAt (restarts when it's shortened),
+                // then leave. Archived posts (read-only) are never auto-dismissed.
+                guard !post.isReadOnly,
+                      let endsAt = store.activeBoardWeek?.endsAt, endsAt > .now else { return }
+                try? await Task.sleep(for: .seconds(endsAt.timeIntervalSinceNow))
+                guard !Task.isCancelled else { return }
+                dismiss()
+            }
+            .onChange(of: store.activeBoardWeek?.id) { _, _ in
+                // Backstop for a rollover that lands a *new* week id without this view's
+                // endsAt task firing — e.g. a reset that happened while backgrounded,
+                // resolved by the foreground refresh. Live posts only.
+                if !post.isReadOnly { dismiss() }
             }
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
@@ -272,19 +302,26 @@ struct PostDetailView: View {
                 .ignoresSafeArea()
                 .zIndex(100)
             }
-            .onChange(of: selectedEditPhotoItem) { _, item in
-                Task { await loadEditImage(item) }
+            .onChange(of: editPhoto.selectedPhotoItem) { _, item in
+                Task { await editPhoto.loadPickedPhoto(item) }
             }
-            .fullScreenCover(item: Binding<UIImage?>(
-                get: { uncroppedEditImage },
-                set: { uncroppedEditImage = $0 }
-            )) { image in
+            .presentableErrorAlert(error: $editPhoto.alertError)
+            .fullScreenCover(item: $editPhoto.uncroppedImage) { image in
                 PostImageCropView(image: image) { cropped in
-                    uncroppedEditImage = nil
-                    Task { await uploadCroppedEditImage(cropped) }
+                    editPhoto.uncroppedImage = nil
+                    guard let userID = store.currentUserID else { return }
+                    Task {
+                        await editPhoto.uploadCropped(
+                            cropped,
+                            userID: userID,
+                            revertPreviewOnFailure: true,
+                            alertOnFailure: false
+                        )
+                        if editPhoto.uploadedURL != nil { draftImageUrl = nil }
+                    }
                 } onCancel: {
-                    uncroppedEditImage = nil
-                    selectedEditPhotoItem = nil
+                    editPhoto.uncroppedImage = nil
+                    editPhoto.selectedPhotoItem = nil
                 }
             }
         }

@@ -13,6 +13,8 @@ extension PostDetailView {
     // MARK: - Derived
 
     
+    // Force-unwrap is safe here: a fixed HTTPS host + `/post/` + a UUID's
+    // canonical string form never contains characters `URL(string:)` rejects.
     var shareURL: URL {
         URL(string: "https://onboardapp.org/post/\(livePost.id)")!
     }
@@ -43,24 +45,14 @@ extension PostDetailView {
 
     func beginEditing() {
         cancelCommentEditing()
-        draftTitle = livePost.title
-        draftDescription = livePost.description
-        draftTone = livePost.tone
-        draftTags = livePost.tags
-        draftImageUrl = livePost.imageUrl
-        draftImageAspectRatio = livePost.imageAspectRatio
-        selectedEditPhotoData = nil
-        selectedEditPhotoItem = nil
-        uploadedEditImageUrl = nil
-        uploadedEditAspectRatio = nil
-        editImageUploadFailed = false
+        resetEditDraft()
         withAnimation(.smooth(duration: 0.4)) { editMode = true }
     }
 
     func saveEdits() {
         Task {
-            let effectiveImageUrl = uploadedEditImageUrl ?? draftImageUrl
-            let effectiveAspectRatio = uploadedEditAspectRatio ?? draftImageAspectRatio
+            let effectiveImageUrl = editPhoto.uploadedURL ?? draftImageUrl
+            let effectiveAspectRatio = editPhoto.uploadedAspectRatio ?? draftImageAspectRatio
             let succeeded = await store.updatePost(
                 id: livePost.id,
                 title: draftTitle.trimmed,
@@ -76,45 +68,42 @@ extension PostDetailView {
     }
 
     func cancelEditing() {
+        resetEditDraft()
+        withAnimation(.smooth(duration: 0.4)) { editMode = false }
+    }
+
+    private func resetEditDraft() {
         draftTitle = livePost.title
         draftDescription = livePost.description
         draftTone = livePost.tone
         draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl
         draftImageAspectRatio = livePost.imageAspectRatio
-        selectedEditPhotoData = nil
-        selectedEditPhotoItem = nil
-        uploadedEditImageUrl = nil
-        uploadedEditAspectRatio = nil
-        editImageUploadFailed = false
-        withAnimation(.smooth(duration: 0.4)) { editMode = false }
+        editPhoto.reset()
     }
 
     // MARK: - Comment editing
 
     func beginCommentEditing(commentID: UUID, body: String) {
         withAnimation(.smooth(duration: 0.35)) { composer.dismiss() }
-        editingCommentID = commentID
-        draftCommentBody = body
+        commentEdit.begin(commentID: commentID, body: body)
     }
 
     func confirmCommentEditing() {
-        guard let editingCommentID else { return }
-        let trimmed = draftCommentBody.trimmed
+        guard let editingCommentID = commentEdit.editingCommentID else { return }
+        let trimmed = commentEdit.draftCommentBody.trimmed
         guard !trimmed.isEmpty else { return }
         Task {
             await store.updateComment(postID: livePost.id, commentID: editingCommentID, body: trimmed)
             withAnimation(.smooth(duration: 0.35)) {
-                self.editingCommentID = nil
-                draftCommentBody = ""
+                commentEdit.clear()
             }
         }
     }
 
     func cancelCommentEditing() {
         withAnimation(.smooth(duration: 0.35)) {
-            editingCommentID = nil
-            draftCommentBody = ""
+            commentEdit.clear()
         }
     }
 
@@ -134,38 +123,8 @@ extension PostDetailView {
     // MARK: - Image editing
 
     func removeEditImage() {
-        selectedEditPhotoData = nil
-        selectedEditPhotoItem = nil
-        uploadedEditImageUrl = nil
-        uploadedEditAspectRatio = nil
+        editPhoto.removeImage()
         draftImageUrl = nil
         draftImageAspectRatio = nil
-        editImageUploadFailed = false
-    }
-
-    func loadEditImage(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        guard let rawData = try? await item.loadTransferable(type: Data.self),
-              let uiImage = UIImage(data: rawData) else { return }
-        uncroppedEditImage = uiImage
-    }
-
-    func uploadCroppedEditImage(_ image: UIImage) async {
-        selectedEditPhotoData = image.jpegData(compressionQuality: 0.85)
-        editImageUploadFailed = false
-        guard let userID = store.currentUserID else { return }
-        isUploadingEditImage = true
-        defer { isUploadingEditImage = false }
-        if let result = await ImageUploader.upload(input: .uiImage(image), type: .postPhoto, userID: userID) {
-            uploadedEditImageUrl = result.url
-            uploadedEditAspectRatio = result.aspectRatio
-            draftImageUrl = nil
-        } else {
-            // Drop the failed preview so what's on screen matches what Save keeps
-            // (the post's previous image, if any).
-            selectedEditPhotoData = nil
-            selectedEditPhotoItem = nil
-            editImageUploadFailed = true
-        }
     }
 }

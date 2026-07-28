@@ -51,15 +51,11 @@ struct CommentComposerSheet: View {
                     .focused($isFocused)
                     .disabled(isPosting)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .onChange(of: composer.draft) { _, newValue in
-                        if newValue.count > 280 {
-                            composer.draft = String(newValue.prefix(280))
-                        }
-                    }
+                    .characterLimited($composer.draft, to: CommentComposerState.maxLength)
 
-                Text("\(composer.draft.count) / 280")
+                Text("\(composer.draft.count) / \(CommentComposerState.maxLength)")
                     .fontStyle(.caption)
-                    .foregroundStyle(composer.draft.count >= 280 ? .red : .secondary)
+                    .foregroundStyle(composer.draft.count >= CommentComposerState.maxLength ? .red : .secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button {
