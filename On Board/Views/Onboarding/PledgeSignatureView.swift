@@ -8,9 +8,10 @@
 //  with a cleaner stroke model.
 //
 //  The signature itself never leaves the device — it's a moment of intent,
-//  not a document. TODO(launch): persist a pledge-acceptance timestamp
-//  server-side when this ships to live users, so the pledge survives an
-//  app kill between admission and signing.
+//  not a document. Only the fact and timestamp of acceptance persist
+//  server-side, via `OnboardingStore.acceptPledge()` (fired from
+//  WelcomeOnBoardView's `onSigned` callback, `accept_pledge` RPC), so the
+//  pledge survives an app kill between admission and signing.
 //
 
 import SwiftUI

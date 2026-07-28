@@ -56,6 +56,7 @@ struct WelcomeOnBoardView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var scheme
+    @Environment(OnboardingStore.self) private var onboarding
     /// The Host's voice preference — shared with the global Settings picker.
     /// The in-cover mute button toggles this same key.
     @AppStorage("soundEffectsMode") private var soundMode: SoundEffectsMode = .unlessSilenced
@@ -168,6 +169,12 @@ struct WelcomeOnBoardView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showPledge) {
                 PledgeSignatureView {
+                    // Fire-and-forget: the signature itself is a local moment
+                    // of intent (see PledgeSignatureView's header comment) and
+                    // dismissal never waited on network before — this just
+                    // makes the fact of signing durable server-side so it
+                    // survives an app kill between admission and signing.
+                    Task { await onboarding.acceptPledge() }
                     dismiss()
                 }
             }
@@ -377,8 +384,18 @@ extension View {
 
 #Preview("Welcome") {
     WelcomeOnBoardView(boardName: "Georgetown")
+        .environment(OnboardingStore(
+            service: MockOnboardingService(),
+            auth: AuthStore(service: MockAuthService()),
+            network: NetworkMonitor()
+        ))
 }
 
 #Preview("Welcome — no board name") {
     WelcomeOnBoardView(boardName: nil)
+        .environment(OnboardingStore(
+            service: MockOnboardingService(),
+            auth: AuthStore(service: MockAuthService()),
+            network: NetworkMonitor()
+        ))
 }

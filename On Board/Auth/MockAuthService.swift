@@ -54,6 +54,14 @@ final class MockAuthService: AuthService, @unchecked Sendable {
         try await Task.sleep(for: .milliseconds(250))
     }
 
+    /// Mirrors verifyPhoneOTP's convention: the well-known sample placeholder
+    /// number is the only "existing account" in mock mode; any other number
+    /// demos a brand-new sign-up.
+    func checkPhoneExists(phone: String) async throws -> Bool {
+        try await Task.sleep(for: .milliseconds(350))
+        return phone == "+15555550100"
+    }
+
     func verifyPhoneOTP(phone: String, token: String) async throws -> AuthSession {
         _ = token
         try await Task.sleep(for: .milliseconds(350))
