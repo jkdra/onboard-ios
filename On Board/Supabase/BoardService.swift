@@ -72,13 +72,15 @@ protocol BoardService: Sendable {
         tags: [String]
     ) async throws -> Post
     func deletePost(id: UUID) async throws
+    /// Returns the confirmed comment (real id/timestamp) so the caller can
+    /// patch it into the local tree in place, instead of a full reload.
     func createComment(
         postID: UUID,
         authorID: UUID,
         authorHandle: String,
         body: String,
         parentCommentID: UUID?
-    ) async throws
+    ) async throws -> Comment
     func updateComment(id: UUID, body: String) async throws
     func deleteComment(id: UUID) async throws
     func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws

@@ -30,8 +30,10 @@ struct ProfileView: View {
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
-    @State private var uncroppedImage: UIImage?
     @State private var alertError: PresentableAlertError?
+    // Guards Save against a double-tap firing two concurrent updateProfile
+    // calls for the same profile — the slower response would silently win.
+    @State private var isSavingProfile = false
 
     // Moderation (other users' profiles only)
     @State private var reportTarget: ReportTarget?
@@ -64,16 +66,22 @@ struct ProfileView: View {
             } message: { _ in
                 Text("You won't see each other's posts or comments. You can unblock them anytime in Settings.")
             }
-            .fullScreenCover(item: Binding<UIImage?>(
-                get: { uncroppedImage },
-                set: { uncroppedImage = $0 }
-            )) { image in
+            .fullScreenCover(item: $draft.photo.uncroppedImage) { image in
                 ProfileImageCropView(image: image) { cropped in
-                    uncroppedImage = nil
-                    Task { await uploadCroppedPhoto(cropped) }
+                    draft.photo.uncroppedImage = nil
+                    guard let userID = store.currentUserID else { return }
+                    Task {
+                        await draft.photo.uploadCropped(
+                            cropped,
+                            userID: userID,
+                            revertPreviewOnFailure: true,
+                            alertOnFailure: true
+                        )
+                        if draft.photo.uploadedURL != nil { draft.avatarUrl = draft.photo.uploadedURL }
+                    }
                 } onCancel: {
-                    uncroppedImage = nil
-                    draft.selectedPhotoItem = nil
+                    draft.photo.uncroppedImage = nil
+                    draft.photo.selectedPhotoItem = nil
                 }
             }
             .interactiveDismissDisabled(editMode || showAvatarViewer)
@@ -118,6 +126,7 @@ struct ProfileView: View {
             }
             .fireworks(isActive: birthdayCelebrating)
             .presentableErrorAlert(error: $alertError)
+            .presentableErrorAlert(error: $draft.photo.alertError)
     }
 
     /// Mock-only: replay the birthday celebration for ~10s, retriggerable.
@@ -139,7 +148,7 @@ struct ProfileView: View {
                         profile: displayedProfile,
                         namespace: profileNamespace,
                         draft: draft,
-                        onCameraCapture: { uncroppedImage = $0 }
+                        onCameraCapture: { draft.photo.uncroppedImage = $0 }
                     )
                 } else {
                     ProfileReadContent(
@@ -175,8 +184,8 @@ struct ProfileView: View {
         .interactiveDismissDisabled(editMode)
         .keyboardDoneToolbar()
         .toolbar { profileToolbar }
-        .onChange(of: draft.selectedPhotoItem) { _, newItem in
-            Task { await loadPickedPhoto(newItem) }
+        .onChange(of: draft.photo.selectedPhotoItem) { _, newItem in
+            Task { await draft.photo.loadPickedPhoto(newItem) }
         }
     }
 
@@ -184,7 +193,7 @@ struct ProfileView: View {
     private var profileToolbar: some ToolbarContent {
         if editMode {
             EditModeToolbarItems(
-                canSave: draft.canSave,
+                canSave: draft.canSave && !isSavingProfile,
                 onCancel: cancelEditing,
                 onSave: saveProfile
             )
@@ -251,6 +260,8 @@ struct ProfileView: View {
 
     // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
     // onOpenURL handling in On_BoardApp.swift, just a different path segment.
+    // Force-unwrap is safe: a fixed HTTPS host + `/profile/` + a UUID's
+    // canonical string form never contains characters `URL(string:)` rejects.
     private var shareURL: URL {
         URL(string: "https://onboardapp.org/profile/\(displayedProfile.id)")!
     }
@@ -269,7 +280,10 @@ struct ProfileView: View {
     }
 
     private func saveProfile() {
+        guard !isSavingProfile else { return }
+        isSavingProfile = true
         Task {
+            defer { isSavingProfile = false }
             await store.updateProfile(
                 displayName: draft.displayName.trimmed,
                 handle: draft.handle.trimmed,
@@ -345,41 +359,6 @@ struct ProfileView: View {
             try await store.unblock(userID: displayedProfile.id)
         } catch {
             alertError = store.presentableModerationError(error)
-        }
-    }
-
-    // MARK: - Avatar upload
-
-    private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        guard let uiImage = UIImage(data: data) else { return }
-
-        await MainActor.run {
-            uncroppedImage = uiImage
-        }
-    }
-
-    private func uploadCroppedPhoto(_ image: UIImage) async {
-        // Optimistically set the selected data to preview
-        draft.selectedPhotoData = image.jpegData(compressionQuality: 0.85)
-
-        draft.isUploadingPhoto = true
-        defer { draft.isUploadingPhoto = false }
-
-        guard let userID = store.currentUserID else { return }
-
-        if let result = await ImageUploader.upload(input: .uiImage(image), type: .profilePicture, userID: userID) {
-            draft.avatarUrl = result.url
-        } else {
-            // Revert the optimistic preview so the avatar shown matches what Save
-            // would actually keep, and tell the user instead of failing silently.
-            draft.selectedPhotoData = nil
-            draft.selectedPhotoItem = nil
-            alertError = PresentableAlertError(
-                message: "Your photo couldn't be uploaded.",
-                recoverySuggestion: "Check your connection and try again."
-            )
         }
     }
 }

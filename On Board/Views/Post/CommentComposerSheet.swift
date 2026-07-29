@@ -51,15 +51,11 @@ struct CommentComposerSheet: View {
                     .focused($isFocused)
                     .disabled(isPosting)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .onChange(of: composer.draft) { _, newValue in
-                        if newValue.count > 280 {
-                            composer.draft = String(newValue.prefix(280))
-                        }
-                    }
+                    .characterLimited($composer.draft, to: CommentComposerState.maxLength)
 
-                Text("\(composer.draft.count) / 280")
+                Text("\(composer.draft.count) / \(CommentComposerState.maxLength)")
                     .fontStyle(.caption)
-                    .foregroundStyle(composer.draft.count >= 280 ? .red : .secondary)
+                    .foregroundStyle(composer.draft.count >= CommentComposerState.maxLength ? .red : .secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button {
@@ -67,7 +63,15 @@ struct CommentComposerSheet: View {
                         isPosting = true
                         await onPost()
                         isPosting = false
-                        if !composer.isComposing { dismiss() }
+                        if !composer.isComposing {
+                            // See NewPostView's Cancel button for why this
+                            // goes before dismiss() — otherwise the sheet's
+                            // dismiss transition can race the keyboard's own
+                            // hide animation and leave a stale safe-area
+                            // inset on whatever's shown next.
+                            KeyboardDismisser.dismiss()
+                            dismiss()
+                        }
                     }
                 } label: {
                     LoadingButtonLabel("Post", systemImage: "arrow.up", isLoading: isPosting)
@@ -87,6 +91,7 @@ struct CommentComposerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        KeyboardDismisser.dismiss()
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.down")

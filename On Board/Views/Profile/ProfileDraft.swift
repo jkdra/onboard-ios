@@ -31,12 +31,12 @@ final class ProfileDraft {
     var displayName = ""
     var handle = ""
     var bio = ""
+    /// The profile's existing avatar URL, until `photo.uploadedURL` replaces
+    /// it — same relationship as PostDetailView's `draftImageUrl`/`editPhoto`.
     var avatarUrl: String?
     var birthday: Date?
     var showBirthday = false
-    var selectedPhotoItem: PhotosPickerItem?
-    var selectedPhotoData: Data?
-    var isUploadingPhoto = false
+    var photo = PhotoAttachmentController(type: .profilePicture)
     var handleAvailability: HandleAvailability = .idle
 
     private var originalHandle = ""
@@ -79,15 +79,16 @@ final class ProfileDraft {
         avatarUrl = profile.avatarUrl
         birthday = profile.birthday.flatMap { Self.birthdayFormatter.date(from: $0) }
         showBirthday = profile.showBirthday
-        selectedPhotoData = nil
-        selectedPhotoItem = nil
+        photo.reset()
         self.checkAvailability = checkAvailability
     }
 
     func cancel() {
         handleCheckTask?.cancel()
-        selectedPhotoData = nil
-        selectedPhotoItem = nil
+        photo.reset()
+        // Harmless: ProfileReadContent reads the store's profile, not
+        // draft.avatarUrl, and begin() re-seeds this from the real profile on
+        // the next edit — this just leaves nothing stale on the draft itself.
         avatarUrl = nil
     }
 

@@ -6,6 +6,7 @@
 import GoogleSignIn
 import Supabase
 import SwiftUI
+import TipKit
 
 private enum AppLaunchContext {
     static var isPreview: Bool {
@@ -58,6 +59,11 @@ struct On_BoardApp: App {
             auth: authStore,
             network: networkMonitor
         ))
+        // Local-only (no CloudKit sync), no artificial throttling beyond each
+        // Tip's own rules — one donation per cold launch, used by ArchiveTip's
+        // "shown after the 2nd launch" rule.
+        try? Tips.configure([.datastoreLocation(.applicationDefault), .displayFrequency(.immediate)])
+        Task { await ArchiveTip.appLaunchEvent.donate() }
     }
 
     var body: some Scene {

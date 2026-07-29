@@ -10,7 +10,7 @@ struct OnboardingUsernameStepView: View {
 
     @State private var handle = ""
     @State private var availability: Availability = .idle
-    @State private var checkTask: Task<Void, Never>?
+    @State private var debouncer = Debouncer()
 
     private enum Availability: Equatable {
         case idle
@@ -120,24 +120,22 @@ struct OnboardingUsernameStepView: View {
     }
 
     private func scheduleAvailabilityCheck() {
-        checkTask?.cancel()
         let candidate = trimmedHandle
 
         guard !candidate.isEmpty else {
+            debouncer.cancel()
             availability = .idle
             return
         }
 
         guard HandleRules.isValid(candidate) else {
+            debouncer.cancel()
             availability = .invalid
             return
         }
 
         availability = .checking
-        checkTask = Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-
+        debouncer.schedule(isStillCurrent: { trimmedHandle == candidate }) {
             let result = await onboarding.checkHandleAvailable(candidate)
             guard !Task.isCancelled, trimmedHandle == candidate else { return }
             switch result {

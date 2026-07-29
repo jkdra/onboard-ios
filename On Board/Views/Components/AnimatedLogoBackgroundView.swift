@@ -42,18 +42,17 @@ struct AnimatedLogoBackgroundView: View {
 
     private func drawLogos(context: GraphicsContext, size: CGSize, image: GraphicsContext.ResolvedImage, xOffset: Double, yOffset: Double) {
         // Expand the drawing area to account for rotation
-        let diagonal = Double(hypot(size.width, size.height))
+        let diagonal = TiledCanvasGeometry.diagonal(for: size)
         let drawingSize = diagonal * 1.5
-        
+
         let countX = Int(drawingSize / stepX) + 4
         let countY = Int(drawingSize / stepY) + 4
-        
+
         let cx = Double(size.width) / 2
         let cy = Double(size.height) / 2
 
-        let transform = CGAffineTransform(rotationAngle: CGFloat(angle.radians))
-            .concatenating(CGAffineTransform(translationX: cx, y: cy))
-        
+        let transform = TiledCanvasGeometry.transform(angle: angle, center: CGPoint(x: cx, y: cy))
+
         let originX = -drawingSize / 2 + xOffset
         let originY = -drawingSize / 2 + yOffset
         

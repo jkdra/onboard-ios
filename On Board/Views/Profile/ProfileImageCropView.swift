@@ -194,6 +194,10 @@ struct ProfileImageCropView: View {
             .ignoresSafeArea()
         }
         .preferredColorScheme(.dark)
+        // Mirrors PostImageCropView: without this, dismissing mid-delay leaves
+        // the auto-settle task (and whatever its `onSettle` closure captured)
+        // alive up to 1.5s past teardown, firing `withAnimation` on a gone screen.
+        .onDisappear { interaction.cancelAutoSettle() }
     }
 
     // MARK: - Clamping

@@ -45,10 +45,12 @@ struct SettingsRowLabel: View {
     var tint: Color = .primary
 
     var body: some View {
-        HStack(spacing: 12) {
-            SettingsIconBadge(systemImage: systemImage, tint: tint)
+        Label {
             Text(title).fontStyle(.body)
+        } icon: {
+            SettingsIconBadge(systemImage: systemImage, tint: tint)
         }
+        .labelStyle(.titleAndIcon)
     }
 }
 

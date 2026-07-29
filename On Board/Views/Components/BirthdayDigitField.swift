@@ -18,21 +18,6 @@ struct BirthdayDigitField: View {
     @State private var pendingDate = Date()
 
     var body: some View {
-        HStack(spacing: 10) {
-            group(0..<4)
-            dash
-            group(4..<6)
-            dash
-            group(6..<8)
-        }
-        .overlay {
-            DatePicker("Birthday", selection: $pendingDate, in: ...(maximumDate ?? .now), displayedComponents: .date)
-//                .colorMultiply(.clear)
-                .frame(maxWidth: .infinity)
-                .labelsHidden()
-        }
-        .contentShape(.rect)
-        
         Button {
             pendingDate = date ?? maximumDate ?? .now
             isPresented = true

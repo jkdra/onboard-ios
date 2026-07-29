@@ -75,6 +75,12 @@ protocol OnboardingService: Sendable {
     func joinWaitlist() async throws -> OnboardingStep
     func submitReferralCode(_ code: String) async throws
     func setExpectedGraduation(_ month: Date) async throws
+    /// Records that the user signed the community pledge. The drawn
+    /// signature itself never leaves the device (see PledgeSignatureView's
+    /// header comment) — this persists only the fact and timestamp, so the
+    /// pledge survives an app kill between admission and signing. Idempotent:
+    /// safe to call again if a prior call's result was never confirmed.
+    func acceptPledge() async throws
 }
 
 enum OnboardingServiceFactory {

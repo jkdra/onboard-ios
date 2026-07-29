@@ -79,12 +79,15 @@ final class HostVoice {
 
     private let neutralBaseRate = 1.60
     private let happyBaseRate = 1.72
+    /// Guards against a second `prepare()` re-dispatching the sample load while
+    /// the first is still in flight.
+    private var isLoadingBlips = false
 
     // MARK: - Phoneme tables
 
     /// Every phoneme key the mapping can produce (the no-hiss subset). Order
     /// gives each a stable index for the melody.
-    static let phonemeOrder = [
+    nonisolated static let phonemeOrder = [
         "AH", "EH", "IH", "EE", "OH", "OO", "UH",   // vowels
         "M", "N", "L", "R", "W", "Y", "H",          // soft consonants
         "B", "P", "D", "T", "G", "K",               // hard consonants
@@ -149,11 +152,42 @@ final class HostVoice {
             }
         }
         guard !started else { return }
+
+        // Blips are loaded once and survive a stop()/prepare() cycle (stop()
+        // only tears the engine down, not the cached samples) — if they're
+        // already warm, skip straight to the cheap engine setup below instead
+        // of re-dispatching a reload.
+        if !neutralBlips.isEmpty, !happyBlips.isEmpty {
+            startEngine()
+            return
+        }
+        guard !isLoadingBlips else { return }
+        isLoadingBlips = true
+
+        Task.detached(priority: .userInitiated) { [self] in
+            // Pure function over static phoneme tables + bundled assets — safe
+            // to run off the main actor. This used to run inline in `prepare()`
+            // on the main actor: 21 phonemes × 2 moods is 42 disk writes/reads
+            // (NSDataAsset → temp file → AVAudioFile), enough to visibly hitch
+            // the welcome screen right as it appeared.
+            let neutral = Self.loadBlipSet(mood: "Neutral")
+            let happy = Self.loadBlipSet(mood: "Happy")
+            await MainActor.run {
+                self.finishLoadingBlips(neutral: neutral, happy: happy)
+            }
+        }
+    }
+
+    private func finishLoadingBlips(neutral: [String: [Float]], happy: [String: [Float]]) {
+        isLoadingBlips = false
+        neutralBlips = neutral
+        happyBlips = happy
+        guard !started else { return } // a second prepare()/stop() already raced ahead
+        startEngine()
+    }
+
+    private func startEngine() {
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
-
-        if neutralBlips.isEmpty { neutralBlips = loadBlipSet(mood: "Neutral") }
-        if happyBlips.isEmpty { happyBlips = loadBlipSet(mood: "Happy") }
-
         pool.removeAll()
         for _ in 0..<poolSize {
             let node = AVAudioPlayerNode()
@@ -271,7 +305,10 @@ final class HostVoice {
 
     // MARK: - Sample loading & varispeed
 
-    private func loadBlipSet(mood: String) -> [String: [Float]] {
+    /// `nonisolated` and `static` so `prepare()` can run this off the main
+    /// actor via `Task.detached` — it touches no instance state, only the
+    /// static phoneme table and bundled assets.
+    private nonisolated static func loadBlipSet(mood: String) -> [String: [Float]] {
         var result: [String: [Float]] = [:]
         for key in Self.phonemeOrder {
             guard let asset = NSDataAsset(name: "HostVoice\(mood)\(key)") else { continue }
@@ -297,9 +334,10 @@ final class HostVoice {
               let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1)
         else { return nil }
         let n = max(1, Int(Double(x.count) / rate))
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(n)) else { return nil }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(n)),
+              let out = buffer.floatChannelData?[0]
+        else { return nil }
         buffer.frameLength = AVAudioFrameCount(n)
-        let out = buffer.floatChannelData![0]
         for k in 0..<n {
             let p = Double(k) * rate
             let a = Int(p)
@@ -327,10 +365,10 @@ final class HostVoice {
         let duration = 0.06
         let frameCount = Int(sampleRate * duration)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1),
-              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount))
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)),
+              let samples = buffer.floatChannelData?[0]
         else { return nil }
         buffer.frameLength = AVAudioFrameCount(frameCount)
-        let samples = buffer.floatChannelData![0]
         let attack = max(frameCount / 12, 1)
         for i in 0..<frameCount {
             let t = Double(i) / sampleRate

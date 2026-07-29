@@ -5,7 +5,7 @@ import SwiftUI
 final class CropInteractionState {
     var isBlurRemoved = false
     private var autoSettleTask: Task<Void, Never>?
-    
+
     func cancelAutoSettle() {
         autoSettleTask?.cancel()
         autoSettleTask = nil

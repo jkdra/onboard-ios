@@ -38,4 +38,19 @@ enum PostTone: String, CaseIterable, Identifiable, Codable {
     static func random() -> PostTone {
         allCases.randomElement() ?? .blue
     }
+
+    /// Legible foreground for content drawn on this tone's color (e.g. a
+    /// selected `ReactionBar` pill, tinted with `tone.color` at partial
+    /// opacity). White reads fine on every system tone at that blend except
+    /// yellow — by far the lightest of the set — which needs black instead.
+    /// Hand-tuned against the actual composited appearance rather than a
+    /// contrast formula: a generic luminance check on the raw colors would
+    /// flag borderline tones (orange, green) that read fine in practice once
+    /// blended at reduced opacity over the system background.
+    var legibleForeground: Color {
+        switch self {
+        case .yellow: .black
+        default: .white
+        }
+    }
 }

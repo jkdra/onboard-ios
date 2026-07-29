@@ -39,7 +39,10 @@ struct AccountSecuritySettingsView: View {
         .navigationTitle("Security")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshMethods() }
-        .refreshable { await refreshMethods() }
+        // Pull-to-refresh is an explicit user gesture expecting a signal back —
+        // unlike the passive .task/post-link refreshes below, a silent failure
+        // here just looks like the pull did nothing.
+        .refreshable { await refreshMethods(alertOnFailure: true) }
         .sheet(isPresented: $showPasswordSheet) {
             SetPasswordView {
                 Task { await refreshMethods() }
@@ -297,36 +300,38 @@ struct AccountSecuritySettingsView: View {
     }
 
     private var linkAppleRow: some View {
-        Button {
-            Task { await linkApple() }
-        } label: {
-            HStack(spacing: 12) {
-                SettingsIconBadge(systemImage: AuthProvider.apple.systemImage)
-                Text("Apple")
-                    .fontStyle(.body)
-                Spacer()
-                if isLinkingApple {
-                    ProgressView()
-                } else {
-                    Text("Link")
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(Color.primary)
-                }
-            }
-        }
-        .disabled(isLinkingApple)
+        oauthLinkRow(
+            icon: { SettingsIconBadge(systemImage: AuthProvider.apple.systemImage) },
+            label: "Apple",
+            isLinking: isLinkingApple,
+            action: linkApple
+        )
     }
 
     private var linkGoogleRow: some View {
+        oauthLinkRow(
+            icon: { GoogleIconBadge() },
+            label: "Google",
+            isLinking: isLinkingGoogle,
+            action: linkGoogle
+        )
+    }
+
+    private func oauthLinkRow<Icon: View>(
+        @ViewBuilder icon: () -> Icon,
+        label: String,
+        isLinking: Bool,
+        action: @escaping () async -> Void
+    ) -> some View {
         Button {
-            Task { await linkGoogle() }
+            Task { await action() }
         } label: {
             HStack(spacing: 12) {
-                GoogleIconBadge()
-                Text("Google")
+                icon()
+                Text(label)
                     .fontStyle(.body)
                 Spacer()
-                if isLinkingGoogle {
+                if isLinking {
                     ProgressView()
                 } else {
                     Text("Link")
@@ -335,7 +340,7 @@ struct AccountSecuritySettingsView: View {
                 }
             }
         }
-        .disabled(isLinkingGoogle)
+        .disabled(isLinking)
     }
 
     private func unavailableOAuthRow(provider: AuthProvider) -> some View {
@@ -357,10 +362,16 @@ struct AccountSecuritySettingsView: View {
         .opacity(0.55)
     }
 
-    private func refreshMethods() async {
+    private func refreshMethods(alertOnFailure: Bool = false) async {
         isRefreshing = true
         defer { isRefreshing = false }
-        await auth.refreshLinkedMethods()
+        do {
+            try await auth.refreshLinkedMethods()
+        } catch {
+            if alertOnFailure {
+                alertError = PresentableAlertError.from(error)
+            }
+        }
     }
 
     private func unlink(_ identity: LinkedIdentity) async {

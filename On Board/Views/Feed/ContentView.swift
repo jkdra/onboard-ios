@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import TipKit
 
 struct ContentView: View {
 
@@ -17,6 +18,7 @@ struct ContentView: View {
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
     @State private var navigationPath: [BoardRoute] = []
+    @State private var archiveTip = ArchiveTip()
     @State private var showNewPost = false
     @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
@@ -26,15 +28,53 @@ struct ContentView: View {
     /// Fires the once-a-year birthday celebration (fireworks + the countdown
     /// card's greeting) when the current user's birthday is today.
     @State private var birthdayCelebrating = false
-    // DEV-only: refine the Signal Lost image placeholder against a real load.
-    @State private var devShowLoadedImage = false
-    @State private var devPlaceholderTint: PostTone?
-    /// Preview aspect ratio (width / height), matching post.imageAspectRatio.
-    @State private var devAspect: Double = 0.8
+    /// True while the in-feed new-post card is at least partly on screen. When it
+    /// scrolls away (and posting is still open), the bottom-bar compose button appears.
+    @State private var newPostCardVisible = true
+    /// Drives the programmatic snap-to-top at the start of the weekly reset.
+    @State private var feedScrollPosition = ScrollPosition()
+    /// Announces the turnover. Without it the board's entire contents changed with no
+    /// acknowledgement — a post you were reading would just evaporate.
+    @State private var showBoardClearedToast = false
+    /// True while the take-down has finished but the server hasn't produced the new
+    /// week yet (device clock ahead of the server's rollover). The board is already
+    /// swept, so this drives the "Setting up this week's board…" indicator.
+    @State private var settingUpNewBoard = false
+    /// Last week id this view has seen, so a week arriving on its own (poll, foreground
+    /// refresh) can be told apart from the one we rolled over ourselves.
+    @State private var lastKnownWeekID: UUID?
     @Namespace private var cardNamespace
+
+    /// DEV/mock-only: the in-feed dev scratch block (Signal Lost preview, tint/aspect
+    /// pickers) fills roughly 1.5 screens above the masonry, so a snap-to-top during a
+    /// UI-test walkthrough frames the controls instead of the feed. Pass
+    /// `-dev.hideDevBlock` to suppress it and see the real board.
+    private static let hidesDevBlock =
+        ProcessInfo.processInfo.arguments.contains("-dev.hideDevBlock")
 
     private var clearingSoon: Bool {
         BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt)
+    }
+
+    /// True only while the feed actually contains an *enabled* compose card — i.e.
+    /// an interactive week outside the final hour. Gates the bottom-bar button so it
+    /// never appears on archived weeks or once posting has closed.
+    private var postingEnabled: Bool {
+        store.feedItems.contains {
+            if case .newPost(let isEnabled, _) = $0 { return isEnabled }
+            return false
+        }
+    }
+
+    /// Shows the bottom-bar compose button once the in-feed card is scrolled away.
+    private var showsBottomBarNewPost: Bool {
+        postingEnabled && !newPostCardVisible
+    }
+
+    /// iOS 26 gives `.bottomBar` a liquid-glass background the button rides on; on
+    /// earlier versions we hide that background and let the button wear its own material.
+    private var isIOS26OrLater: Bool {
+        if #available(iOS 26.0, *) { true } else { false }
     }
 
     var body: some View {
@@ -159,69 +199,28 @@ struct ContentView: View {
         let feedItems = store.feedItems
         return ZStack {
             ScrollView {
-                if onboarding.supportsDevAdmission {
-                    VStack(alignment: .leading, spacing: 12) {
-                        // DEV (mock builds): flip between the Signal Lost
-                        // placeholder and a real loaded image to refine the
-                        // placeholder's look at post-image proportions.
-                        Group {
-                            if devShowLoadedImage {
-                                BoardAsyncImage(
-                                    url: URL(string: "https://picsum.photos/seed/onboard/\(max(1, Int(1000 * devAspect)))/1000"),
-                                    tone: devPlaceholderTint ?? .blue
-                                )
-                            } else {
-                                SignalLostPlaceholder(tint: devPlaceholderTint?.color)
-                            }
-                        }
-                        // Frame to the chosen aspect ratio — the same thing
-                        // GridCard does with post.imageAspectRatio, so the
-                        // placeholder sits in the exact frame the image will.
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(devAspect, contentMode: .fit)
-                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-
-                        Toggle("Show loaded image", isOn: $devShowLoadedImage)
-                            .tint(.primary)
-
-                        Picker("Placeholder tint", selection: $devPlaceholderTint) {
-                            Text("Monochrome").tag(PostTone?.none)
-                            ForEach(PostTone.allCases) { tone in
-                                Text(tone.displayName).tag(PostTone?.some(tone))
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Picker("Aspect ratio", selection: $devAspect) {
-                            Text("Portrait 4:5").tag(0.8)
-                            Text("Tall 3:4").tag(0.75)
-                            Text("Square 1:1").tag(1.0)
-                            Text("Photo 3:2").tag(1.5)
-                            Text("Landscape 16:9").tag(16.0 / 9.0)
-                        }
-                        .pickerStyle(.menu)
-
-                        Button("Replay Welcome [DEV]") {
-                            showWelcomeReplay = true
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-                    .fontStyle(.footnote)
-                    .padding(.horizontal)
-                    .padding(.top, 4)
+                if onboarding.supportsDevAdmission, !Self.hidesDevBlock {
+                    DevFeedScratchBlock(showWelcomeReplay: $showWelcomeReplay)
                 }
 
                 BoardFeedView(
                     items: feedItems,
                     onNewPost: { showNewPost = true },
                     isResetting: boardIsResetting,
-                    celebrateBirthday: birthdayCelebrating
+                    celebrateBirthday: birthdayCelebrating,
+                    onNewPostCardVisibilityChanged: { visible in
+                        guard newPostCardVisible != visible else { return }
+                        withAnimation(reduceMotion ? nil : .snappy) {
+                            newPostCardVisible = visible
+                        }
+                    }
                 )
 
                 if store.isLive, !store.isLoading, !store.hasFeedPosts {
                     emptyFeedState
                 }
             }
+            .scrollPosition($feedScrollPosition)
 
             if store.isLoading, store.posts.isEmpty {
                 // Ghost masonry in the real card geometry — reads as "the board
@@ -230,6 +229,20 @@ struct ContentView: View {
                 ScrollView {
                     FeedSkeletonView()
                 }
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
+
+            if settingUpNewBoard {
+                // The old board is swept and the new week hasn't landed yet. The feed
+                // behind this is intentionally empty (boardIsResetting keeps it so).
+                VStack(spacing: 14) {
+                    ProgressView()
+                    Text("Setting up this week's board…")
+                        .fontStyle(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(false)
                 .transition(.opacity)
             }
@@ -280,27 +293,87 @@ struct ContentView: View {
             WelcomeOnBoardView(boardName: onboarding.status?.boardName)
         }
         .navigationTitle("This Week")
+        // The large title only collapses to the compact bar (where .principal
+        // content actually renders) once the user scrolls past it — so simply
+        // mounting the countdown ToolbarItem wasn't enough to show it "at all
+        // times": at the top of the feed the large "This Week" title was still
+        // covering it, countdown card visible or not. Forcing .inline for the
+        // whole clearing-soon window skips the large title entirely so the
+        // countdown is visible in the nav bar from the moment the window opens.
+        .navigationBarTitleDisplayMode(clearingSoon ? .inline : .automatic)
         .task {
             // No realtime subscription for reactions/posts (removed — the app is
             // weekly-cadence, not a live chat, so instant cross-user updates aren't
             // worth the always-on connection). This silent poll is the replacement:
             // pull-to-refresh and foreground-refresh cover the rest.
+            //
+            // This `.task` lives on the NavigationStack's *root* content, which SwiftUI
+            // keeps mounted — and this loop running — even while Archive/Settings/a post
+            // is pushed on top. Gating the actual refresh on `navigationPath.isEmpty`
+            // stops it from silently hitting the network every 45s while the user isn't
+            // even looking at the feed.
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(45))
                 guard !Task.isCancelled else { break }
+                guard navigationPath.isEmpty else { continue }
                 await store.refresh(for: store.currentUserID)
             }
         }
-        .task(id: store.activeBoardWeek?.endsAt) {
-            guard let endsAt = store.activeBoardWeek?.endsAt, endsAt > .now else { return }
-            try? await Task.sleep(for: .seconds(endsAt.timeIntervalSinceNow))
+        .task {
+            // DEV/mock only: `-dev.clearAfter <seconds>` shrinks the week on a delay
+            // rather than on a menu tap. The menu is unreachable once a sheet is up, so
+            // this is the only way to drive a reset that lands while the composer is
+            // open with a typed draft — the case that silently destroyed user work.
+            let delay = UserDefaults.standard.double(forKey: "dev.clearAfter")
+            guard delay > 0, onboarding.supportsDevAdmission else { return }
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
+            store.devSetCountdown(seconds: 5)
+        }
+        .task(id: store.activeBoardWeek?.endsAt) {
+            guard let endsAt = store.activeBoardWeek?.endsAt else { return }
+            // Already past the deadline (relaunched onto a stale week, or the sleep
+            // below was suspended while backgrounded): roll over immediately rather
+            // than leaving the board sitting expired with no scheduled trigger.
+            if endsAt > .now {
+                try? await Task.sleep(for: .seconds(endsAt.timeIntervalSinceNow))
+                guard !Task.isCancelled else { return }
+            }
             await triggerBoardReset()
         }
+        .onChange(of: store.activeBoardWeek?.id, initial: true) { _, newID in
+            handleWeekChange(to: newID)
+        }
+        .toast(
+            isPresented: $showBoardClearedToast,
+            message: "The board cleared. This is a new week.",
+            icon: "sparkles"
+        )
+        // Pre-26: hide the bar chrome so only the button's own circular material
+        // shows. On 26+ we leave it automatic so the button rides the liquid glass.
+        .toolbarBackground(isIOS26OrLater ? .automatic : .hidden, for: .bottomBar)
         .toolbar {
+            // Shown for the whole clearing-soon window regardless of scroll position —
+            // simpler than reacting to the countdown card's own on-screen state, and
+            // it sidesteps a real defect that approach had: toggling a ToolbarItem's
+            // *presence* on every scroll forces UIKit to reassign
+            // UINavigationItem.titleView, which runs its own layout pass and visibly
+            // slides the new title in from the side. SwiftUI's .transition has no
+            // authority over that — it only animates content within an already-stable
+            // item. Mounting this once per clearing-soon window (not per scroll) keeps
+            // it firmly inside SwiftUI's own animation system.
+            if clearingSoon {
+                ToolbarItem(placement: .principal) {
+                    ClearingSoonPrincipal(weekEnd: store.activeBoardWeek?.endsAt)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        // Archive's own entry point — the tip's condition
+                        // goes false the moment this is set, so it won't
+                        // show again after this first visit.
+                        ArchiveTip.hasOpenedArchive = true
                         navigationPath.append(BoardRoute.archive)
                     } label: {
                         Label("Archive", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -310,11 +383,64 @@ struct ContentView: View {
                     } label: {
                         Label("Settings", systemImage: "gearshape")
                     }
+                    if onboarding.supportsDevAdmission {
+                        // DEV/mock only: shrink the week so the clears-soon UI + reset
+                        // fire in ~10s. In the menu (not the feed) so it's always
+                        // tappable — a feed button here sits under the bottom toolbar.
+                        Button {
+                            store.devSetCountdown(seconds: 10)
+                        } label: {
+                            Label("Clear board in 10s [DEV]", systemImage: "clock.badge.exclamationmark")
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis").fontWeight(.semibold)
                 }
                 .accessibilityLabel("More")
+                // "Archive" itself is invisible until this menu is open, so
+                // the tip has to point at the menu's own trigger instead.
+                .popoverTip(archiveTip)
             }
+            // Mounted for as long as posting could ever be relevant (the whole
+            // interactive week), not just while the in-feed card is off screen.
+            // `.bottomBar` items bridge to UIToolbar.items — an array — so
+            // conditionally including/excluding one on every scroll (the old
+            // `showsBottomBarNewPost` gate) churns that array's count on every
+            // frame the card's visibility toggles, the same ToolbarItem-presence
+            // anti-pattern that caused the nav-principal slide bug above. Keeping
+            // the item mounted and fading its content via `showsBottomBarNewPost`
+            // instead keeps the toolbar's item count stable while scrolling.
+            if postingEnabled {
+                ToolbarItem(placement: .bottomBar) {
+                    bottomBarNewPostButton
+                }
+            }
+        }
+    }
+
+    /// Icon-only compose button surfaced in the bottom bar once the in-feed card
+    /// scrolls away. On iOS 26 the toolbar's glass sits behind it; earlier versions
+    /// get a circular material of their own (the bar background is hidden above).
+    @ViewBuilder
+    private var bottomBarNewPostButton: some View {
+        let button = Button {
+            showNewPost = true
+        } label: {
+            Label("New post", systemImage: "plus")
+                .labelStyle(.iconOnly)
+                .fontWeight(.semibold)
+        }
+        .accessibilityLabel("New post")
+        .accessibilityHidden(!showsBottomBarNewPost)
+        .allowsHitTesting(showsBottomBarNewPost)
+        .opacity(showsBottomBarNewPost ? 1 : 0)
+
+        if isIOS26OrLater {
+            button
+        } else {
+            button
+                .padding(12)
+                .background(.regularMaterial, in: Circle())
         }
     }
 
@@ -353,16 +479,101 @@ struct ContentView: View {
         }
     }
 
+    /// Plays the take-down, swaps in the new week, and announces the arrival.
+    ///
+    /// Every rollover funnels through here — the scheduled `endsAt` timer, and (via
+    /// `handleWeekChange`) a week that arrives on its own from the 45s poll or a
+    /// foreground refresh. Before this, a poll that beat the timer swapped the entire
+    /// board out with no animation and no explanation.
     private func triggerBoardReset() async {
-        showNewPost = false
-        if !navigationPath.isEmpty { navigationPath.removeAll() }
-        try? await Task.sleep(for: .milliseconds(400))
+        // The timer and an incoming poll can both fire within the same second.
+        guard !boardIsResetting else { return }
         boardIsResetting = true
-        let postCount = store.feedItems.filter { if case .post = $0 { return true }; return false }.count
-        let animDuration = Double(max(postCount, 1)) * 0.07 + 0.7
-        try? await Task.sleep(for: .seconds(animDuration))
-        await store.refresh(for: store.currentUserID)
-        boardIsResetting = false
+        defer { boardIsResetting = false }
+
+        // Only live-post destinations are invalidated by the wipe. PostDetailView
+        // dismisses itself as well; this is the backstop for when its task was
+        // suspended (covered by a sheet, app backgrounded across the boundary).
+        navigationPath.removeAll(where: \.isLivePostDestination)
+
+        // Quick snap to the top so the take-down only ever animates the cards the
+        // user can actually see; everything below the fold is dropped by BoardFeedView.
+        if reduceMotion {
+            feedScrollPosition.scrollTo(edge: .top)
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) {
+                feedScrollPosition.scrollTo(edge: .top)
+            }
+            try? await Task.sleep(for: .milliseconds(220))
+        }
+
+        // Bottom-to-top cascade: at most ~10 on-screen cards, each 0.06s apart, plus
+        // the 0.45s per-card fade. Cap the wait to that window rather than the full
+        // (possibly large) post count, which now never all animate.
+        try? await Task.sleep(for: .seconds(10 * 0.06 + 0.45 + 0.15))
+
+        let outgoingWeekID = store.activeBoardWeek?.id
+
+        // Mock builds have no BoardService, so `refresh` is a no-op and the take-down
+        // would land on the same posts it just swept away. Roll the week over in
+        // memory instead; live builds fall through to the real fetch.
+        if !store.devRollOverWeek() {
+            await store.refresh(for: store.currentUserID)
+        }
+
+        // Our countdown runs on the device clock; the server archives on its own
+        // schedule. If we hit zero first (clock skew, cron lag, a slow function),
+        // the refresh above hands back the same expired week — the board is already
+        // swept, so say what's happening and poll with backoff until the new week
+        // actually exists. The expired phase keeps posting locked throughout.
+        if store.activeBoardWeek?.id == outgoingWeekID {
+            withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+                settingUpNewBoard = true
+            }
+            defer {
+                withAnimation(reduceMotion ? nil : .smooth(duration: 0.3)) {
+                    settingUpNewBoard = false
+                }
+            }
+            var retryDelay: Double = 2
+            while store.activeBoardWeek?.id == outgoingWeekID {
+                try? await Task.sleep(for: .seconds(retryDelay))
+                // The 45s poll or a pull-to-refresh can land the new week first; its
+                // endsAt change restarts the .task(id:) that owns us — stop cleanly
+                // rather than double-fetching against the fresh board.
+                if Task.isCancelled { break }
+                await store.refresh(for: store.currentUserID)
+                retryDelay = min(retryDelay * 2, 30)
+            }
+        }
+
+        // Announce only a real turnover. On the cancelled path the week may still be
+        // the outgoing one — whatever replaced this task owns what happens next.
+        // Tracking lastKnownWeekID here as well as in handleWeekChange prevents the
+        // observer firing a second, redundant announcement for this same week.
+        if store.activeBoardWeek?.id != outgoingWeekID {
+            lastKnownWeekID = store.activeBoardWeek?.id
+            announceNewBoard()
+        }
+    }
+
+    /// A new week appeared without us animating it in — the silent-swap path. The 45s
+    /// poll, a pull-to-refresh, or the foreground refresh after the app was backgrounded
+    /// across the boundary can all land one. Previously the board's entire contents
+    /// changed underneath the user with no acknowledgement whatsoever.
+    private func handleWeekChange(to newID: UUID?) {
+        defer { lastKnownWeekID = newID }
+        // First observation of any week (cold launch, hydration) is not a rollover.
+        guard let previous = lastKnownWeekID, let newID, previous != newID else { return }
+        // triggerBoardReset owns its own announcement and has already run the take-down.
+        guard !boardIsResetting else { return }
+        announceNewBoard()
+    }
+
+    private func announceNewBoard() {
+        withAnimation(reduceMotion ? nil : .snappy) {
+            showBoardClearedToast = true
+        }
     }
 
     private var emptyFeedState: some View {

@@ -41,6 +41,9 @@ struct EmailStatus: Codable, Sendable {
 }
 
 protocol AuthService: Sendable {
+    /// Test/mock scaffolding, not a real production entry point — see
+    /// `AuthStore.signIn(with:)`'s doc comment. Every provider has its own
+    /// dedicated method below; that's what production views call.
     func signIn(with provider: AuthProvider) async throws -> AuthSession
     func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession
     func signInWithGoogle() async throws -> AuthSession
@@ -49,6 +52,11 @@ protocol AuthService: Sendable {
     func sendEmailOTP(email: String) async throws
     func verifyEmailOTP(email: String, token: String) async throws -> AuthSession
     func checkEmailExists(email: String) async throws -> EmailStatus
+    /// Whether `phone` (E.164, with the leading `+`) already has an account —
+    /// the phone-flow counterpart to `checkEmailExists`, driving SignInView's
+    /// "Account Found!" toast for phone sign-in the same way it already does
+    /// for email.
+    func checkPhoneExists(phone: String) async throws -> Bool
     func signUpWithPassword(email: String, password: String) async throws -> AuthSession?
     func signInWithPassword(email: String, password: String) async throws -> AuthSession
     /// Sets (or changes) the password on the signed-in account.
