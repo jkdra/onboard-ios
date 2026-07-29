@@ -93,6 +93,7 @@ extension BoardStore {
         let changed = transform(&thread)
         if changed {
             commentsByPostID[postID] = thread
+            commentsLastLocallyMutatedAt[postID] = Date()
         }
         return changed
     }

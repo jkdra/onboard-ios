@@ -11,7 +11,7 @@ import Foundation
 extension BoardStore {
     /// Not `private` — the test target reads/writes this path directly to
     /// seed and verify cache fixtures without exercising the full app.
-    static var cacheFileURL: URL {
+    nonisolated static var cacheFileURL: URL {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("org.onboardapp.board-cache.json")
@@ -23,10 +23,19 @@ extension BoardStore {
     /// for free. Any decode failure (corrupt file, mismatched schema version,
     /// or a different board's cache) is treated as a plain cache miss — the
     /// file is deleted and normal network loading proceeds.
-    func hydrateFromDiskIfNeeded(boardID: UUID) {
+    ///
+    /// The read + decode of the full envelope happens off-main (a large
+    /// cached feed's JSON can be sizable) so a cold launch doesn't stall the
+    /// first frame; only applying the result back to `BoardStore`'s
+    /// `@MainActor` state runs here.
+    func hydrateFromDiskIfNeeded(boardID: UUID) async {
         guard !(activeBoardWeek?.boardId == boardID && !posts.isEmpty) else { return }
-        guard let data = try? Data(contentsOf: Self.cacheFileURL),
-              let envelope = try? BoardJSON.decoder.decode(CacheEnvelope.self, from: data),
+        let envelope = await Task.detached(priority: .userInitiated) { () -> CacheEnvelope? in
+            guard let data = try? Data(contentsOf: Self.cacheFileURL) else { return nil }
+            return try? BoardJSON.decoder.decode(CacheEnvelope.self, from: data)
+        }.value
+
+        guard let envelope,
               envelope.schemaVersion == CacheEnvelope.currentSchemaVersion,
               envelope.boardId == boardID
         else {
@@ -52,6 +61,15 @@ extension BoardStore {
     /// simply never persist across a relaunch. Correctness is unaffected
     /// (falls back to a network fetch); it's only the spinner-skip speedup
     /// that doesn't apply to this cohort.
+    ///
+    /// Stays synchronous on purpose, even though the encode+write is real
+    /// CPU/IO work: this is the one thing standing between a mutation and a
+    /// force-quit losing it (see above) — dispatching the write to a
+    /// detached background task would let the process die before it lands,
+    /// silently reintroducing exactly the data loss this function exists to
+    /// prevent. Worth revisiting only alongside a durability-preserving
+    /// approach (e.g. a coalesced/debounced write on a serial background
+    /// queue that's flushed on `scenePhase` background, not fire-and-forget).
     func persistToDisk() {
         guard let activeBoardWeek else { return }
         let activeWeekPosts = posts.filter { $0.boardWeekId == activeBoardWeek.id }

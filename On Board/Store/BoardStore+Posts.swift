@@ -109,6 +109,13 @@ extension BoardStore {
         }
     }
 
+    /// Removes the post locally before the network call resolves, not after.
+    /// A rapid re-trigger of the same delete (before the UI has reacted to the
+    /// first) used to be able to send a duplicate DELETE request, since the
+    /// post stayed in `posts` — and thus kept passing this function's own
+    /// existence guard — until the first call's await returned. Removing it
+    /// up front closes that: a second call fails the `firstIndex` guard
+    /// immediately, same as `block`/`unblock`'s optimistic-then-rollback shape.
     func deletePost(id: UUID) async -> Bool {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
@@ -119,11 +126,19 @@ extension BoardStore {
             return false
         }
 
+        let priorPosts = posts
+        let priorComments = commentsByPostID
+        let priorReactions = userReactions
+        removePost(id: id)
+
         do {
             try await boardService.deletePost(id: id)
-            removePost(id: id)
             return true
         } catch {
+            posts = priorPosts
+            commentsByPostID = priorComments
+            userReactions = priorReactions
+            rebuildCaches()
             loadError = Self.mapLoadError(error)
             return false
         }

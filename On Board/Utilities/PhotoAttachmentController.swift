@@ -33,6 +33,14 @@ final class PhotoAttachmentController {
 
     var hasImage: Bool { selectedPhotoData != nil }
 
+    /// Bumped at the start of every `uploadCropped` call. A cancel-and-retry
+    /// (pick photo A, crop, then — before A's upload resolves — pick photo B
+    /// and crop that too) starts a second overlapping upload; without this,
+    /// whichever network response lands last wins the write to
+    /// `uploadedURL`/`uploadedAspectRatio`, which can silently revert the
+    /// picture back to the photo the user already replaced.
+    private var uploadGeneration = 0
+
     init(type: PhotoType) {
         self.type = type
     }
@@ -69,16 +77,30 @@ final class PhotoAttachmentController {
         revertPreviewOnFailure: Bool,
         alertOnFailure: Bool
     ) async {
-        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
+        uploadGeneration += 1
+        let generation = uploadGeneration
+
         uploadFailed = false
         isUploading = true
-        defer { isUploading = false }
+        defer { if generation == uploadGeneration { isUploading = false } }
+
+        // A full-resolution JPEG encode is real main-thread work; ImageUploader
+        // already does its own resize/encode off-main for the actual upload
+        // below, but this is a second, separate encode purely to back the
+        // local preview thumbnail, so it gets the same treatment.
+        let previewData = await Task.detached(priority: .userInitiated) {
+            image.jpegData(compressionQuality: 0.85)
+        }.value
+        guard generation == uploadGeneration else { return }
+        selectedPhotoData = previewData
 
         do {
             let result = try await ImageUploader.upload(input: .uiImage(image), type: type, userID: userID)
+            guard generation == uploadGeneration else { return }
             uploadedURL = result.url
             uploadedAspectRatio = result.aspectRatio
         } catch {
+            guard generation == uploadGeneration else { return }
             uploadedURL = nil
             uploadedAspectRatio = nil
             uploadFailed = true

@@ -70,18 +70,29 @@ struct SettingsView: View {
                 }
                 .tint(.primary)
 
-                Toggle(isOn: $profanityEnabled) {
-                    HStack(spacing: 6) {
-                        Text("Profanity").fontStyle(.body)
-                        Button {
-                            showProfanityInfo = true
-                        } label: {
-                            Image(systemName: "info.circle.fill")
-                                .fontStyle(.body)
-                                .foregroundStyle(.secondary)
-                        }
-                        .buttonStyle(.borderless)
+                HStack(spacing: 6) {
+                    Text("Profanity").fontStyle(.body)
+                    // Kept as a sibling of the Toggle below, not nested in its
+                    // label — a nested interactive control there is commonly
+                    // unreachable by VoiceOver since the row's own activation
+                    // wins, hiding this button from screen-reader users. Sits
+                    // right after the label text visually (not trailing next
+                    // to the switch) to match this row's original look.
+                    Button {
+                        showProfanityInfo = true
+                    } label: {
+                        Image(systemName: "info.circle.fill")
+                            .fontStyle(.body)
+                            .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("About profanity setting")
+
+                    Spacer()
+
+                    Toggle(isOn: $profanityEnabled) { EmptyView() }
+                        .labelsHidden()
+                        .accessibilityLabel("Profanity")
                 }
                 .tint(.primary)
                 .alert("Profanity", isPresented: $showProfanityInfo) {

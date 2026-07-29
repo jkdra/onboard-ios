@@ -23,6 +23,9 @@ struct PostDetailView: View {
     @State var draftTone: PostTone
     @State var draftTags: [String] = []
     @State var showingTagSelection = false
+    // Guards Save against a double-tap firing two concurrent updatePost
+    // calls for the same post — the slower response would silently win.
+    @State var isSavingEdits = false
 
     // Comment editing / composing
     @State var commentEdit = CommentEditState()

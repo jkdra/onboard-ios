@@ -50,7 +50,7 @@ extension BoardStore {
         // A warm hydration below can make hasCachedFeed true "for free," which
         // is exactly how a relaunch skips the loading spinner without any
         // change to the gating logic itself.
-        hydrateFromDiskIfNeeded(boardID: boardID)
+        await hydrateFromDiskIfNeeded(boardID: boardID)
 
         // Only treat the cache as warm when it belongs to the board being fetched —
         // on a board switch the old board's feed must not suppress the loading state.
@@ -180,9 +180,26 @@ extension BoardStore {
         // already-cached data fail silently; only writes alert). A post with no
         // cached comments yet is a true first load, so its failure still surfaces.
         let isRevalidation = commentsByPostID[postID] != nil
+        // This fetch's snapshot only reflects server state as of whenever the
+        // RPC actually ran — captured here, before the await, so it predates
+        // anything a concurrent local mutation stamps into
+        // `commentsLastLocallyMutatedAt` while this call is in flight.
+        let fetchStartedAt = Date()
 
         do {
             let thread = try await boardService.fetchComments(for: postID)
+            // A comment add/edit/delete/vote that landed locally after this
+            // fetch started already reflects the most current state — this
+            // response is now stale relative to it. Applying it anyway would
+            // silently revert that change (a vote/edit/new comment vanishing,
+            // a deleted one reappearing) until the next post open re-fetches.
+            // Bail entirely rather than partially merge; the next natural
+            // revalidation (next post open) picks up fresh server state once
+            // nothing local is in flight.
+            if let lastLocalMutation = commentsLastLocallyMutatedAt[postID],
+               lastLocalMutation > fetchStartedAt {
+                return
+            }
             // A background revalidation lands here on every post open, even
             // one already fully cached — only pay for the disk write when the
             // fetch actually turned up something new to persist.

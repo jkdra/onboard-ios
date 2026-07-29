@@ -50,7 +50,10 @@ extension PostDetailView {
     }
 
     func saveEdits() {
+        guard !isSavingEdits else { return }
+        isSavingEdits = true
         Task {
+            defer { isSavingEdits = false }
             let effectiveImageUrl = editPhoto.uploadedURL ?? draftImageUrl
             let effectiveAspectRatio = editPhoto.uploadedAspectRatio ?? draftImageAspectRatio
             let succeeded = await store.updatePost(

@@ -16,6 +16,7 @@ extension PostDetailView {
     var toolbarContent: some ToolbarContent {
         if editMode {
             EditModeToolbarItems(
+                canSave: !isSavingEdits,
                 saveTint: draftTone.color,
                 onCancel: cancelEditing,
                 onSave: saveEdits

@@ -192,14 +192,14 @@ final class AuthStore {
         try await service.revokeApple(authorizationCode: authorizationCode)
     }
 
-    func refreshLinkedMethods() async {
+    /// Throws on failure so a manual pull-to-refresh can tell the user it
+    /// didn't work — the current session/state is untouched either way
+    /// (there's nothing to roll back; this only ever advances `state` on
+    /// success).
+    func refreshLinkedMethods() async throws {
         guard isSignedIn else { return }
-        do {
-            if let session = try await service.refreshAuthSession() {
-                state = .signedIn(session)
-            }
-        } catch {
-            // Keep the current session if refresh fails.
+        if let session = try await service.refreshAuthSession() {
+            state = .signedIn(session)
         }
     }
 

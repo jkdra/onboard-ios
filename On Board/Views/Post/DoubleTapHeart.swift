@@ -92,6 +92,22 @@ private struct DoubleTapHeart: ViewModifier {
             )
             .onAppear { isPresentedOnScreen = true }
             .onDisappear { isPresentedOnScreen = false }
+            // VoiceOver's activation gesture (double-tap) doesn't route into a
+            // raw SpatialTapGesture/ExclusiveGesture like the one above, so
+            // without these, a screen-reader user has no way at all to like
+            // this post or open its image. Named actions (surfaced via the
+            // rotor / activation hint) close that gap without changing the
+            // view's normal accessibility reading order.
+            .accessibilityActions {
+                if isEnabled {
+                    Button(isLiked() ? "Unlike" : "Like") {
+                        if !isLiked() { onLike() }
+                    }
+                }
+                if isEnabled, let onSingleTap {
+                    Button("Open Photo") { onSingleTap() }
+                }
+            }
     }
 
     private func spawnBurst(at location: CGPoint) {

@@ -39,7 +39,10 @@ struct AccountSecuritySettingsView: View {
         .navigationTitle("Security")
         .navigationBarTitleDisplayMode(.inline)
         .task { await refreshMethods() }
-        .refreshable { await refreshMethods() }
+        // Pull-to-refresh is an explicit user gesture expecting a signal back —
+        // unlike the passive .task/post-link refreshes below, a silent failure
+        // here just looks like the pull did nothing.
+        .refreshable { await refreshMethods(alertOnFailure: true) }
         .sheet(isPresented: $showPasswordSheet) {
             SetPasswordView {
                 Task { await refreshMethods() }
@@ -359,10 +362,16 @@ struct AccountSecuritySettingsView: View {
         .opacity(0.55)
     }
 
-    private func refreshMethods() async {
+    private func refreshMethods(alertOnFailure: Bool = false) async {
         isRefreshing = true
         defer { isRefreshing = false }
-        await auth.refreshLinkedMethods()
+        do {
+            try await auth.refreshLinkedMethods()
+        } catch {
+            if alertOnFailure {
+                alertError = PresentableAlertError.from(error)
+            }
+        }
     }
 
     private func unlink(_ identity: LinkedIdentity) async {

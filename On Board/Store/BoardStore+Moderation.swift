@@ -69,9 +69,21 @@ extension BoardStore {
 
     /// Blocks a user: optimistically removes all their content from the
     /// session cache, then persists. Rolls back on failure.
+    ///
+    /// `ProfileView` and `PostDetailView` each gate their own block button
+    /// with a local `isUpdatingBlock` flag, but that doesn't stop the two
+    /// screens from calling this concurrently for the same user (e.g. block
+    /// from a post, then reach the same author's profile before the first
+    /// request resolves) — two independent snapshot/rollback pairs racing
+    /// would let a slower failure's rollback undo a faster success. Guarding
+    /// per-user here closes that gap; a second call while one's in flight is
+    /// a no-op rather than a second race.
     func block(userID: UUID) async throws {
         guard userID != currentUserID else { return }
         guard let boardService else { throw BoardServiceError.notConfigured }
+        guard !blockOperationsInFlight.contains(userID) else { return }
+        blockOperationsInFlight.insert(userID)
+        defer { blockOperationsInFlight.remove(userID) }
 
         // Snapshot for rollback.
         let priorBlocked = blockedUserIDs
@@ -96,9 +108,14 @@ extension BoardStore {
         }
     }
 
-    /// Unblocks a user. Their content reappears on the next refresh.
+    /// Unblocks a user. Their content reappears on the next refresh. Shares
+    /// `blockOperationsInFlight` with `block(userID:)` — see its doc comment.
     func unblock(userID: UUID) async throws {
         guard let boardService else { throw BoardServiceError.notConfigured }
+        guard !blockOperationsInFlight.contains(userID) else { return }
+        blockOperationsInFlight.insert(userID)
+        defer { blockOperationsInFlight.remove(userID) }
+
         let priorBlocked = blockedUserIDs
         blockedUserIDs.remove(userID)
         do {

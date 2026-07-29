@@ -31,6 +31,9 @@ struct ProfileView: View {
     @State private var editMode = false
     @State private var draft = ProfileDraft()
     @State private var alertError: PresentableAlertError?
+    // Guards Save against a double-tap firing two concurrent updateProfile
+    // calls for the same profile — the slower response would silently win.
+    @State private var isSavingProfile = false
 
     // Moderation (other users' profiles only)
     @State private var reportTarget: ReportTarget?
@@ -190,7 +193,7 @@ struct ProfileView: View {
     private var profileToolbar: some ToolbarContent {
         if editMode {
             EditModeToolbarItems(
-                canSave: draft.canSave,
+                canSave: draft.canSave && !isSavingProfile,
                 onCancel: cancelEditing,
                 onSave: saveProfile
             )
@@ -277,7 +280,10 @@ struct ProfileView: View {
     }
 
     private func saveProfile() {
+        guard !isSavingProfile else { return }
+        isSavingProfile = true
         Task {
+            defer { isSavingProfile = false }
             await store.updateProfile(
                 displayName: draft.displayName.trimmed,
                 handle: draft.handle.trimmed,

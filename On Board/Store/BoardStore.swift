@@ -103,6 +103,18 @@ final class BoardStore {
     // One in-flight notification-settings save. A rapid second toggle
     // supersedes the first so its rollback can't invert newer state.
     @ObservationIgnored var notificationSettingsSyncTask: Task<Void, Never>?
+    // Users currently mid-block/unblock. A second call for the same user
+    // (possible when two different screens both expose the action) is a
+    // no-op instead of racing its rollback against the first call's.
+    @ObservationIgnored var blockOperationsInFlight: Set<UUID> = []
+    // Same guard for comment-edit saves, keyed per comment.
+    @ObservationIgnored var commentEditSyncTasks: [UUID: Task<Void, Never>] = [:]
+    // Keyed per-post. Stamped whenever a local optimistic comment mutation
+    // (add/edit/delete/vote) touches that post's thread — `loadComments`
+    // checks this against its own fetch's start time so a revalidation that
+    // was already in flight can't wholesale-overwrite a change made while it
+    // was still running. See CLAUDE.md's "loadComments merge guard" note.
+    @ObservationIgnored var commentsLastLocallyMutatedAt: [UUID: Date] = [:]
 
     // MARK: - Archive LRU
 

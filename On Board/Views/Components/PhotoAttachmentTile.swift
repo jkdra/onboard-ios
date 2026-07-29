@@ -108,6 +108,7 @@ struct PhotoAttachmentTile: View {
         }
         .buttonStyle(.plain)
         .disabled(controller.isUploading)
+        .accessibilityLabel(controller.isUploading ? "Uploading photo" : "Photo attached, tap to change")
         .overlay(alignment: .topTrailing) {
             if !controller.isUploading {
                 Button {

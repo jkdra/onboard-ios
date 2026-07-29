@@ -19,12 +19,18 @@ struct ProfileEditContent: View {
 
     @State private var showHandleLockedAlert = false
 
+    // Constructing a RelativeDateTimeFormatter isn't free — cached once
+    // instead of rebuilt on every render of `handleUnlockText`.
+    private static let relativeDateTimeFormatter: RelativeDateTimeFormatter = {
+        let f = RelativeDateTimeFormatter()
+        f.unitsStyle = .full
+        return f
+    }()
+
     /// Friendly "in 6 days" for when the username may next be changed.
     private var handleUnlockText: String {
         guard let at = profile.handleChangeAvailableAt else { return "soon" }
-        let f = RelativeDateTimeFormatter()
-        f.unitsStyle = .full
-        return f.localizedString(for: at, relativeTo: .now)
+        return Self.relativeDateTimeFormatter.localizedString(for: at, relativeTo: .now)
     }
 
     var body: some View {
