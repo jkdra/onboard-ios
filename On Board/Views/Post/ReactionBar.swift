@@ -145,7 +145,7 @@ struct ReactionBar: View {
                         .fontStyle(.caption)
                 }
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(currentReaction != nil ? tone.legibleForeground : .primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 12)
             .contentShape(shape)
@@ -178,7 +178,7 @@ struct ReactionBar: View {
                     .contentTransition(.numericText(value: Double(count)))
                     .animation(.snappy(duration: 0.35), value: count)
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(isSelected ? tone.legibleForeground : .primary)
             .frame(maxWidth: .infinity)
             .padding(.vertical)
             .contentShape(shape)
