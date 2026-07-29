@@ -92,7 +92,15 @@ struct SetPasswordView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: { Label("Cancel", systemImage: "xmark").fontWeight(.semibold) }
+                    // See NewPostView's Cancel button for why the keyboard is
+                    // resigned before dismiss() — avoids racing the sheet's
+                    // own dismiss transition against the keyboard's hide
+                    // animation, which can leave a stale safe-area inset on
+                    // whatever screen is shown next.
+                    Button {
+                        KeyboardDismisser.dismiss()
+                        dismiss()
+                    } label: { Label("Cancel", systemImage: "xmark").fontWeight(.semibold) }
                         .disabled(isSaving)
                 }
             }
@@ -110,6 +118,7 @@ struct SetPasswordView: View {
         do {
             try await auth.setPassword(password)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
+            KeyboardDismisser.dismiss()
             dismiss()
             onSaved?()
         } catch {

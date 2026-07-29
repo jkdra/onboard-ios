@@ -147,7 +147,16 @@ struct NewPostView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
+                    // Resigning the keyboard before the sheet's own dismiss
+                    // transition starts keeps the two animations from racing —
+                    // otherwise the feed underneath can inherit a stale
+                    // keyboard-sized safe-area inset that pushes the next
+                    // screen's bottom-pinned content up until something else
+                    // forces a relayout.
+                    Button {
+                        KeyboardDismisser.dismiss()
+                        dismiss()
+                    } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
                 }
@@ -293,6 +302,7 @@ struct NewPostView: View {
             isSubmitting = false
             guard succeeded else { return }
             didSubmit = true
+            KeyboardDismisser.dismiss()
             dismiss()
         }
     }

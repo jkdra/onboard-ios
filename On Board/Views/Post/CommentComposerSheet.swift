@@ -63,7 +63,15 @@ struct CommentComposerSheet: View {
                         isPosting = true
                         await onPost()
                         isPosting = false
-                        if !composer.isComposing { dismiss() }
+                        if !composer.isComposing {
+                            // See NewPostView's Cancel button for why this
+                            // goes before dismiss() — otherwise the sheet's
+                            // dismiss transition can race the keyboard's own
+                            // hide animation and leave a stale safe-area
+                            // inset on whatever's shown next.
+                            KeyboardDismisser.dismiss()
+                            dismiss()
+                        }
                     }
                 } label: {
                     LoadingButtonLabel("Post", systemImage: "arrow.up", isLoading: isPosting)
@@ -83,6 +91,7 @@ struct CommentComposerSheet: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
+                        KeyboardDismisser.dismiss()
                         dismiss()
                     } label: {
                         Image(systemName: "chevron.down")
