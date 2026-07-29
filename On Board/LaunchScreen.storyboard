@@ -10,11 +10,18 @@
   Uses LaunchHost, a separate imageset carrying explicit light/dark appearance
   variants, rather than HostIdle itself. RootView flips the sprite with
   .colorInverted in dark mode, which a storyboard can't do. Templating and tinting
-  was the obvious shortcut and it does not work — the artwork relies on transparent
-  negative space for the face and the counter of the B, so a template flattens the
-  whole thing into a black silhouette. The variants are rendered from HostIdle.pdf
-  with the RGB forced to white over the original alpha, which is what .colorInvert()
-  produces for all-black art.
+  was the obvious shortcut and it does not work — a template flattens the whole
+  thing into a single silhouette color, losing the outline/eye detail. The light
+  variant (LaunchHost.png) is a genuine two-tone raster — opaque black outline+eye,
+  opaque white fill, transparent background — not a single-tone shape with
+  alpha-cutout face detail. The dark variant must be a true RGB invert of that
+  (black<->white swapped, alpha untouched) to preserve the same detail; forcing
+  every opaque pixel to a single color instead (which is what a naive "invert via
+  .colorInvert() semantics on all-black art" derivation produces) silently
+  collapses the outline and eye into the fill, leaving a detail-less blob that
+  still looks plausible at a glance. Shipped broken once (2026-07-29) for exactly
+  this reason — verify any regeneration against a true-black composite, not
+  Xcode's neutral-gray asset-catalog preview, which hides the missing detail.
 
   Keeping it a separate imageset also means none of this can leak into CountdownCard
   or HostSpeechBubble, which rely on HostIdle staying vector and "original".
