@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import TipKit
 
 struct ContentView: View {
 
@@ -17,6 +18,7 @@ struct ContentView: View {
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
 
     @State private var navigationPath: [BoardRoute] = []
+    @State private var archiveTip = ArchiveTip()
     @State private var showNewPost = false
     @State private var boardIsResetting = false
     @State private var pulseLowOpacity = false
@@ -368,6 +370,10 @@ struct ContentView: View {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Button {
+                        // Archive's own entry point — the tip's condition
+                        // goes false the moment this is set, so it won't
+                        // show again after this first visit.
+                        ArchiveTip.hasOpenedArchive = true
                         navigationPath.append(BoardRoute.archive)
                     } label: {
                         Label("Archive", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
@@ -391,6 +397,9 @@ struct ContentView: View {
                     Image(systemName: "ellipsis").fontWeight(.semibold)
                 }
                 .accessibilityLabel("More")
+                // "Archive" itself is invisible until this menu is open, so
+                // the tip has to point at the menu's own trigger instead.
+                .popoverTip(archiveTip)
             }
             // Mounted for as long as posting could ever be relevant (the whole
             // interactive week), not just while the in-feed card is off screen.
