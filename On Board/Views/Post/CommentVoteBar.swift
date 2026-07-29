@@ -61,5 +61,6 @@ struct CommentVoteBar: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(vote.label), \(count)")
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }

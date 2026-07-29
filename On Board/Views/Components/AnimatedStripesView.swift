@@ -113,13 +113,16 @@ struct AnimatedStripesView: View {
     // MARK: - Drawing
 
     private func drawStripes(context: GraphicsContext, size: CGSize, xOffset: Double) {
-        let diagonal = Double(hypot(size.width, size.height))
+        let diagonal = TiledCanvasGeometry.diagonal(for: size)
         let stripeCount = Int(diagonal / step) + 6
         let cx = Double(size.width) / 2
         let cy = Double(size.height) / 2
 
-        let transform = CGAffineTransform(rotationAngle: CGFloat(angle.radians))
-            .concatenating(CGAffineTransform(translationX: cx + xOffset, y: cy))
+        let transform = TiledCanvasGeometry.transform(
+            angle: angle,
+            center: CGPoint(x: cx, y: cy),
+            extraOffset: CGPoint(x: xOffset, y: 0)
+        )
 
         let originX = -diagonal / 2 - step
         for i in 0..<stripeCount {

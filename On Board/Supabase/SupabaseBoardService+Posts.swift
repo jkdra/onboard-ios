@@ -5,6 +5,9 @@
 
 import Foundation
 import Supabase
+import os
+
+private let logger = Logger(subsystem: "org.onboardapp.onboard", category: "SupabaseBoardService+Posts")
 
 extension SupabaseBoardService {
     /// One row of `fetch_tags_for_week` — `(post_id, tag_name)`.
@@ -101,20 +104,43 @@ extension SupabaseBoardService {
             .execute()
             .value
 
-        let enriched: RemotePostRow = try await client
-            .rpc("fetch_post_by_id", params: ["p_post_id": inserted.id])
-            .execute()
-            .value
-            
+        // The insert above already committed server-side — from here on, a
+        // transient failure must not throw the whole post away, since the
+        // caller (BoardStore+Posts.addPost) treats any throw as "post creation
+        // failed" and a user retry would create a genuine duplicate row.
+        // The enrich fetch is the one piece we can't proceed without, so it
+        // gets one retry; tag-attachment failure is tolerated (best-effort —
+        // losing tags on a blip is far cheaper than losing the whole post).
+        async let enrichedTask = fetchPostByIdWithRetry(id: inserted.id)
+        async let tagsAttached: Void = trySetTags(postID: inserted.id, tags: tags)
+
+        let enriched = try await enrichedTask
+        await tagsAttached
+
+        var post = enriched.toPost()
+        post.tags = tags
+        return post
+    }
+
+    private func fetchPostByIdWithRetry(id: UUID) async throws -> RemotePostRow {
+        do {
+            return try await client.rpc("fetch_post_by_id", params: ["p_post_id": id]).execute().value
+        } catch {
+            try? await Task.sleep(for: .milliseconds(400))
+            return try await client.rpc("fetch_post_by_id", params: ["p_post_id": id]).execute().value
+        }
+    }
+
+    private func trySetTags(postID: UUID, tags: [String]) async {
         struct SetTagsParams: Encodable {
             let p_post_id: UUID
             let p_tags: [String]
         }
-        try await client.rpc("set_post_tags", params: SetTagsParams(p_post_id: inserted.id, p_tags: tags)).execute()
-            
-        var post = enriched.toPost()
-        post.tags = tags
-        return post
+        do {
+            try await client.rpc("set_post_tags", params: SetTagsParams(p_post_id: postID, p_tags: tags)).execute()
+        } catch {
+            logger.error("set_post_tags failed for post \(postID, privacy: .public): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func updatePost(
@@ -126,47 +152,43 @@ extension SupabaseBoardService {
         imageAspectRatio: Double?,
         tags: [String]
     ) async throws -> Post {
-        try await mapAuthErrors {
-            struct Update: Encodable {
-                let title: String
-                let description: String
-                let tone: PostTone
-                let imageUrl: String?
-                let imageAspectRatio: Double?
-            }
-
-            try await client
-                .from("posts")
-                .update(Update(title: title, description: description, tone: tone,
-                               imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
-                .eq("id", value: id.uuidString)
-                .execute()
-
-            let enriched: RemotePostRow = try await client
-                .rpc("fetch_post_by_id", params: ["p_post_id": id])
-                .execute()
-                .value
-                
-            struct SetTagsParams: Encodable {
-                let p_post_id: UUID
-                let p_tags: [String]
-            }
-            try await client.rpc("set_post_tags", params: SetTagsParams(p_post_id: id, p_tags: tags)).execute()
-                
-            var post = enriched.toPost()
-            post.tags = tags
-            return post
+        struct Update: Encodable {
+            let title: String
+            let description: String
+            let tone: PostTone
+            let imageUrl: String?
+            let imageAspectRatio: Double?
         }
+
+        try await client
+            .from("posts")
+            .update(Update(title: title, description: description, tone: tone,
+                           imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
+            .eq("id", value: id.uuidString)
+            .execute()
+
+        // The update above already committed — same reasoning as
+        // createPost: don't throw the whole save away over a transient
+        // blip in the enrich/tag steps (unlike an insert, retrying an
+        // identical update isn't destructive, but it's still wasted round
+        // trips and a confusing "failed to save" for a save that landed).
+        async let enrichedTask = fetchPostByIdWithRetry(id: id)
+        async let tagsAttached: Void = trySetTags(postID: id, tags: tags)
+
+        let enriched = try await enrichedTask
+        await tagsAttached
+
+        var post = enriched.toPost()
+        post.tags = tags
+        return post
     }
 
     func deletePost(id: UUID) async throws {
-        try await mapAuthErrors {
-            try await client
-                .from("posts")
-                .delete()
-                .eq("id", value: id.uuidString)
-                .execute()
-        }
+        try await client
+            .from("posts")
+            .delete()
+            .eq("id", value: id.uuidString)
+            .execute()
     }
     
     func searchTags(query: String, boardID: UUID) async throws -> [Tag] {

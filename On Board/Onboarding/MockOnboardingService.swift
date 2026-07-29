@@ -222,6 +222,13 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         save(status, for: userID)
     }
 
+    func acceptPledge() async throws {
+        try await Task.sleep(for: .milliseconds(150))
+        guard MockOnboardingService.currentUserID(from: defaults) != nil else {
+            throw OnboardingError.notAuthenticated
+        }
+    }
+
     /// Dev-only lever for the waitlist screen's "Join Board [DEV]" button:
     /// admits the current mock user on the spot, mirroring what an admin
     /// approval does to the live status. Exercises the first-time welcome flow

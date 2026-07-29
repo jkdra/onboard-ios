@@ -24,17 +24,15 @@ struct NewPostView: View {
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
+    /// True whenever posting is closed — the final hour *and* the expired window
+    /// between the deadline and the new week landing. Named for the common case; see
+    /// `updateClearingState`.
     @State private var isWithinFinalHour = false
     @State private var finalHourBannerText: String?
     @State private var pulseLowOpacity = false
 
     // Image attachment
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var selectedPhotoData: Data?
-    @State private var uploadedImageUrl: String?
-    @State private var uploadedAspectRatio: Double?
-    @State private var isUploadingImage = false
-    @State private var uncroppedPostImage: UIImage?
+    @State private var photo = PhotoAttachmentController(type: .postPhoto)
     @State private var isSubmitting = false
     @State private var showingTagSelection = false
 
@@ -43,7 +41,7 @@ struct NewPostView: View {
 
     private var canSubmit: Bool {
         !title.trimmed.isEmpty && !content.trimmed.isEmpty
-            && !isUploadingImage && !isSubmitting && !isWithinFinalHour
+            && !photo.isUploading && !isSubmitting && !isWithinFinalHour
     }
 
     private var previewTone: PostTone? { selectedTone }
@@ -149,7 +147,16 @@ struct NewPostView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button { dismiss() } label: {
+                    // Resigning the keyboard before the sheet's own dismiss
+                    // transition starts keeps the two animations from racing —
+                    // otherwise the feed underneath can inherit a stale
+                    // keyboard-sized safe-area inset that pushes the next
+                    // screen's bottom-pinned content up until something else
+                    // forces a relayout.
+                    Button {
+                        KeyboardDismisser.dismiss()
+                        dismiss()
+                    } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
                 }
@@ -176,30 +183,47 @@ struct NewPostView: View {
                 updateClearingState()
             }
             .task {
+                // 15s, not 60s: at 60s the composer could sit enabled for most of a
+                // minute past the cutoff. The store-side guard in `addPost` still
+                // rejects a late submit, but failing an attempt is worse than never
+                // offering it.
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(60))
+                    try? await Task.sleep(for: .seconds(15))
                     updateClearingState()
                 }
+            }
+            // The sheet deliberately survives the weekly reset — a typed draft is the
+            // user's work, and silently discarding it to play an animation they can't
+            // even see behind the sheet would be the worse trade. Recompute the instant
+            // the week actually turns over so the composer reopens against the new board.
+            .onChange(of: store.activeBoardWeek?.id) { _, _ in
+                updateClearingState()
             }
             .animation(.smooth(duration: 0.3), value: isWithinFinalHour)
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
-            .onChange(of: selectedPhotoItem) { _, item in
-                Task { await loadPickedPhoto(item) }
+            .presentableErrorAlert(error: $photo.alertError)
+            .onChange(of: photo.selectedPhotoItem) { _, item in
+                Task { await photo.loadPickedPhoto(item) }
             }
             .sheet(isPresented: $showingTagSelection) {
                 TagSelectionView(selectedTags: $tags)
             }
-            .fullScreenCover(item: Binding<UIImage?>(
-                get: { uncroppedPostImage },
-                set: { uncroppedPostImage = $0 }
-            )) { image in
+            .fullScreenCover(item: $photo.uncroppedImage) { image in
                 PostImageCropView(image: image) { cropped in
-                    uncroppedPostImage = nil
-                    Task { await uploadCroppedImage(cropped) }
+                    photo.uncroppedImage = nil
+                    guard let userID = store.currentUserID else { return }
+                    Task {
+                        await photo.uploadCropped(
+                            cropped,
+                            userID: userID,
+                            revertPreviewOnFailure: false,
+                            alertOnFailure: false
+                        )
+                    }
                 } onCancel: {
-                    uncroppedPostImage = nil
-                    selectedPhotoItem = nil
+                    photo.uncroppedImage = nil
+                    photo.selectedPhotoItem = nil
                 }
             }
         }
@@ -239,94 +263,24 @@ struct NewPostView: View {
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                let hasImage = selectedPhotoData != nil
-                PhotoSourceButton(selection: $selectedPhotoItem, onCapture: { uncroppedPostImage = $0 }) {
-                    Label(
-                        hasImage ? "Change Image" : "Add Image",
-                        systemImage: "photo.badge.plus"
-                    )
-                }
-                .buttonStyle(.boardSecondary)
-                .disabled(isUploadingImage)
+            PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
 
-                if isUploadingImage {
-                    ProgressView()
-                } else if selectedPhotoData != nil {
-                    Button(role: .destructive) {
-                        removeImage()
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel("Remove image")
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            if let data = selectedPhotoData, let uiImage = PhotoPreviewCache.image(for: data) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxHeight: 220)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(Color.secondary.opacity(0.2), lineWidth: 1)
-                    )
-                    .transition(.scale(scale: 0.95).combined(with: .opacity))
-
-                if uploadedImageUrl == nil && !isUploadingImage {
-                    Label("Image couldn't be uploaded — post will be text-only.", systemImage: "exclamationmark.triangle")
-                        .fontStyle(.caption)
-                        .foregroundStyle(.secondary)
-                }
+            if photo.uploadFailed {
+                Label("Image couldn't be uploaded — post will be text-only.", systemImage: "exclamationmark.triangle")
+                    .fontStyle(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
-        .animation(.smooth(duration: 0.25), value: selectedPhotoData != nil)
-    }
-
-    // MARK: - Upload
-
-    @MainActor
-    private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        guard let rawData = try? await item.loadTransferable(type: Data.self),
-              let uiImage = UIImage(data: rawData) else { return }
-        uncroppedPostImage = uiImage
-    }
-
-    private func uploadCroppedImage(_ image: UIImage) async {
-        // Optimistic preview of the cropped result while it uploads.
-        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
-
-        guard let userID = store.currentUserID else { return }
-
-        isUploadingImage = true
-        defer { isUploadingImage = false }
-
-        if let result = await ImageUploader.upload(input: .uiImage(image), type: .postPhoto, userID: userID) {
-            uploadedImageUrl = result.url
-            uploadedAspectRatio = result.aspectRatio
-        } else {
-            // Upload failed — post goes text-only; preview stays so user sees their image.
-            uploadedImageUrl = nil
-            uploadedAspectRatio = nil
-        }
-    }
-
-    private func removeImage() {
-        selectedPhotoItem = nil
-        selectedPhotoData = nil
-        uploadedImageUrl = nil
-        uploadedAspectRatio = nil
     }
 
     // MARK: - Clearing state
 
     private func updateClearingState() {
         let weekEnd = store.activeBoardWeek?.endsAt
-        isWithinFinalHour = BoardSchedule.isWithinFinalHour(weekEnd: weekEnd)
+        // `allowsPosting` rather than `isWithinFinalHour` so an expired week keeps the
+        // composer locked. It also *reopens* the composer the moment a new week lands,
+        // which is what lets a draft ride through the rollover and post to the new board.
+        isWithinFinalHour = !BoardSchedule.phase(weekEnd: weekEnd).allowsPosting
         finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd)
     }
 
@@ -341,13 +295,14 @@ struct NewPostView: View {
                 title: title.trimmed,
                 description: content.trimmed,
                 tone: resolvedTone,
-                imageUrl: uploadedImageUrl,
-                imageAspectRatio: uploadedAspectRatio,
+                imageUrl: photo.uploadedURL,
+                imageAspectRatio: photo.uploadedAspectRatio,
                 tags: tags
             )
             isSubmitting = false
             guard succeeded else { return }
             didSubmit = true
+            KeyboardDismisser.dismiss()
             dismiss()
         }
     }

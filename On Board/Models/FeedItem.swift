@@ -14,7 +14,10 @@ import Foundation
 enum FeedItem: Identifiable, Equatable {
     case post(id: Post.ID, tone: PostTone)
     case countdown(week: BoardWeek?, isArchived: Bool)
-    case newPost
+    /// The compose card. `isEnabled` is false once posting closes (final hour and the
+    /// expired window) — the card stays in place (so the masonry doesn't reflow) but
+    /// renders a disabled "clears soon" state instead of disappearing.
+    case newPost(isEnabled: Bool, weekID: UUID)
 
     var id: String {
         switch self {
@@ -22,7 +25,12 @@ enum FeedItem: Identifiable, Equatable {
             "\(postID.uuidString)-\(tone.rawValue)"
         case .countdown(let week, _):
             if let week { "__countdown-\(week.id.uuidString)" } else { "__countdown" }
-        case .newPost: "__newPost"
+        // Stable across the enabled→disabled flip so SwiftUI keeps view identity
+        // (an in-place update, not a remove/insert that would reshuffle the grid) —
+        // but scoped to the week, so the rollover remounts it. With a fully fixed id
+        // the card was the one cell that *survived* the weekly reset, visibly
+        // reversing its take-down animation while everything around it entered fresh.
+        case .newPost(_, let weekID): "__newPost-\(weekID.uuidString)"
         }
     }
 

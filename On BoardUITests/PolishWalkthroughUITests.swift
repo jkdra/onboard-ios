@@ -443,3 +443,222 @@ final class PolishWalkthroughUITests: XCTestCase {
     }
 
 }
+
+// MARK: - Board clearing walkthrough
+
+/// Drives the weekly-reset scenarios so the clears-soon UI and the take-down can be
+/// reviewed on video. Separate class from `PolishWalkthroughUITests` on purpose — that
+/// one is listed in the scheme's `<SkippedTests>` by class identifier, this one isn't.
+final class BoardClearingWalkthroughUITests: XCTestCase {
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    /// `clearAfter` arms the delayed dev countdown, for scenarios where the More menu
+    /// is unreachable because a sheet is covering it.
+    @MainActor
+    private func launchAsMaya(clearAfter: Int? = nil) -> XCUIApplication {
+        let session = #"{"userId":"A0000000-0000-4000-8000-000000000001","primaryProvider":"email","email":"student@example.edu","phone":null,"hasEmailIdentity":true,"hasPhoneIdentity":false,"hasPassword":false,"linkedIdentities":[{"id":"mock-email","provider":"email","email":"student@example.edu"}]}"#
+        let hex = Data(session.utf8).map { String(format: "%02x", $0) }.joined()
+        let app = XCUIApplication()
+        app.launchArguments = [
+            "-mock.auth.session", "<\(hex)>",
+            "-dev.hideDevBlock",
+            "-dev.skipPushPrompt",
+        ]
+        if let clearAfter {
+            app.launchArguments += ["-dev.clearAfter", "\(clearAfter)"]
+        }
+        app.launch()
+        sleep(2)
+        return app
+    }
+
+    @MainActor
+    private func tapMoreMenu(_ app: XCUIApplication) {
+        let bar = app.navigationBars.firstMatch
+        for candidate in [bar.buttons["More"], bar.buttons["ellipsis"]] where candidate.exists {
+            candidate.tap()
+            return
+        }
+        let buttons = bar.buttons
+        if buttons.count > 0 {
+            buttons.element(boundBy: buttons.count - 1).tap()
+        }
+    }
+
+    /// Fires the dev hook that shrinks the active week to ~10s from now.
+    @MainActor
+    private func startTenSecondCountdown(_ app: XCUIApplication) {
+        tapMoreMenu(app)
+        let clear = app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "Clear board in 10s"))
+            .firstMatch
+        XCTAssertTrue(clear.waitForExistence(timeout: 6), "dev 'Clear board in 10s' menu item")
+        clear.tap()
+
+        // Prove the hook landed. Without this the walkthrough happily "passes" against
+        // an untouched 6-day countdown — which is exactly how the first run wasted a
+        // full video: the springboard push alert had swallowed the menu taps.
+        let clearsSoon = app.staticTexts["CLEARS SOON!"]
+        XCTAssertTrue(
+            clearsSoon.waitForExistence(timeout: 5),
+            "countdown card should switch to its red 'CLEARS SOON!' caption"
+        )
+    }
+
+    /// TEMPORARY — capturing the feed's first-load entrance (fade+grow) animation to
+    /// verify the `.topLeading` anchor fix on `BoardFeedView.masonryCell`'s
+    /// `scaleEffect` removes the perceived title-text shift, particularly on the
+    /// "brat by charli xcx..." sample post (2-line, heavy-weight title). Video
+    /// recording must start before this test process launches the app, since that's
+    /// when the reveal animation fires.
+    @MainActor
+    func testGridCardEntranceAnimationCapture() throws {
+        _ = launchAsMaya()
+        sleep(2)
+    }
+
+    /// A) Sitting on the feed as the board clears. Scrolls mid-window so the
+    /// countdown moves into the nav principal, then rides through the take-down.
+    @MainActor
+    func testClearA_FeedDuringReset() throws {
+        let app = launchAsMaya()
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+                .firstMatch.waitForExistence(timeout: 15),
+            "feed loaded"
+        )
+        sleep(2)
+        startTenSecondCountdown(app)
+        sleep(2)                 // clears-soon: red pulse + disabled compose card
+        app.swipeUp(velocity: .slow)
+        sleep(3)                 // countdown card off screen -> principal countdown
+        sleep(10)                // ride through the reset
+        sleep(6)                 // aftermath: what does the board look like now?
+    }
+
+    /// B) Reading a post as the board clears — the auto-dismiss path.
+    @MainActor
+    func testClearB_PostOpenDuringReset() throws {
+        let app = launchAsMaya()
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+                .firstMatch.waitForExistence(timeout: 15),
+            "feed loaded"
+        )
+        startTenSecondCountdown(app)
+        sleep(1)
+        let card = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+            .firstMatch
+        card.tap()
+        sleep(14)                // principal countdown, then the auto-dismiss
+        sleep(6)                 // where does the user land?
+    }
+
+    /// C) Navigated into Settings as the board clears — does the reset evict the user?
+    @MainActor
+    func testClearC_SettingsOpenDuringReset() throws {
+        let app = launchAsMaya()
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+                .firstMatch.waitForExistence(timeout: 15),
+            "feed loaded"
+        )
+        startTenSecondCountdown(app)
+        sleep(1)
+        tapMoreMenu(app)
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 5), "Settings menu item")
+        settings.tap()
+        sleep(14)                // does the reset pop Settings out from under the user?
+
+        // Back out by hand. If the countdown card is frozen at 00s the reset DID fire
+        // while Settings covered the feed; if the week is intact it never ran at all.
+        let back = app.navigationBars.buttons.firstMatch
+        if back.exists { back.tap() }
+        sleep(8)
+    }
+
+    /// D) Composing a post with a typed draft when the board clears. Previously
+    /// unreachable — the menu-driven dev hook closes posting instantly, so the composer
+    /// couldn't be opened. `-dev.clearAfter` arms the countdown on a delay instead.
+    @MainActor
+    func testClearD_ComposerOpenDuringReset() throws {
+        let app = launchAsMaya(clearAfter: 18)
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+                .firstMatch.waitForExistence(timeout: 15),
+            "feed loaded"
+        )
+
+        let compose = app.buttons["New post"].firstMatch
+        XCTAssertTrue(compose.waitForExistence(timeout: 6), "compose card")
+        compose.tap()
+
+        let titleField = app.textFields.firstMatch
+        XCTAssertTrue(titleField.waitForExistence(timeout: 6), "composer title field")
+        titleField.tap()
+        titleField.typeText("draft that must survive the wipe")
+
+        // Countdown fires at ~18s, reset ~5s later — both while this sheet is up.
+        sleep(20)
+
+        // The draft must still be here afterwards.
+        let draft = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "must survive"))
+            .firstMatch
+        let draftField = app.textFields
+            .matching(NSPredicate(format: "value CONTAINS[c] %@", "must survive"))
+            .firstMatch
+        XCTAssertTrue(
+            draft.exists || draftField.exists,
+            "typed draft must survive the weekly reset instead of being silently discarded"
+        )
+        sleep(8)
+    }
+
+    /// TEMPORARY — investigating a user-reported "almost imperceptible" scroll glitch,
+    /// suspected to involve the bottom-bar new-post button. Does a single continuous
+    /// touch (press, hold, THEN drag without lifting — not a flick) across the new-post
+    /// card's visibility boundary, since `showsBottomBarNewPost` in ContentView.swift
+    /// conditionally mounts a ToolbarItem(placement: .bottomBar) exactly the way the
+    /// nav-principal ToolbarItem used to (already fixed elsewhere for that defect).
+    @MainActor
+    func testScrollHoldDragNewPostBoundary() throws {
+        let app = launchAsMaya(clearAfter: nil)
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "brat"))
+                .firstMatch.waitForExistence(timeout: 15),
+            "feed loaded"
+        )
+        sleep(1)
+
+        // Kept well clear of the bottom edge — a first attempt starting at dy:0.8
+        // turned out to graze the system's swipe-up-and-hold-to-home gesture zone
+        // (confirmed via video: the app visibly backgrounded to SpringBoard), which
+        // produced a dramatic full-screen fade that was a test-harness artifact, not
+        // an app bug. dy:0.55→0.25 stays solidly mid-screen, well inside app content.
+        let scrollView = app.scrollViews.firstMatch
+        let start = scrollView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.55))
+        let end = scrollView.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+
+        // Single continuous touch: press, hold, THEN drag — never lifts in between.
+        // This is deliberately NOT a flick/swipe (a separate, momentary gesture); it's
+        // the "tap-and-hold-scroll" the user described. Repeated a few times (each its
+        // own press-hold-drag, not one mega-drag) to accumulate enough scroll distance
+        // to cross the new-post card's visibility boundary at least once each way.
+        for _ in 0..<3 {
+            start.press(forDuration: 0.6, thenDragTo: end)
+            usleep(400_000)
+        }
+        sleep(1)
+        for _ in 0..<3 {
+            end.press(forDuration: 0.6, thenDragTo: start)
+            usleep(400_000)
+        }
+        sleep(2)
+    }
+}

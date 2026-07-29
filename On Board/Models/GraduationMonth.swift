@@ -41,10 +41,6 @@ enum GraduationMonth {
     }
 
     private static func date(from raw: String?) -> Date? {
-        guard let raw else { return nil }
-        let f = DateFormatter()
-        f.locale = posix
-        f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: raw)
+        WireDateParser.date(from: raw)
     }
 }

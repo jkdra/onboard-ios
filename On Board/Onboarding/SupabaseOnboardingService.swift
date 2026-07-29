@@ -201,6 +201,13 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
             .execute()
     }
 
+    func acceptPledge() async throws {
+        let client = try requireClient()
+        try await client
+            .rpc("accept_pledge")
+            .execute()
+    }
+
     private func requireClient() throws -> SupabaseClient {
         guard let client else { throw OnboardingError.notConfigured }
         return client

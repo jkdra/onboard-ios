@@ -96,11 +96,25 @@ final class BoardStore {
     // One in-flight reaction sync per post. A new tap cancels the prior request
     // so its (now stale) rollback can't fire against already-moved state.
     @ObservationIgnored var reactionSyncTasks: [UUID: Task<Void, Never>] = [:]
+    // Same guard for follow/unfollow, keyed per followed user.
+    @ObservationIgnored var followSyncTasks: [UUID: Task<Void, Never>] = [:]
     // Same guard for comment up/down votes, keyed per comment.
     @ObservationIgnored var commentVoteSyncTasks: [UUID: Task<Void, Never>] = [:]
     // One in-flight notification-settings save. A rapid second toggle
     // supersedes the first so its rollback can't invert newer state.
     @ObservationIgnored var notificationSettingsSyncTask: Task<Void, Never>?
+    // Users currently mid-block/unblock. A second call for the same user
+    // (possible when two different screens both expose the action) is a
+    // no-op instead of racing its rollback against the first call's.
+    @ObservationIgnored var blockOperationsInFlight: Set<UUID> = []
+    // Same guard for comment-edit saves, keyed per comment.
+    @ObservationIgnored var commentEditSyncTasks: [UUID: Task<Void, Never>] = [:]
+    // Keyed per-post. Stamped whenever a local optimistic comment mutation
+    // (add/edit/delete/vote) touches that post's thread — `loadComments`
+    // checks this against its own fetch's start time so a revalidation that
+    // was already in flight can't wholesale-overwrite a change made while it
+    // was still running. See CLAUDE.md's "loadComments merge guard" note.
+    @ObservationIgnored var commentsLastLocallyMutatedAt: [UUID: Date] = [:]
 
     // MARK: - Archive LRU
 
@@ -114,7 +128,8 @@ final class BoardStore {
 
     fileprivate struct FeedItemsCacheKey: Equatable {
         let postSignatures: [String]
-        let canInteract: Bool
+        let showsNewPost: Bool
+        let newPostEnabled: Bool
     }
 
     /// True when a Supabase client is configured for this session.
@@ -196,6 +211,97 @@ final class BoardStore {
         rebuildCaches()
     }
 
+    /// DEV/mock-only: shrink the active week so the clears-soon UI (red countdown,
+    /// disabled new-post card, principal countdown) engages now and the weekly reset
+    /// fires in `seconds`. Rebuilds the week with a near-future `endsAt`; ContentView's
+    /// `.task(id: endsAt)` restarts on the change and drives the reset. No-op when live.
+    func devSetCountdown(seconds: TimeInterval) {
+        guard !isLive, let week = activeBoardWeek else { return }
+        let shortened = BoardWeek(
+            id: week.id,
+            boardId: week.boardId,
+            startsAt: week.startsAt,
+            endsAt: Date.now.addingTimeInterval(seconds),
+            status: week.status,
+            archivedAt: week.archivedAt,
+            promptClean: week.promptClean,
+            promptProfane: week.promptProfane,
+            postCount: week.postCount
+        )
+        activeBoardWeek = shortened
+        boardWeeks = boardWeeks.map { $0.id == shortened.id ? shortened : $0 }
+    }
+
+    /// Prompts the mock rollover cycles through, so each new week reads as a genuinely
+    /// different board rather than the same one redrawn.
+    private static let devRolloverPrompts: [(clean: String, profane: String)] = [
+        ("What's a class you'd take again just for the professor?",
+         "What class would you retake just for the damn professor?"),
+        ("What's the best thing you've eaten on campus this week?",
+         "What's the best shit you've eaten on campus this week?"),
+        ("What's something you changed your mind about this year?",
+         "What's something you were dead wrong about this year?"),
+        ("What's the strangest thing in your backpack right now?",
+         "What's the weirdest crap in your backpack right now?"),
+    ]
+
+    /// DEV/mock-only stand-in for the server-side weekly rollover.
+    ///
+    /// Mock builds have no `BoardService`, so `refresh(for:)` returns immediately and
+    /// the reset animation used to land on the *exact same posts* — the take-down, the
+    /// arrival, and every downstream "did the board actually change" behaviour were
+    /// untestable offline. This performs the turnover in memory the way the backend
+    /// does it: archive the outgoing week (its posts become read-only records reachable
+    /// from the Archive), then open a fresh empty week with a new prompt.
+    ///
+    /// Returns false when there's nothing to roll over, so callers can fall through to
+    /// the live refresh path instead of assuming a rollover happened.
+    @discardableResult
+    func devRollOverWeek() -> Bool {
+        guard !isLive, let outgoing = activeBoardWeek else { return false }
+
+        // The outgoing week ended when its clock ran out; a rollover triggered early by
+        // the dev hook must not stamp an archivedAt in the future.
+        let boundary = min(outgoing.endsAt, .now)
+        let archived = BoardWeek(
+            id: outgoing.id,
+            boardId: outgoing.boardId,
+            startsAt: outgoing.startsAt,
+            endsAt: boundary,
+            status: .archived,
+            archivedAt: boundary,
+            promptClean: outgoing.promptClean,
+            promptProfane: outgoing.promptProfane,
+            postCount: posts(for: outgoing).count
+        )
+
+        // Rotate deterministically off the number of weeks already on the board, so a
+        // second rollover in one session doesn't repeat the prompt.
+        let prompt = Self.devRolloverPrompts[boardWeeks.count % Self.devRolloverPrompts.count]
+        let incoming = BoardWeek(
+            id: UUID(),
+            boardId: outgoing.boardId,
+            startsAt: boundary,
+            endsAt: boundary.addingTimeInterval(86_400 * 7),
+            status: .active,
+            promptClean: prompt.clean,
+            promptProfane: prompt.profane,
+            postCount: 0
+        )
+
+        // Everything from the outgoing week becomes a read-only record. The new week
+        // starts genuinely empty — that empty state is the thing worth seeing.
+        posts = posts.map { post in
+            post.boardWeekId == outgoing.id
+                ? post.assigning(boardWeekId: outgoing.id, isReadOnly: true)
+                : post
+        }
+        boardWeeks = boardWeeks.map { $0.id == archived.id ? archived : $0 } + [incoming]
+        activeBoardWeek = incoming
+        rebuildCaches()
+        return true
+    }
+
     func resetForSignOut() {
         posts = []
         profiles = []
@@ -243,14 +349,23 @@ final class BoardStore {
 
     func feedItems(for week: BoardWeek) -> [FeedItem] {
         let weekPosts = posts(for: week)
-        // Posting closes for the final hour before the board clears, so nobody can be
-        // mid-compose when the weekly reset wipes the week. ContentView's 60s tick
-        // re-reads feedItems, so the new-post entry disappears within a minute of the cutoff.
-        let canPost = canInteract(with: week)
-            && !BoardSchedule.isWithinFinalHour(weekEnd: week.endsAt)
+        // The compose card shows on any interactive (active, current-board) week.
+        // Once posting closes it stays put but renders disabled, so nobody is
+        // mid-compose when the weekly wipe lands — and the masonry doesn't reflow the
+        // way it would if the card vanished. Archived/read-only weeks show no card at
+        // all. ContentView's 60s tick re-reads feedItems, so the enabled→disabled flip
+        // happens within a minute of the cutoff.
+        //
+        // `allowsPosting` (not `!isWithinFinalHour`) because it also covers expiry —
+        // otherwise the card flipped back to its tappable "+" the instant the clock hit
+        // zero, inviting a post into a week that had already ended.
+        let showsNewPost = canInteract(with: week)
+        let newPostEnabled = showsNewPost
+            && BoardSchedule.phase(weekEnd: week.endsAt).allowsPosting
         let cacheKey = FeedItemsCacheKey(
             postSignatures: weekPosts.map { "\($0.id.uuidString)-\($0.tone.rawValue)" },
-            canInteract: canPost
+            showsNewPost: showsNewPost,
+            newPostEnabled: newPostEnabled
         )
 
         if feedItemsCacheKeys[week.id] == cacheKey,
@@ -259,8 +374,8 @@ final class BoardStore {
         }
 
         var items: [FeedItem] = [.countdown(week: week, isArchived: week.isReadOnly)]
-        if canPost {
-            items.append(.newPost)
+        if showsNewPost {
+            items.append(.newPost(isEnabled: newPostEnabled, weekID: week.id))
         }
         items += weekPosts.map { .post(id: $0.id, tone: $0.tone) }
 
@@ -293,10 +408,23 @@ final class BoardStore {
     }
 
     func upsertProfile(_ profile: Profile) {
-        if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
-            profiles[index] = profile
-        } else {
-            profiles.append(profile)
+        upsertProfiles([profile])
+    }
+
+    /// Batch form of `upsertProfile` — updates every profile in `profiles`
+    /// first, then calls `rebuildCaches()` once. `rebuildCaches()` rebuilds
+    /// the profile index *and* every post proxy, so upserting N profiles one
+    /// at a time (as `loadMissingPostAuthorProfiles`/
+    /// `loadMissingCommentAuthorProfiles` used to) paid for N full rebuilds
+    /// of the entire posts index for what's really one batch of new authors.
+    func upsertProfiles(_ newProfiles: [Profile]) {
+        guard !newProfiles.isEmpty else { return }
+        for profile in newProfiles {
+            if let index = profiles.firstIndex(where: { $0.id == profile.id }) {
+                profiles[index] = profile
+            } else {
+                profiles.append(profile)
+            }
         }
         rebuildCaches()
     }

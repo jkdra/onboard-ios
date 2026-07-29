@@ -300,6 +300,19 @@ final class OnboardingStore {
         await refresh(force: true)
     }
 
+    /// Records the pledge signature server-side. Doesn't gate any onboarding
+    /// step (unlike the other `performSubmit` actions) — `WelcomeOnBoardView`
+    /// dismisses immediately regardless of this call's outcome, since the
+    /// signature itself is a local moment of intent; this just makes that
+    /// fact durable against an app kill between admission and signing.
+    @discardableResult
+    func acceptPledge() async -> Bool {
+        await performSubmit {
+            try await service.acceptPledge()
+            return true
+        }
+    }
+
     @discardableResult
     func joinWaitlist() async -> Bool {
         await performSubmit {

@@ -25,6 +25,10 @@ extension BoardStore {
 
         guard let boardService, let currentUserID else { return }
 
+        // Which week this reaction belongs to, so a failure caused by the weekly
+        // rollover landing mid-flight can be told apart from a real error.
+        let weekIDAtSend = activeBoardWeek?.id
+
         // Supersede any in-flight sync for this post: a rapid second tap must not
         // let the first request's rollback invert state that has already moved on.
         reactionSyncTasks[postId]?.cancel()
@@ -48,6 +52,10 @@ extension BoardStore {
                     previous: reaction,
                     reaction: previous
                 )
+                // A reaction sent seconds before the deadline resolves server-side
+                // after the week is archived and always fails. Rolling back is right;
+                // alerting about it on a feed mid-take-down is not.
+                guard !isWeeklyBoundaryFailure(weekIDAtSend: weekIDAtSend) else { return }
                 loadError = Self.mapLoadError(error)
             }
         }

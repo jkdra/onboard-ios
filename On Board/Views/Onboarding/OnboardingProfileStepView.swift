@@ -13,12 +13,11 @@ struct OnboardingProfileStepView: View {
     @State private var displayName = ""
     @State private var bio = ""
     @AppStorage(PendingReferralCode.key) private var referralCode = ""
+    /// The current avatar URL — pre-populated from status on appear, replaced
+    /// once `photo.uploadedURL` resolves. Same relationship as
+    /// PostDetailView's `draftImageUrl`/`editPhoto`.
     @State private var avatarUrl: String?
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @State private var selectedPhotoData: Data?
-    @State private var isUploadingPhoto = false
-    @State private var uncroppedImage: UIImage?
-    @State private var photoUploadFailed = false
+    @State private var photo = PhotoAttachmentController(type: .profilePicture)
     @FocusState private var focus: Field?
 
     private enum Field { case displayName, bio }
@@ -105,11 +104,11 @@ struct OnboardingProfileStepView: View {
                     HStack(spacing: 14) {
                         // Capture @MainActor state before the @Sendable PhotosPicker label closure.
                         // SwiftUI re-evaluates body on every state change, so captures stay fresh.
-                        let photoData = selectedPhotoData
-                        let uploading = isUploadingPhoto
+                        let photoData = photo.selectedPhotoData
+                        let uploading = photo.isUploading
                         let hasPhoto = photoData != nil && avatarUrl != nil
                         let uiImage = photoData.flatMap { PhotoPreviewCache.image(for: $0) }
-                        PhotoSourceButton(selection: $selectedPhotoItem, onCapture: { uncroppedImage = $0 }) {
+                        PhotoSourceButton(selection: $photo.selectedPhotoItem, onCapture: { photo.uncroppedImage = $0 }) {
                             ZStack(alignment: .bottomTrailing) {
                                 ZStack {
                                     Circle()
@@ -159,7 +158,7 @@ struct OnboardingProfileStepView: View {
                                 Text("Uploading…")
                                     .fontStyle(.subheadline)
                                     .foregroundStyle(.secondary)
-                            } else if photoUploadFailed {
+                            } else if photo.uploadFailed {
                                 Label("Upload failed — try a different photo", systemImage: "exclamationmark.triangle.fill")
                                     .fontStyle(.footnote)
                                     .foregroundStyle(.orange)
@@ -168,12 +167,10 @@ struct OnboardingProfileStepView: View {
                                     .fontStyle(.subheadline)
                                     .foregroundStyle(hasPhoto ? .primary : .secondary)
                             }
-                            if selectedPhotoData != nil {
+                            if photo.selectedPhotoData != nil {
                                 Button("Remove") {
-                                    selectedPhotoData = nil
-                                    selectedPhotoItem = nil
+                                    photo.removeImage()
                                     avatarUrl = nil
-                                    photoUploadFailed = false
                                 }
                                 .fontStyle(.footnote)
                                 .foregroundStyle(.secondary)
@@ -220,50 +217,29 @@ struct OnboardingProfileStepView: View {
             // a code was already captured (installed-app universal link).
             await PendingReferralCode.hydrateFromPasteboardIfNeeded()
         }
-        .fullScreenCover(item: Binding<UIImage?>(
-            get: { uncroppedImage },
-            set: { uncroppedImage = $0 }
-        )) { image in
+        .presentableErrorAlert(error: $photo.alertError)
+        .fullScreenCover(item: $photo.uncroppedImage) { image in
             ProfileImageCropView(image: image) { cropped in
-                uncroppedImage = nil
-                Task { await uploadCroppedPhoto(cropped) }
+                photo.uncroppedImage = nil
+                guard let userID = onboarding.status?.id else { return }
+                Task {
+                    await photo.uploadCropped(
+                        cropped,
+                        userID: userID,
+                        revertPreviewOnFailure: true,
+                        alertOnFailure: false
+                    )
+                    if photo.uploadedURL != nil { avatarUrl = photo.uploadedURL }
+                    if photo.uploadFailed { avatarUrl = nil }
+                }
             } onCancel: {
-                uncroppedImage = nil
-                selectedPhotoItem = nil
+                photo.uncroppedImage = nil
+                photo.selectedPhotoItem = nil
             }
         }
-        .onChange(of: selectedPhotoItem) { _, newItem in
-            photoUploadFailed = false
-            Task { await loadAndUploadPhoto(newItem) }
-        }
-    }
-
-    @MainActor
-    private func loadAndUploadPhoto(_ item: PhotosPickerItem?) async {
-        guard let item else { return }
-        guard let data = try? await item.loadTransferable(type: Data.self) else { return }
-        guard let uiImage = UIImage(data: data) else { return }
-        
-        await MainActor.run {
-            uncroppedImage = uiImage
-        }
-    }
-
-    private func uploadCroppedPhoto(_ image: UIImage) async {
-        // Optimistically set the selected data to preview
-        selectedPhotoData = image.jpegData(compressionQuality: 0.85)
-        
-        isUploadingPhoto = true
-        defer { isUploadingPhoto = false }
-
-        guard let userID = onboarding.status?.id else { return }
-
-        if let result = await ImageUploader.upload(input: .uiImage(image), type: .profilePicture, userID: userID) {
-            avatarUrl = result.url
-            photoUploadFailed = false
-        } else {
-            avatarUrl = nil
-            photoUploadFailed = true
+        .onChange(of: photo.selectedPhotoItem) { _, newItem in
+            photo.uploadFailed = false
+            Task { await photo.loadPickedPhoto(newItem) }
         }
     }
 }

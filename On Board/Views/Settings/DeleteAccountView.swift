@@ -84,7 +84,6 @@ struct DeleteAccountView: View {
                         }
                     }
                     .frame(maxWidth: .infinity)
-                    .padding()
                 }
                 .buttonStyle(.boardDestructive)
                 .disabled(isDeleting || !hasScrolledToBottom)
@@ -174,7 +173,9 @@ struct DeleteAccountView: View {
 
             try await auth.deleteAccount()
         } catch {
-            alertError = PresentableAlertError(message: error.localizedDescription)
+            if let alert = PresentableAlertError.from(error) {
+                alertError = alert
+            }
         }
     }
 }

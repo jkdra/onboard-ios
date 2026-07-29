@@ -40,13 +40,21 @@ final class AuthStore {
         }
     }
 
+    /// Not a production sign-in path — no view calls this. Apple/Google/phone/
+    /// email each have their own dedicated method below (`signInWithApple`,
+    /// `signInWithGoogle`, phone/email OTP), which is what `SignInView` and
+    /// `SignInView+Social` actually use. This generic entry point exists
+    /// because `On_BoardTests.swift` calls it ~12 times as a one-line way to
+    /// simulate "already signed in as this provider" test setup, without
+    /// choreographing the full OTP/Apple/Google flow each time — removing it
+    /// would mean rewriting all of those. `SupabaseAuthService`'s
+    /// implementation reflects this: 3 of 4 providers just throw "use the
+    /// dedicated flow instead."
     func signIn(with provider: AuthProvider) async {
         state = .signingIn(provider)
         do {
             let session = try await service.signIn(with: provider)
             state = .signedIn(session)
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -57,8 +65,6 @@ final class AuthStore {
         do {
             let session = try await service.signInWithApple(idToken: idToken, nonce: nonce, fullName: fullName)
             state = .signedIn(session)
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -69,8 +75,6 @@ final class AuthStore {
         do {
             let session = try await service.signInWithGoogle()
             state = .signedIn(session)
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -85,8 +89,6 @@ final class AuthStore {
         do {
             let session = try await service.verifyPhoneOTP(phone: phone, token: token)
             state = .signedIn(session)
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -101,8 +103,6 @@ final class AuthStore {
         do {
             let session = try await service.verifyEmailOTP(email: email, token: token)
             state = .signedIn(session)
-        } catch let error as AuthError {
-            state = .failed(error.localizedDescription)
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -136,6 +136,10 @@ final class AuthStore {
 
     func checkEmailExists(email: String) async throws -> EmailStatus {
         return try await service.checkEmailExists(email: email)
+    }
+
+    func checkPhoneExists(phone: String) async throws -> Bool {
+        return try await service.checkPhoneExists(phone: phone)
     }
 
     /// Sets or changes the account password. Throws so the settings sheet can
@@ -188,14 +192,14 @@ final class AuthStore {
         try await service.revokeApple(authorizationCode: authorizationCode)
     }
 
-    func refreshLinkedMethods() async {
+    /// Throws on failure so a manual pull-to-refresh can tell the user it
+    /// didn't work — the current session/state is untouched either way
+    /// (there's nothing to roll back; this only ever advances `state` on
+    /// success).
+    func refreshLinkedMethods() async throws {
         guard isSignedIn else { return }
-        do {
-            if let session = try await service.refreshAuthSession() {
-                state = .signedIn(session)
-            }
-        } catch {
-            // Keep the current session if refresh fails.
+        if let session = try await service.refreshAuthSession() {
+            state = .signedIn(session)
         }
     }
 

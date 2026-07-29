@@ -82,7 +82,10 @@ struct GraduationEditorSheet: View {
     @State private var month: Int
     @State private var year: Int
 
-    private let monthNames: [String] = DateFormatter().monthSymbols
+    // Calendar.current.monthSymbols avoids constructing a DateFormatter just
+    // to read a fixed symbol list — cheap either way, but this runs on every
+    // re-init of the view struct (i.e. every parent re-render), not once.
+    private let monthNames: [String] = Calendar.current.monthSymbols
 
     init(current: String?) {
         self.current = current

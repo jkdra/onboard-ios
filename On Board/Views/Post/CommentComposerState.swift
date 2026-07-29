@@ -24,6 +24,10 @@ enum ComposerTarget: Equatable {
 }
 
 struct CommentComposerState: Equatable {
+    /// Shared with CommentView's edit-in-place draft, which composes a comment
+    /// body the same way but doesn't route through this type.
+    static let maxLength = 280
+
     private(set) var target: ComposerTarget?
     var draft: String = ""
 

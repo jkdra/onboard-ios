@@ -21,8 +21,17 @@ extension BoardStore {
         return boardWeeks.filter { $0.boardId == boardID }
     }
 
-    var clearingBannerText: String? {
-        BoardSchedule.finalHourBannerText(weekEnd: activeBoardWeek?.endsAt)
+    /// True when a mutation that failed was doomed by the weekly rollover rather than
+    /// by anything the user did: the week it was sent against has since been archived,
+    /// or its deadline has passed and the replacement hasn't landed yet.
+    ///
+    /// These failures arrive on a screen that is already being torn down, and the
+    /// state they'd complain about is about to be thrown away regardless. Roll back
+    /// quietly; an alert here is pure noise attached to a scary-looking error.
+    func isWeeklyBoundaryFailure(weekIDAtSend: UUID?) -> Bool {
+        guard let weekIDAtSend else { return false }
+        guard activeBoardWeek?.id == weekIDAtSend else { return true }
+        return BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt).hasEnded
     }
 
     var canInteractWithBoard: Bool {
@@ -84,6 +93,7 @@ extension BoardStore {
         let changed = transform(&thread)
         if changed {
             commentsByPostID[postID] = thread
+            commentsLastLocallyMutatedAt[postID] = Date()
         }
         return changed
     }

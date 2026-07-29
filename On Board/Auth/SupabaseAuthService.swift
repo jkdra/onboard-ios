@@ -107,6 +107,18 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         ).execute().value
     }
 
+    func checkPhoneExists(phone: String) async throws -> Bool {
+        let client = try requireClient()
+        struct CheckPhoneRequest: Encodable {
+            let p_phone: String
+        }
+
+        return try await client.rpc(
+            "check_phone_exists",
+            params: CheckPhoneRequest(p_phone: phone)
+        ).execute().value
+    }
+
     func signUpWithPassword(email: String, password: String) async throws -> AuthSession? {
         let client = try requireClient()
         do {

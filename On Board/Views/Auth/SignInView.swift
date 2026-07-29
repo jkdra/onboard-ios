@@ -39,6 +39,7 @@ struct SignInView: View {
     @State private var otpSent = false
     @State private var isSendingOTP = false
     @State private var emailStatus: EmailStatus? = nil
+    @State private var phoneExists: Bool? = nil
     @State private var showAccountDetectedToast = false
     @State private var requiresEmailVerification = false
     @State var alertError: PresentableAlertError?
@@ -402,6 +403,7 @@ struct SignInView: View {
         submittedDestination = ""
         isVerifyingOTP = false
         emailStatus = nil
+        phoneExists = nil
         showAccountDetectedToast = false
         requiresEmailVerification = false
         // Deliberately NOT resendCooldown.reset(): backing out clears the form,
@@ -528,6 +530,9 @@ struct SignInView: View {
 
             switch credentialMode {
             case .phone:
+                if !isResend {
+                    phoneExists = try await auth.checkPhoneExists(phone: destination)
+                }
                 try await auth.sendPhoneOTP(phone: destination)
             case .email:
                 if !isResend {
@@ -537,7 +542,7 @@ struct SignInView: View {
             }
             submittedDestination = destination
             withAnimation(.snappy(duration: 0.35)) {
-                if !isResend && emailStatus?.exists == true {
+                if !isResend && (emailStatus?.exists == true || phoneExists == true) {
                     showAccountDetectedToast = true
                 }
                 otpSent = true

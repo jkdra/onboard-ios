@@ -17,7 +17,10 @@ struct OnboardingGraduationStepView: View {
     @State private var month = 5   // May
     @State private var year = Calendar.current.component(.year, from: Date()) + 1
 
-    private let monthNames: [String] = DateFormatter().monthSymbols
+    // Calendar.current.monthSymbols avoids constructing a DateFormatter just
+    // to read a fixed symbol list — cheap either way, but this runs on every
+    // re-init of the view struct (i.e. every parent re-render), not once.
+    private let monthNames: [String] = Calendar.current.monthSymbols
 
     private var years: [Int] {
         let current = Calendar.current.component(.year, from: Date())

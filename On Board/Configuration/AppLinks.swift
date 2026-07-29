@@ -19,6 +19,13 @@ enum AppLinks {
         components.queryItems = [
             URLQueryItem(name: "subject", value: "On Board — Report")
         ]
+        return components.url ?? contactSupportMailURL
+    }
+
+    static var contactSupportMailURL: URL {
+        var components = URLComponents()
+        components.scheme = "mailto"
+        components.path = supportEmail
         return components.url ?? URL(string: "mailto:\(supportEmail)")!
     }
 }

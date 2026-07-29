@@ -205,6 +205,11 @@ struct GridCard: View {
                 .fontStyle(.title3)
                 .fontWeight(.heavy)
                 .foregroundStyle(.primary)
+                // Matches the composer's own cap (NewPostView's title field is
+                // `lineLimit(1...3)`) — without this, an unusually long title can
+                // overflow the card's fixed `cardHeight` in the masonry grid.
+                .lineLimit(3)
+                .truncationMode(.tail)
             Text(post.description)
                 .font(.custom("ZalandoSansSemiExpanded-Regular", size: 14, relativeTo: .callout))
                 .fontWeight(.regular)
@@ -400,7 +405,12 @@ struct FeedGridCard: View {
                 isLeadingColumn: isLeadingColumn,
                 columnWidth: columnWidth
             )
-            .id("\(postID.uuidString)-\(proxy.post.tone.rawValue)")
+            // id is the post alone — including tone here would force a full
+            // remount on every tone change, which destroys and recreates the
+            // view AT the new color, so the `.animation(value: post.tone)`
+            // modifiers below (textCard/imageCard) never see an old value to
+            // cross-fade from and the tone change hard-cuts instead.
+            .id(postID.uuidString)
         }
     }
 }

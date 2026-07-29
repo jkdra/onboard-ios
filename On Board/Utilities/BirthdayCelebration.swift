@@ -49,10 +49,6 @@ enum BirthdayCelebration {
     // MARK: -
 
     private static func parse(_ raw: String?) -> Date? {
-        guard let raw else { return nil }
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "yyyy-MM-dd"
-        return f.date(from: raw)
+        WireDateParser.date(from: raw)
     }
 }

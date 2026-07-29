@@ -13,7 +13,7 @@ struct OnboardingSchoolEmailStepView: View {
     @State private var matchedSchool: SchoolMatch?
     @State private var codeSent = false
     @State private var lookupState: LookupState = .idle
-    @State private var lookupTask: Task<Void, Never>?
+    @State private var debouncer = Debouncer()
     @State private var resendCooldown = OTPCooldown()
     @State private var showNiceTryAlert = false
 
@@ -179,9 +179,8 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private func scheduleSchoolLookup() {
-        lookupTask?.cancel()
-
         guard SchoolEmailRules.isValid(normalizedEmail) else {
+            debouncer.cancel()
             matchedSchool = nil
             lookupState = .idle
             return
@@ -191,10 +190,7 @@ struct OnboardingSchoolEmailStepView: View {
         matchedSchool = nil
 
         let candidate = normalizedEmail
-        lookupTask = Task {
-            try? await Task.sleep(for: .milliseconds(350))
-            guard !Task.isCancelled else { return }
-
+        debouncer.schedule(isStillCurrent: { normalizedEmail == candidate }) {
             let result = await onboarding.lookupSchool(for: candidate)
             guard !Task.isCancelled, normalizedEmail == candidate else { return }
             switch result {

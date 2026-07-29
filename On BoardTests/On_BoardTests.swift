@@ -281,15 +281,26 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     }
     func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
     func deletePost(id: UUID) async throws {}
-    func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws {}
+    func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment {
+        On_Board.Comment(authorId: authorID, author: authorHandle, body: body)
+    }
     func updateComment(id: UUID, body: String) async throws {}
     func deleteComment(id: UUID) async throws {}
     func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws {}
     func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?, birthday: String?, showBirthday: Bool?) async throws -> Profile { throw BoardServiceError.notConfigured }
     func checkHandleAvailable(_ handle: String) async throws -> Bool { true }
-    func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws {}
-    func blockUser(blockedID: UUID) async throws {}
-    func unblockUser(blockedID: UUID) async throws {}
+    var reportContentError: Error?
+    func reportContent(targetType: ReportTargetType, targetID: UUID, reason: ReportReason, details: String?) async throws {
+        if let reportContentError { throw reportContentError }
+    }
+    var blockUserError: Error?
+    func blockUser(blockedID: UUID) async throws {
+        if let blockUserError { throw blockUserError }
+    }
+    var unblockUserError: Error?
+    func unblockUser(blockedID: UUID) async throws {
+        if let unblockUserError { throw unblockUserError }
+    }
     func fetchBlockedUserIDs(for userID: UUID) async throws -> [UUID] { [] }
     func fetchProfiles(ids: [UUID]) async throws -> [Profile] { [] }
     func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
@@ -480,7 +491,7 @@ struct BoardStoreTests {
 }
 
 extension BoardStoreTests {
-    @Test @MainActor func hydrateFromDiskRestoresWarmState() {
+    @Test @MainActor func hydrateFromDiskRestoresWarmState() async {
         let boardID = UUID()
         let week = BoardWeek(
             boardId: boardID,
@@ -507,14 +518,14 @@ extension BoardStoreTests {
         defer { writer.clearDiskCache() }
 
         let reader = BoardStore()
-        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+        await reader.hydrateFromDiskIfNeeded(boardID: boardID)
 
         #expect(reader.activeBoardWeek?.boardId == boardID)
         #expect(reader.posts.contains { $0.id == post.id })
         #expect(reader.profile(id: profile.id)?.id == profile.id)
     }
 
-    @Test @MainActor func mismatchedSchemaVersionIsTreatedAsMiss() throws {
+    @Test @MainActor func mismatchedSchemaVersionIsTreatedAsMiss() async throws {
         let boardID = UUID()
         let week = BoardWeek(
             boardId: boardID,
@@ -537,7 +548,7 @@ extension BoardStoreTests {
         try data.write(to: BoardStore.cacheFileURL, options: .atomic)
 
         let reader = BoardStore()
-        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+        await reader.hydrateFromDiskIfNeeded(boardID: boardID)
 
         #expect(reader.activeBoardWeek == nil)
         #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
@@ -637,7 +648,7 @@ extension BoardStoreTests {
 
         // Rehydrating a fresh store from the disk cache should see the same score.
         let reader = BoardStore()
-        reader.hydrateFromDiskIfNeeded(boardID: boardID)
+        await reader.hydrateFromDiskIfNeeded(boardID: boardID)
         #expect(reader.popScore(for: profile.id)?[.like] == 5)
     }
 
@@ -678,6 +689,104 @@ extension BoardStoreTests {
         await store.loadComments(for: post.id)
 
         #expect(store.loadError != nil)
+    }
+
+    // Moderation (block/report) had zero coverage — the optimistic-mutate,
+    // rollback-on-failure shape here mirrors setReaction/setNotificationSettings,
+    // but nothing previously pinned it for block/unblock/report.
+    @Test @MainActor func blockUserRemovesContentAndPersistsTheBlock() async throws {
+        let blockedAuthor = SampleProfileID.leo
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, title: "t", description: "d", author: "leokp")
+        let store = BoardStore(
+            posts: [blockedPost],
+            profiles: Profile.samples,
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: MockBoardService()
+        )
+
+        try await store.block(userID: blockedAuthor)
+
+        #expect(store.isBlocked(userID: blockedAuthor))
+        #expect(store.posts.isEmpty)
+    }
+
+    @Test @MainActor func blockUserRollsBackContentAndBlockedSetOnFailure() async throws {
+        let blockedAuthor = SampleProfileID.leo
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, title: "t", description: "d", author: "leokp")
+        let service = MockBoardService()
+        service.blockUserError = BoardServiceError.notConfigured
+        let store = BoardStore(
+            posts: [blockedPost],
+            profiles: Profile.samples,
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: service
+        )
+
+        await #expect(throws: (any Error).self) {
+            try await store.block(userID: blockedAuthor)
+        }
+
+        #expect(!store.isBlocked(userID: blockedAuthor))
+        #expect(store.posts.count == 1)
+    }
+
+    @Test @MainActor func unblockUserRollsBackOnFailure() async throws {
+        let blockedAuthor = SampleProfileID.leo
+        let service = MockBoardService()
+        service.unblockUserError = BoardServiceError.notConfigured
+        let store = BoardStore(
+            posts: [],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            boardService: service
+        )
+        store.blockedUserIDs = [blockedAuthor]
+
+        await #expect(throws: (any Error).self) {
+            try await store.unblock(userID: blockedAuthor)
+        }
+
+        #expect(store.isBlocked(userID: blockedAuthor))
+    }
+
+    @Test @MainActor func reportingAPostRemovesItLocally() async throws {
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let store = BoardStore(
+            posts: [post],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: MockBoardService()
+        )
+
+        try await store.report(post: post, reason: .spam, details: nil)
+
+        #expect(store.posts.isEmpty)
+    }
+
+    @Test @MainActor func reportingAPostPropagatesFailureWithoutRemovingIt() async throws {
+        let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
+        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let service = MockBoardService()
+        service.reportContentError = BoardServiceError.notConfigured
+        let store = BoardStore(
+            posts: [post],
+            profiles: [],
+            currentUserID: SampleProfileID.maya,
+            activeBoardWeek: activeWeek,
+            boardService: service
+        )
+
+        await #expect(throws: (any Error).self) {
+            try await store.report(post: post, reason: .spam, details: nil)
+        }
+
+        #expect(store.posts.count == 1)
     }
 }
 
@@ -1130,6 +1239,10 @@ struct OnboardingStalenessTests {
         func setExpectedGraduation(_ month: Date) async throws {
             try await inner.setExpectedGraduation(month)
         }
+
+        func acceptPledge() async throws {
+            try await inner.acceptPledge()
+        }
     }
 
     @Test func refreshIfOnlineRefetchesOnceStatusIsStale() async throws {
@@ -1153,6 +1266,42 @@ struct OnboardingStalenessTests {
         store.statusStaleInterval = 0
         await store.refreshIfOnline()
         #expect(service.fetchCount == 2)
+    }
+
+    // Guards the pledge-persistence fix: signing the pledge (WelcomeOnBoardView)
+    // must reach the `accept_pledge` RPC through OnboardingStore, not silently
+    // no-op, so the acceptance survives an app kill between admission and signing.
+    @Test func acceptPledgeSucceedsWhenSignedIn() async {
+        let authDefaults = UserDefaults(suiteName: "OnboardingPledgeAuth")!
+        authDefaults.removePersistentDomain(forName: "OnboardingPledgeAuth")
+
+        let auth = AuthStore(service: MockAuthService(defaults: authDefaults))
+        await auth.signIn(with: .apple)
+
+        let store = OnboardingStore(
+            service: MockOnboardingService(defaults: authDefaults),
+            auth: auth,
+            network: NetworkMonitor()
+        )
+
+        let succeeded = await store.acceptPledge()
+        #expect(succeeded)
+        #expect(store.lastError == nil)
+    }
+
+    @Test func acceptPledgeFailsWhenSignedOut() async {
+        let authDefaults = UserDefaults(suiteName: "OnboardingPledgeAuthSignedOut")!
+        authDefaults.removePersistentDomain(forName: "OnboardingPledgeAuthSignedOut")
+
+        let auth = AuthStore(service: MockAuthService(defaults: authDefaults))
+        let store = OnboardingStore(
+            service: MockOnboardingService(defaults: authDefaults),
+            auth: auth,
+            network: NetworkMonitor()
+        )
+
+        let succeeded = await store.acceptPledge()
+        #expect(!succeeded)
     }
 }
 
@@ -1265,6 +1414,7 @@ private final class ScriptedAuthService: AuthService, @unchecked Sendable {
     func signInWithPassword(email: String, password: String) async throws -> AuthSession { fatalError("unused") }
     func signUpWithPassword(email: String, password: String) async throws -> AuthSession? { fatalError("unused") }
     func checkEmailExists(email: String) async throws -> EmailStatus { fatalError("unused") }
+    func checkPhoneExists(phone: String) async throws -> Bool { fatalError("unused") }
     func setPassword(_ password: String) async throws -> AuthSession { fatalError("unused") }
     func linkApple(idToken: String, nonce: String?) async throws -> AuthSession { fatalError("unused") }
     func linkGoogle() async throws -> AuthSession { fatalError("unused") }
@@ -1305,9 +1455,21 @@ struct BoardSwitchRaceTests {
         var slowBoardID: UUID?
         private var continuation: CheckedContinuation<Void, Never>?
 
+        // Separate slow-path for fetchComments, keyed by post rather than
+        // board, so a comments-load race can be simulated independently of
+        // the board-load race above.
+        var slowCommentsPostID: UUID?
+        var commentsToReturn = CommentThread(comments: [], userVotes: [:])
+        private var commentsContinuation: CheckedContinuation<Void, Never>?
+
         func releaseSlowLoad() {
             continuation?.resume()
             continuation = nil
+        }
+
+        func releaseSlowComments() {
+            commentsContinuation?.resume()
+            commentsContinuation = nil
         }
 
         func loadActiveBoard(boardID: UUID, for userID: UUID) async throws -> BoardSnapshot {
@@ -1330,13 +1492,22 @@ struct BoardSwitchRaceTests {
         func listArchivedWeeks(boardID: UUID, limit: Int, offset: Int) async throws -> [BoardWeek] { [] }
         func listAccessibleBoards(for userID: UUID) async throws -> [Board] { [] }
         func fetchPosts(forWeek weekID: UUID, userID: UUID) async throws -> BoardWeekPosts { fatalError("unused") }
-        func fetchComments(for postID: UUID) async throws -> CommentThread { fatalError("unused") }
+        func fetchComments(for postID: UUID) async throws -> CommentThread {
+            if postID == slowCommentsPostID {
+                await withTaskCancellationHandler {
+                    await withCheckedContinuation { self.commentsContinuation = $0 }
+                } onCancel: {
+                    Task { @MainActor in self.releaseSlowComments() }
+                }
+            }
+            return commentsToReturn
+        }
         func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws { fatalError("unused") }
         func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
         func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
         func deletePost(id: UUID) async throws { fatalError("unused") }
-        func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws { fatalError("unused") }
-        func updateComment(id: UUID, body: String) async throws { fatalError("unused") }
+        func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment { fatalError("unused") }
+        func updateComment(id: UUID, body: String) async throws { }
         func deleteComment(id: UUID) async throws { fatalError("unused") }
         func setReaction(postID: UUID, userID: UUID, reaction: Reaction?) async throws { fatalError("unused") }
         func updateProfile(id: UUID, displayName: String, handle: String, bio: String?, avatarUrl: String?, birthday: String?, showBirthday: Bool?) async throws -> Profile { fatalError("unused") }
@@ -1376,6 +1547,56 @@ struct BoardSwitchRaceTests {
 
         #expect(store.currentBoardId == boardB)
         #expect(store.activeBoardWeek?.boardId == boardB)
+    }
+
+    // Regression test for the loadComments/local-mutation race: a background
+    // revalidation's fetch can still be in flight when the user edits a
+    // comment; the stale response landing afterward must not clobber the edit.
+    @Test func loadCommentsDoesNotClobberAConcurrentLocalEdit() async {
+        let boardID = UUID(), authorID = UUID(), commentID = UUID()
+        let week = BoardWeek(
+            boardId: boardID,
+            startsAt: .now,
+            endsAt: .now.addingTimeInterval(604_800),
+            status: .active
+        )
+        let originalComment = Comment(id: commentID, authorId: authorID, author: "maya", body: "original")
+        let post = Post(
+            authorId: authorID,
+            boardWeekId: week.id,
+            title: "t",
+            description: "d",
+            author: "maya",
+            comments: [originalComment]
+        )
+
+        let service = SlowBoardService()
+        service.slowCommentsPostID = post.id
+        // The stale server snapshot the fetch will (eventually) return —
+        // reflects the comment's body from before the local edit below.
+        service.commentsToReturn = CommentThread(comments: [originalComment], userVotes: [:])
+
+        let store = BoardStore(
+            posts: [post],
+            profiles: [],
+            currentUserID: authorID,
+            activeBoardWeek: week,
+            boardWeeks: [week],
+            currentBoard: Board(id: boardID, name: "Test"),
+            boardService: service
+        )
+
+        let loadTask = Task { await store.loadComments(for: post.id) }
+        await Task.yield()  // let the slow fetch start and suspend
+
+        await store.updateComment(postID: post.id, commentID: commentID, body: "edited")
+        #expect(store.comments(for: post.id).comment(with: commentID)?.body == "edited")
+
+        service.releaseSlowComments()
+        await loadTask.value
+
+        // The stale fetch resolving afterward must not have reverted the edit.
+        #expect(store.comments(for: post.id).comment(with: commentID)?.body == "edited")
     }
 }
 
@@ -1542,5 +1763,145 @@ struct NotificationSettingsPayloadTests {
         #expect(object["push_new_posts"] as? Bool == true)
         // The regression: this key used to be missing entirely.
         #expect(object["push_followed_posts"] as? Bool == false)
+    }
+}
+
+/// Pins the expiry hole: every window predicate used to be written as
+/// `remaining > 0 && remaining < window`, so the instant the clock reached zero all of
+/// them reported false and the board fell back to wide-open styling and — much worse —
+/// a re-enabled compose button on a week that had already ended.
+@MainActor
+struct BoardPhaseTests {
+    private let weekEnd = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func phase(secondsBeforeEnd: TimeInterval) -> BoardPhase {
+        BoardSchedule.phase(weekEnd: weekEnd, from: weekEnd.addingTimeInterval(-secondsBeforeEnd))
+    }
+
+    @Test func openWellBeforeTheDeadline() {
+        #expect(phase(secondsBeforeEnd: 86_400) == .open)
+        #expect(phase(secondsBeforeEnd: 10_801) == .open)
+    }
+
+    @Test func clearingSoonInsideFinalThreeHours() {
+        #expect(phase(secondsBeforeEnd: 10_799) == .clearingSoon)
+        #expect(phase(secondsBeforeEnd: 3_601) == .clearingSoon)
+    }
+
+    @Test func finalHourInsideLastHour() {
+        #expect(phase(secondsBeforeEnd: 3_599) == .finalHour)
+        #expect(phase(secondsBeforeEnd: 1) == .finalHour)
+    }
+
+    @Test func expiredAtAndAfterTheDeadline() {
+        #expect(phase(secondsBeforeEnd: 0) == .expired)
+        #expect(phase(secondsBeforeEnd: -1) == .expired)
+        #expect(phase(secondsBeforeEnd: -86_400) == .expired)
+    }
+
+    /// The regression itself. Posting must stay closed from the final hour straight
+    /// through expiry — never reopen because the counter hit zero.
+    @Test func postingStaysClosedThroughExpiry() {
+        #expect(phase(secondsBeforeEnd: 10_799).allowsPosting)
+        #expect(!phase(secondsBeforeEnd: 3_599).allowsPosting)
+        #expect(!phase(secondsBeforeEnd: 0).allowsPosting)
+        #expect(!phase(secondsBeforeEnd: -3_600).allowsPosting)
+    }
+
+    /// Same for the urgency treatment — an ended board must not render as calm.
+    @Test func urgencyPersistsThroughExpiry() {
+        #expect(!phase(secondsBeforeEnd: 86_400).isUrgent)
+        #expect(phase(secondsBeforeEnd: 10_799).isUrgent)
+        #expect(phase(secondsBeforeEnd: 0).isUrgent)
+        #expect(phase(secondsBeforeEnd: -600).isUrgent)
+    }
+
+    @Test func isClearingSoonCoversExpiry() {
+        #expect(BoardSchedule.isClearingSoon(weekEnd: weekEnd, from: weekEnd))
+        #expect(BoardSchedule.isExpired(weekEnd: weekEnd, from: weekEnd))
+        // isWithinFinalHour stays narrow — it means "the last hour", not "closed".
+        #expect(!BoardSchedule.isWithinFinalHour(weekEnd: weekEnd, from: weekEnd))
+    }
+}
+
+/// `isLivePostDestination` drives what a board-clear reset evicts from the nav
+/// stack (ContentView.triggerBoardReset) — only a route pointing at a post that
+/// stops existing the moment the board rolls over should be popped. Archive,
+/// Settings, and a profile are all still valid on the new week, and evicting
+/// someone from Settings because a timer fired would be its own bug. No direct
+/// test existed for this predicate despite the reset logic depending on it.
+@MainActor
+struct BoardRouteIsLivePostDestinationTests {
+    private let week = BoardWeek(
+        startsAt: .now,
+        endsAt: .now.addingTimeInterval(3600),
+        status: .active
+    )
+
+    @Test func postRoutesAreLive() {
+        #expect(BoardRoute.post(UUID()).isLivePostDestination)
+        #expect(BoardRoute.postFromProfile(postID: UUID(), profileID: UUID()).isLivePostDestination)
+    }
+
+    @Test func nonPostRoutesSurviveAReset() {
+        #expect(!BoardRoute.archive.isLivePostDestination)
+        #expect(!BoardRoute.archivedWeek(week).isLivePostDestination)
+        #expect(!BoardRoute.profile(Profile.samples[0]).isLivePostDestination)
+        #expect(!BoardRoute.settings.isLivePostDestination)
+    }
+}
+
+/// The mock rollover stands in for the server-side weekly turnover. Without it
+/// `refresh(for:)` is a no-op offline and the reset animation lands on the same posts.
+@MainActor
+struct MockWeekRolloverTests {
+    @Test func rolloverArchivesTheOldWeekAndOpensAnEmptyOne() throws {
+        let store = BoardStore.previewBoard()
+        let outgoing = try #require(store.activeBoardWeek)
+        let outgoingPostCount = store.posts(for: outgoing).count
+        #expect(outgoingPostCount > 0)
+
+        #expect(store.devRollOverWeek())
+
+        let incoming = try #require(store.activeBoardWeek)
+        #expect(incoming.id != outgoing.id)
+        #expect(incoming.status == .active)
+        #expect(store.posts(for: incoming).isEmpty)
+        #expect(incoming.startsAt <= incoming.endsAt)
+
+        let archived = try #require(store.boardWeeks.first { $0.id == outgoing.id })
+        #expect(archived.status == .archived)
+        #expect(archived.archivedAt != nil)
+        // The old posts survive as read-only records reachable from the Archive.
+        let archivedPosts = store.posts(for: archived)
+        #expect(archivedPosts.count == outgoingPostCount)
+        let allReadOnly = archivedPosts.allSatisfy(\.isReadOnly)
+        #expect(allReadOnly)
+    }
+
+    @Test func rolledOverBoardReopensPosting() throws {
+        let store = BoardStore.previewBoard()
+        store.devSetCountdown(seconds: -1)   // already expired
+        let expired = try #require(store.activeBoardWeek)
+        #expect(!BoardSchedule.phase(weekEnd: expired.endsAt).allowsPosting)
+
+        #expect(store.devRollOverWeek())
+
+        let fresh = try #require(store.activeBoardWeek)
+        #expect(BoardSchedule.phase(weekEnd: fresh.endsAt).allowsPosting)
+        // And the feed offers an enabled compose card again — remounted under the
+        // new week's id, so it enters with the fresh board instead of surviving it.
+        #expect(store.feedItems.contains { item in
+            if case .newPost(let isEnabled, let weekID) = item {
+                return isEnabled && weekID == fresh.id
+            }
+            return false
+        })
+    }
+
+    @Test func rolloverIsANoOpOnALiveStore() {
+        // Live stores must never fabricate a week client-side.
+        let store = BoardStore(boardService: nil)
+        #expect(!store.devRollOverWeek())
     }
 }

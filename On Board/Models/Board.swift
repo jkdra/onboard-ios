@@ -40,4 +40,15 @@ enum BoardRoute: Hashable {
     case postFromProfile(postID: Post.ID, profileID: UUID)
     case profile(Profile)
     case settings
+
+    /// Routes pointing at a *live* post, which stops existing the moment the board
+    /// rolls over. Only these get popped on a reset — Archive, Settings, and a
+    /// profile are all still perfectly valid on the new week, and evicting someone
+    /// from Settings because a timer fired would be its own bug.
+    var isLivePostDestination: Bool {
+        switch self {
+        case .post, .postFromProfile: true
+        case .archive, .archivedWeek, .profile, .settings: false
+        }
+    }
 }
