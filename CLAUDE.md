@@ -47,6 +47,26 @@ No secrets are required to build. The app runs fully offline with `MockAuthServi
 > `NSArgumentDomain`: pass `-mock.auth.session "<hex-of-JSON-AuthSession>"` as a launch
 > argument for `SampleProfileID.maya`, whom `MockOnboardingService` reports `.complete`.
 
+> **Xcode can report errors for code that isn't there — `xcodebuild` is ground
+> truth.** Hit twice on 2026-08-02, from two unrelated causes, each costing real
+> time before anyone checked the CLI:
+> 1. **Unsaved/stashed work.** SourceKit was still diagnosing buffers from a
+>    `git stash`ed branch — errors named types (`PromotedSlot`), files
+>    (`Styling/Font/ButlerFont.swift`) and line numbers that existed in *no* file
+>    on disk in the checked-out branch.
+> 2. **A broken index after Clean Build Folder.** The tell is *system* modules
+>    failing: `No such module 'UIKit' / 'XCTest' / 'Testing'`. Nothing in this
+>    repo can break UIKit — that means SourceKit has no compiler arguments at all,
+>    and every "Cannot find X in scope" below it is downstream noise. A CLI build
+>    does **not** repair it (Xcode holds its own in-memory state); ⌘B inside
+>    Xcode, or quitting and reopening, does.
+>
+> Before debugging any Xcode error list, run
+> `xcodebuild -scheme "On Board" -destination "generic/platform=iOS Simulator" build`.
+> If that says `** BUILD SUCCEEDED **`, the code is fine and the problem is the IDE.
+> Also check for orphaned DerivedData pointing at deleted worktrees:
+> `for d in ~/Library/Developer/Xcode/DerivedData/On_Board-*; do plutil -extract WorkspacePath raw "$d/info.plist"; done`
+
 > **Simulator launch-screen caching gotcha:** the Simulator (via SpringBoard) can cache
 > a stale rendering of `LaunchScreen.storyboard`'s launch image across a plain
 > `simctl install`/reinstall of the app — editing an asset in `LaunchHost.imageset` and
