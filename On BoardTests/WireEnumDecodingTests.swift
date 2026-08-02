@@ -135,6 +135,46 @@ struct ReactionRowDecodingTests {
 }
 
 @MainActor
+struct OnboardingStepDecodingTests {
+    @Test func decodesKnownStep() throws {
+        let step = try JSONDecoder().decode(OnboardingStep.self, from: Data(#""school_verify""#.utf8))
+        #expect(step == .schoolVerify)
+    }
+
+    @Test func unknownStepDecodesAsUnrecognizedInsteadOfThrowing() throws {
+        let step = try JSONDecoder().decode(OnboardingStep.self, from: Data(#""alumni_verify""#.utf8))
+        #expect(step == .unrecognized)
+    }
+
+    /// `.unrecognized` must never appear in `allCases`:
+    /// `OnboardingCoordinator.rank(_:)` uses `allCases.firstIndex(of:)` for step
+    /// ordering and `OnboardingProgressBar` takes a step index, so a sentinel in
+    /// that list would silently shift both.
+    @Test func unrecognizedIsExcludedFromAllCases() {
+        #expect(!OnboardingStep.allCases.contains(.unrecognized))
+        #expect(OnboardingStep.allCases.count == 8)
+    }
+
+    @Test func knownStepsStillRoundTrip() throws {
+        for step in OnboardingStep.allCases {
+            let data = try JSONEncoder().encode(step)
+            #expect(try JSONDecoder().decode(OnboardingStep.self, from: data) == step)
+        }
+    }
+
+    /// An unrecognized step must route to the update screen alone — not stacked
+    /// on top of the real steps, which would offer a back button into a flow
+    /// this build cannot complete.
+    @Test func unrecognizedRoutesToItsOwnPath() {
+        #expect(OnboardingCoordinator.targetPath(for: .unrecognized, isSignedIn: true) == [.unrecognized])
+    }
+
+    @Test func signedOutStillGetsAnEmptyPath() {
+        #expect(OnboardingCoordinator.targetPath(for: .unrecognized, isSignedIn: false).isEmpty)
+    }
+}
+
+@MainActor
 struct CommentVoteRowDecodingTests {
     @Test func arrayDecodeSurvivesAnUnknownVote() throws {
         let json = Data("""

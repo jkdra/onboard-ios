@@ -12,6 +12,11 @@ enum AppLinks {
     static let privacyPolicyURL = URL(string: "https://onboardapp.org/privacy")!
     static let termsOfServiceURL = URL(string: "https://onboardapp.org/terms")!
 
+    /// App Store product page, used by the update prompts. The id matches
+    /// `APP_STORE_ID` in the marketing site (onboard-web), which drives the
+    /// auto-pulled changelog — keep the two in sync.
+    static let appStoreURL = URL(string: "https://apps.apple.com/app/id6782297168")!
+
     static var reportMailURL: URL {
         var components = URLComponents()
         components.scheme = "mailto"
