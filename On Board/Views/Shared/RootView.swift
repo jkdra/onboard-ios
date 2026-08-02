@@ -12,6 +12,7 @@ struct RootView: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(BoardStore.self) private var store
     @Environment(NetworkMonitor.self) private var network
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
@@ -76,6 +77,10 @@ struct RootView: View {
         .animation(.smooth, value: onboarding.isComplete)
         .task {
             network.start()
+            // Deliberately not awaited: config must never sit on the launch
+            // path. A failed or slow fetch leaves the last-known (or compiled
+            // default) values in place, which is always a usable app.
+            Task { await remoteConfig.refresh() }
             store.configure(configuration: AppConfiguration.current)
             await auth.restoreSession()
             await syncSessionState()
@@ -109,6 +114,9 @@ struct RootView: View {
         .onChange(of: scenePhase) { _, phase in
             guard didBootstrap, phase == .active else { return }
             network.recheck()
+            // Above the isSignedIn guard on purpose — the version gate and any
+            // auth-flow flag have to stay fresh for signed-out users too.
+            Task { await remoteConfig.refresh() }
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshOnForeground() }
         }
@@ -138,6 +146,8 @@ struct RootView: View {
             WelcomeOnBoardView(boardName: onboarding.status?.boardName)
                 .preferredColorScheme(appearance.colorScheme)
         }
+        // No-op until min_supported_version / recommended_version are seeded.
+        .updatePrompt(remoteConfig.config.updateRequirement())
     }
 
 
