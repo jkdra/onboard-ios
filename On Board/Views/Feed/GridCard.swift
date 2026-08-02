@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct GridCard: View {
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let post: Post
     var userReaction: Reaction?
     var currentUser: Profile?
@@ -336,7 +337,7 @@ struct GridCard: View {
 
     @ViewBuilder
     private var cardBackground: some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(
                     .regular.tint(tone.color.opacity(0.20)),

@@ -10,6 +10,7 @@
 import SwiftUI
 
 struct ReactionBar: View {
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let counts: [Reaction: Int]
     let tone: PostTone
     @Binding var selected: Reaction?
@@ -93,7 +94,7 @@ struct ReactionBar: View {
         }
         .padding()
         .background {
-            if #available(iOS 26.0, *) {
+            if #available(iOS 26.0, *), glassEffectsEnabled {
                 Color.clear.glassEffect(.regular, in: shape)
             } else {
                 shape.fill(Color(.systemBackground).opacity(0.45))
@@ -191,7 +192,7 @@ struct ReactionBar: View {
 
     @ViewBuilder
     private func reactionBackground(shape: UnevenRoundedRectangle, isSelected: Bool) -> some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear.glassEffect(
                 isSelected
                 ? .regular.tint(tone.color).interactive()

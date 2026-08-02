@@ -13,7 +13,7 @@
 //  compiled default must always equal what the app already does.
 //
 
-import Foundation
+import SwiftUI
 
 enum FeatureFlag: String, CaseIterable, Sendable {
     /// The feed-card → post-detail zoom navigation transition. CLAUDE.md
@@ -75,5 +75,29 @@ extension RemoteConfig {
     /// user would move in and out of the rollout on every cold launch.
     static func bucket(_ identity: UUID, salt: String) -> Int {
         Int(StableHash.fnv1a("\(identity.uuidString):\(salt)") % 100)
+    }
+}
+
+// MARK: - Glass effects
+
+private struct GlassEffectsEnabledKey: EnvironmentKey {
+    /// Defaults to `true` so every `#Preview` and any view rendered outside the
+    /// app's environment keeps its current appearance. Deliberately an
+    /// EnvironmentValue rather than reading `RemoteConfigStore` in each leaf
+    /// view: `@Environment(RemoteConfigStore.self)` traps at runtime when the
+    /// store isn't in the environment, which would break every preview of
+    /// ReactionBar, GridCard, CountdownCard and OnboardingProgressBar.
+    static let defaultValue = true
+}
+
+extension EnvironmentValues {
+    /// Gates the iOS 26 `glassEffect` styling. Set once at the app root from
+    /// `FeatureFlag.glassEffects`; read by each `#available(iOS 26.0, *)` site.
+    ///
+    /// The fallback path isn't dormant code — it is what every iOS 18 user runs
+    /// today, so switching this off lands on a well-exercised branch.
+    var glassEffectsEnabled: Bool {
+        get { self[GlassEffectsEnabledKey.self] }
+        set { self[GlassEffectsEnabledKey.self] = newValue }
     }
 }

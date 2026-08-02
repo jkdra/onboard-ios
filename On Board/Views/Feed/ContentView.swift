@@ -46,6 +46,19 @@ struct ContentView: View {
     @State private var lastKnownWeekID: UUID?
     @Namespace private var cardNamespace
 
+    /// nil when `FeatureFlag.zoomTransition` is off, which disables the zoom at
+    /// both ends at once: sources stop registering (the
+    /// `matchedTransitionSource(id:in:)` overload no-ops on a nil namespace) and
+    /// destinations fall back to a plain push. Disabling only one end would leave
+    /// the destination resolving no source rect and collapsing the card on pop.
+    ///
+    /// CLAUDE.md documents four separate landmine categories around this
+    /// transition, and the plain-push fallback is trivially correct — which is
+    /// why this is the highest-value kill switch in the app.
+    private var activeCardNamespace: Namespace.ID? {
+        remoteConfig.isEnabled(.zoomTransition, for: auth.session?.userId) ? cardNamespace : nil
+    }
+
     /// DEV/mock-only: the in-feed dev scratch block (Signal Lost preview, tint/aspect
     /// pickers) fills roughly 1.5 screens above the masonry, so a snap-to-top during a
     /// UI-test walkthrough frames the controls instead of the feed. Pass
@@ -90,7 +103,11 @@ struct ContentView: View {
         // Applied outside the NavigationStack so pushed destinations (ProfileView,
         // ArchivedWeekView) inherit it too. Every BoardFeedView beneath this point
         // registers its zoom sources in the namespace routeDestination zooms from.
-        .environment(\.cardNamespace, cardNamespace)
+        .environment(\.cardNamespace, activeCardNamespace)
+        // Set once here rather than read per leaf view: RemoteConfigStore is
+        // not in a #Preview's environment, and @Environment(_:.self) traps
+        // when the object is absent.
+        .environment(\.glassEffectsEnabled, remoteConfig.isEnabled(.glassEffects, for: auth.session?.userId))
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
@@ -462,14 +479,14 @@ struct ContentView: View {
             if let post = store.post(with: postID) {
                 PostDetailView(post: post)
                     .environment(store)
-                    .navigationTransition(.zoom(sourceID: route, in: cardNamespace))
+                    .zoomTransition(sourceID: route, in: activeCardNamespace)
             }
         case .postFromProfile(let postID, let profileID):
             if let post = store.post(with: postID) {
                 PostDetailView(post: post)
                     .environment(store)
                     .environment(\.originatingProfileID, profileID)
-                    .navigationTransition(.zoom(sourceID: route, in: cardNamespace))
+                    .zoomTransition(sourceID: route, in: activeCardNamespace)
             }
         case .profile(let profile):
             ProfileView(profile: profile, presentation: .navigation)
