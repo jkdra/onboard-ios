@@ -59,23 +59,36 @@ attempted.
 
 ## Part 2 — Where On Board actually is
 
-### The branches are empty
+### The branches (corrected 2026-08-02)
 
-Verified, not assumed:
+An earlier revision of this document claimed neither feature branch contained
+feature code. **That was wrong for `feature/monetization`:** substantial First
+Class + ads work existed in a git stash ("epitaxy: pre-switch"), including 20
+untracked files that lived nowhere else. It has since been landed as commit
+`9a00fc2` on `feature/monetization`.
 
-| Branch | Ahead of main | Actual content |
-|---|---|---|
-| `feature/groups` | 5 commits | merges from main + one `icon.json` tweak |
-| `feature/monetization` | 4 commits | merges from main + one `icon.json` tweak |
+| Branch | State |
+|---|---|
+| `feature/groups` | Genuinely empty — merges from main + an `icon.json` tweak. A named intention. |
+| `feature/monetization` | `Monetization/` module (AdsGateway, EntitlementStore, SubscriptionService protocol + StoreKit/mock impls, AdSlotPlanner), `Views/Monetization/` (FirstClassView, AdCard, PromotedSlot), `FeedItem.promoted`, GoogleMobileAds SPM dep, Butler font, tests, and **two spec docs** (2026-07-29 First Class shell, 2026-07-30 ads roadmap — the latter decides First Class + AdMob ship first, sponsored posts deferred). |
 
-**Neither branch contains any feature code.** They are named intentions.
+The Groups half of the "born behind a flag" argument stands unchanged. For
+Monetization, the discipline shifts from *green-field* to *integration*, and the
+existing design happens to make that easy:
 
-This is the single most important fact for planning, and it's good news. Retrofitting
-flags onto a finished feature is where teams fail — the code wasn't written with an
-off-path, so the flag becomes a half-measure that leaves broken state behind.
-You have the flag system *before* the features exist. Every line of Groups and
-Monetization can be born behind a flag, which is the discipline Meta has and
-almost nobody can retrofit.
+- `EntitlementStore.isFirstClass` and `AdsGateway.isEligibleForAds` are already
+  single choke points — exactly where `FeatureFlag.firstClass` and a
+  `promotedSlots` flag belong. Ads eligibility composes naturally:
+  `flag on AND NOT isFirstClass`.
+- `FeedItem.promoted` is client-inserted (`AdSlotPlanner` decides positions), not
+  server wire data — so it needs **no** wire-format forward-compat work, only a
+  flag gate at insertion time.
+- The `ReferralRewards.milestoneText` call site, commented out pending First
+  Class, should come back as a `FeatureFlag.firstClass` check rather than an
+  uncomment-and-ship.
+
+Retrofitting flags onto a finished feature is where teams fail; this work is
+early enough that the retrofit is three gate-points, not a rewrite.
 
 ### What exists after 1.1.1
 
