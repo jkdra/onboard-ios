@@ -75,7 +75,10 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
     /// author has no matching row — an account deleted after posting — fall back
     /// to a stub built from the post's denormalized author handle, same as before.
     func mergeProfiles(current: Profile, fetched: [Profile], posts: [Post]) -> [Profile] {
-        var byID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        // uniquingKeysWith, not uniqueKeysWithValues, which traps on duplicates.
+        // A profiles query that ever returns the same id twice (a join gaining a
+        // one-to-many) would otherwise crash the feed rather than degrade.
+        var byID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         var seen = Set([current.id])
         var merged = [current]
 
