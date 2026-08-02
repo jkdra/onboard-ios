@@ -3,6 +3,7 @@
 //  On Board
 //
 
+import GoogleMobileAds
 import GoogleSignIn
 import Supabase
 import SwiftUI
@@ -36,6 +37,18 @@ private enum AppLaunchContext {
             network: network
         )
     }
+
+    @MainActor
+    static func makeEntitlementStore() -> EntitlementStore {
+        // Mock-backed for now (StoreKit needs a StoreKit config, not Supabase);
+        // the factory swaps in the real service later without touching callers.
+        EntitlementStore(service: SubscriptionServiceFactory.make())
+    }
+
+    @MainActor
+    static func makeAdsGateway(entitlement: EntitlementStore) -> AdsGateway {
+        AdsGateway(entitlement: entitlement)
+    }
 }
 
 @main
@@ -47,23 +60,40 @@ struct On_BoardApp: App {
     @State private var network: NetworkMonitor
     @State private var auth: AuthStore
     @State private var onboarding: OnboardingStore
+    @State private var entitlement: EntitlementStore
+    @State private var ads: AdsGateway
 
     init() {
         NavigationBarAppearance.configureIfNeeded()
         OnBoardImagePipeline.configure()
         let authStore = AppLaunchContext.makeAuthStore()
         let networkMonitor = NetworkMonitor()
+        let entitlementStore = AppLaunchContext.makeEntitlementStore()
         _auth = State(wrappedValue: authStore)
         _network = State(wrappedValue: networkMonitor)
         _onboarding = State(wrappedValue: AppLaunchContext.makeOnboardingStore(
             auth: authStore,
             network: networkMonitor
         ))
+        _entitlement = State(wrappedValue: entitlementStore)
+        // Must share the SAME EntitlementStore instance as `entitlement` above —
+        // a second, disconnected instance would let AdsGateway check a store
+        // that never learns about a real purchase/restore.
+        _ads = State(wrappedValue: AppLaunchContext.makeAdsGateway(entitlement: entitlementStore))
         // Local-only (no CloudKit sync), no artificial throttling beyond each
         // Tip's own rules — one donation per cold launch, used by ArchiveTip's
         // "shown after the 2nd launch" rule.
         try? Tips.configure([.datastoreLocation(.applicationDefault), .displayFrequency(.immediate)])
         Task { await ArchiveTip.appLaunchEvent.donate() }
+
+        // SDK init only — this does NOT load or show any ad. Whether an ad is
+        // ever actually requested is decided later, per-call, by AdsGateway
+        // (which refuses to serve anything once EntitlementStore.isFirstClass
+        // is true). Skipped in Xcode canvas previews, matching the other
+        // services' `isPreview` guard.
+        if !AppLaunchContext.isPreview {
+            MobileAds.shared.start()
+        }
     }
 
     var body: some Scene {
@@ -74,6 +104,16 @@ struct On_BoardApp: App {
                 .environment(auth)
                 .environment(onboarding)
                 .environment(network)
+                .environment(entitlement)
+                .environment(ads)
+                // BoardStore composes the feed and therefore decides where promoted
+                // slots go, but it must never read entitlements itself. Mirror the
+                // gate's answer in as a plain Bool, and keep it mirrored — the feed
+                // should drop its ad slots the instant someone subscribes, not on
+                // the next refresh.
+                .onChange(of: ads.isEligibleForAds, initial: true) { _, eligible in
+                    store.adsEligible = eligible
+                }
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }

@@ -197,7 +197,7 @@ struct BoardFeedView: View {
         if visible { visibleIDs.insert(item.id) } else { visibleIDs.remove(item.id) }
         switch item {
         case .newPost: onNewPostCardVisibilityChanged?(visible)
-        case .countdown, .post: break
+        case .countdown, .post, .promoted: break
         }
     }
 
@@ -243,7 +243,14 @@ struct BoardFeedView: View {
         // Base text card height (matches GridCard logic)
         let idealBase = columnWidth * 1.15
         let base: CGFloat = max(180, min(idealBase, 260))
-        
+
+        // A promoted slot's height is known before its ad is: that's the whole point
+        // of reserving it, and it's what stops the column balance from shifting when
+        // the ad resolves (or doesn't).
+        if case .promoted = item {
+            return AdCard(content: nil, columnWidth: columnWidth).cardHeight
+        }
+
         guard columnWidth > 0,
               case .post(let postID, _) = item,
               let post = store.feedPost(id: postID),
@@ -282,6 +289,10 @@ struct BoardFeedView: View {
                     .accessibilityLabel("Posting closed — board clears soon")
                     .rotationEffect(.degrees(cardRotation))
             }
+        case .promoted(let slot, let weekID):
+            // No rotation, deliberately. Every post is pinned at an angle; the one
+            // square-on card reads as app furniture rather than someone's post.
+            PromotedSlot(slot: slot, weekID: weekID, columnWidth: columnWidth)
         }
     }
 

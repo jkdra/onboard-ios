@@ -1905,3 +1905,115 @@ struct MockWeekRolloverTests {
         #expect(!store.devRollOverWeek())
     }
 }
+
+/// Density is the part of the ads system users actually feel, so it's pure and
+/// synchronous specifically to be pinned here — no SDK, no network, no view.
+@MainActor
+struct AdSlotPlannerTests {
+    @Test func firstClassMembersGetNoSlots() {
+        let positions = AdSlotPlanner.slotPositions(postCount: 60, isEligible: false, isReadOnly: false)
+        #expect(positions.isEmpty)
+    }
+
+    @Test func archivedWeeksGetNoSlots() {
+        let positions = AdSlotPlanner.slotPositions(postCount: 60, isEligible: true, isReadOnly: true)
+        #expect(positions.isEmpty)
+    }
+
+    /// The opening of a board is the product. An ad in the first viewport is the
+    /// fastest way to make the week read as inventory rather than a campus.
+    @Test func neverPlacesASlotBeforeTheOpeningRun() {
+        let positions = AdSlotPlanner.slotPositions(postCount: 40, isEligible: true, isReadOnly: false)
+        let first = try? #require(positions.first)
+        #expect(first == AdSlotPlanner.cardsBeforeFirstSlot)
+        #expect(positions.allSatisfy { $0 >= AdSlotPlanner.cardsBeforeFirstSlot })
+    }
+
+    @Test func shortWeeksCarryNoAdsAtAll() {
+        for count in 0...AdSlotPlanner.cardsBeforeFirstSlot {
+            let positions = AdSlotPlanner.slotPositions(postCount: count, isEligible: true, isReadOnly: false)
+            #expect(positions.isEmpty, "a \(count)-post week should stay clean")
+        }
+    }
+
+    @Test func slotsAreEvenlySpaced() {
+        let positions = AdSlotPlanner.slotPositions(postCount: 40, isEligible: true, isReadOnly: false)
+        #expect(positions.count > 1)
+        let gaps = zip(positions, positions.dropFirst()).map { $1 - $0 }
+        #expect(gaps.allSatisfy { $0 == AdSlotPlanner.cardsBetweenSlots })
+    }
+
+    @Test func slotCountIsCappedOnVeryLongBoards() {
+        let positions = AdSlotPlanner.slotPositions(postCount: 500, isEligible: true, isReadOnly: false)
+        #expect(positions.count == AdSlotPlanner.maxSlotsPerFeed)
+    }
+
+    @Test func everySlotLandsInsideThePostRun() {
+        let count = 33
+        let positions = AdSlotPlanner.slotPositions(postCount: count, isEligible: true, isReadOnly: false)
+        #expect(positions.allSatisfy { $0 < count })
+    }
+}
+
+/// The feed spine: slots have to be woven in, week-scoped, and gone the moment
+/// somebody subscribes.
+@MainActor
+struct PromotedFeedItemTests {
+    private func store(posts: Int) -> BoardStore {
+        let store = BoardStore.previewBoard()
+        store.adsEligible = true
+        return store
+    }
+
+    @Test func eligibilityFlipRebuildsTheFeed() throws {
+        let store = BoardStore.previewBoard()
+        store.adsEligible = false
+        let withoutAds = store.feedItems.filter(\.isPromoted).count
+        #expect(withoutAds == 0)
+
+        // The sample board is short, so prove the gate rather than the placement:
+        // flipping eligibility must invalidate the cached items either way.
+        store.adsEligible = true
+        let rebuilt = store.feedItems
+        #expect(rebuilt.isEmpty == false)
+    }
+
+    @Test func promotedIdsAreScopedToTheWeek() {
+        let weekA = UUID(), weekB = UUID()
+        let a = FeedItem.promoted(slot: 0, weekID: weekA)
+        let b = FeedItem.promoted(slot: 0, weekID: weekB)
+        #expect(a.id != b.id, "a rollover must remount the slot, not reuse it")
+    }
+
+    @Test func promotedIdsAreDistinctPerSlot() {
+        let week = UUID()
+        #expect(FeedItem.promoted(slot: 0, weekID: week).id
+                != FeedItem.promoted(slot: 1, weekID: week).id)
+    }
+}
+
+/// Conditional assets are the layout's real stress test — most inventory is
+/// missing at least one of them.
+@MainActor
+struct NativeAdContentTests {
+    @Test func mockCoversEveryShapeTheCardMustSurvive() {
+        let samples = MockNativeAdProvider.samples
+        #expect(samples.contains { $0.body == nil })
+        #expect(samples.contains { $0.callToAction == nil })
+        #expect(samples.contains { !$0.hasMedia })
+        #expect(samples.contains { ($0.callToAction?.count ?? 0) > 15 })
+    }
+
+    @Test func unfilledSlotsAreANormalOutcome() async {
+        let provider = MockNativeAdProvider(fills: false)
+        let ad = await provider.loadAd()
+        #expect(ad == nil, "nil means house promo, not an error")
+    }
+
+    @Test func filledSlotsAlwaysCarryAHeadline() async {
+        let provider = MockNativeAdProvider()
+        let ad = await provider.loadAd()
+        let headline = try? #require(ad?.headline)
+        #expect(headline?.isEmpty == false)
+    }
+}

@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		171B349168427EF06CF75F60 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = 6CEF0E320D526A27398F229F /* GoogleMobileAds */; };
 		954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 954766D82FE858F900447B56 /* GoogleSignIn */; };
 		954766DB2FE858F900447B56 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 954766DA2FE858F900447B56 /* GoogleSignInSwift */; };
 		95DC401A2FD36BD700F6E770 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC40192FD36BD700F6E770 /* Auth */; };
@@ -85,6 +86,7 @@
 				954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */,
 				95DC401A2FD36BD700F6E770 /* Auth in Frameworks */,
 				95DC40232FD36BD700F6E770 /* NukeUI in Frameworks */,
+				171B349168427EF06CF75F60 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -162,6 +164,7 @@
 				95DC40222FD36BD700F6E770 /* NukeUI */,
 				954766D82FE858F900447B56 /* GoogleSignIn */,
 				954766DA2FE858F900447B56 /* GoogleSignInSwift */,
+				6CEF0E320D526A27398F229F /* GoogleMobileAds */,
 			);
 			productName = "On Board";
 			productReference = 95DC3FE72FD3688800F6E770 /* On Board.app */;
@@ -249,6 +252,7 @@
 				95DC40182FD36BD700F6E770 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 				95DC40212FD36BD700F6E770 /* XCRemoteSwiftPackageReference "Nuke" */,
 				954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				FD5090ECE90D0B20373FBEB8 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 95DC3FE82FD3688800F6E770 /* Products */;
@@ -682,9 +686,22 @@
 				minimumVersion = 12.0.0;
 			};
 		};
+		FD5090ECE90D0B20373FBEB8 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.7.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		6CEF0E320D526A27398F229F /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FD5090ECE90D0B20373FBEB8 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		954766D82FE858F900447B56 /* GoogleSignIn */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;

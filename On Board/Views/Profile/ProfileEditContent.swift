@@ -18,6 +18,8 @@ struct ProfileEditContent: View {
     var onCameraCapture: (UIImage) -> Void
 
     @State private var showHandleLockedAlert = false
+    @Environment(EntitlementStore.self) private var entitlement
+    @AppStorage("profileColor") private var profileColor: ProfileColor = .none
 
     // Constructing a RelativeDateTimeFormatter isn't free — cached once
     // instead of rebuilt on every render of `handleUnlockText`.
@@ -46,6 +48,8 @@ struct ProfileEditContent: View {
             ProfileMetaRow(profile: profile, showsBirthday: true)
 
             birthdaySection
+
+            profileColorSection
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .alert("Username locked", isPresented: $showHandleLockedAlert) {
@@ -183,6 +187,56 @@ struct ProfileEditContent: View {
         }
     }
 
+    // MARK: - Profile Colors (First Class)
+
+    @ViewBuilder
+    private var profileColorSection: some View {
+        if entitlement.isFirstClass {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Profile Color").fontStyle(.body)
+                HStack(spacing: 12) {
+                    ForEach(ProfileColor.allCases) { option in
+                        Button {
+                            profileColor = option
+                        } label: {
+                            swatch(for: option)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(option.label)
+                        .accessibilityAddTraits(profileColor == option ? [.isSelected, .isButton] : .isButton)
+                    }
+                }
+            }
+        } else {
+            NavigationLink {
+                FirstClassView()
+            } label: {
+                Label {
+                    Text("Profile Color — First Class").fontStyle(.body)
+                } icon: {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func swatch(for option: ProfileColor) -> some View {
+        ZStack {
+            Circle()
+                .fill(option.color ?? Color(.secondarySystemFill))
+                .frame(width: 30, height: 30)
+            Circle()
+                .strokeBorder(Color.primary.opacity(profileColor == option ? 0.9 : 0.15), lineWidth: profileColor == option ? 2.5 : 1)
+                .frame(width: 34, height: 34)
+            if option == .none {
+                Image(systemName: "slash.circle")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
     // MARK: - Avatar
 
     private var avatarPicker: some View {
@@ -204,18 +258,22 @@ struct ProfileEditContent: View {
                             .scaledToFill()
                             .frame(width: 92, height: 92)
                             .clipShape(Circle())
-                            .overlay(Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1))
+                            .overlay(Circle().stroke(entitlement.isFirstClass ? (profileColor.color ?? Color.secondary.opacity(0.3)) : Color.secondary.opacity(0.3), lineWidth: entitlement.isFirstClass && profileColor.color != nil ? 2.5 : 1))
                             .opacity(uploading ? 0.5 : 1.0)
                     } else {
-                        AvatarView(profile: draftUrl.map { url in
-                            Profile(
-                                id: currentProfile.id,
-                                handle: currentProfile.handle,
-                                displayName: currentProfile.displayName,
-                                bio: currentProfile.bio,
-                                avatarUrl: url
-                            )
-                        } ?? currentProfile, size: .large)
+                        AvatarView(
+                            profile: draftUrl.map { url in
+                                Profile(
+                                    id: currentProfile.id,
+                                    handle: currentProfile.handle,
+                                    displayName: currentProfile.displayName,
+                                    bio: currentProfile.bio,
+                                    avatarUrl: url
+                                )
+                            } ?? currentProfile,
+                            size: .large,
+                            tint: entitlement.isFirstClass ? profileColor.color : nil
+                        )
                         .opacity(uploading ? 0.5 : 1.0)
                     }
 

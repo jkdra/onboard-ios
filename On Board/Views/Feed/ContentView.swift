@@ -330,6 +330,14 @@ struct ContentView: View {
             guard !Task.isCancelled else { return }
             store.devSetCountdown(seconds: 5)
         }
+        .task {
+            // DEV/mock only: `-dev.openSettings` pushes Settings directly on launch —
+            // a deterministic way to reach it from a UI test without depending on the
+            // toolbar `Menu`'s tap synthesis (flaky on some simulator OS builds).
+            guard ProcessInfo.processInfo.arguments.contains("-dev.openSettings") else { return }
+            guard navigationPath.isEmpty else { return }
+            navigationPath.append(BoardRoute.settings)
+        }
         .task(id: store.activeBoardWeek?.endsAt) {
             guard let endsAt = store.activeBoardWeek?.endsAt else { return }
             // Already past the deadline (relaunched onto a stale week, or the sleep

@@ -33,9 +33,19 @@ struct ProfileReadContent: View {
     var onTestBirthday: (() -> Void)? = nil
 
     @Environment(BoardStore.self) private var store
+    @Environment(EntitlementStore.self) private var entitlement
+    @AppStorage("profileColor") private var profileColor: ProfileColor = .none
 
     private var canEdit: Bool { store.canEdit(profile: profile) }
     private var isBlockedByMe: Bool { store.isBlocked(userID: profile.id) }
+
+    /// Only ever non-nil for the signed-in user's own profile — Profile
+    /// Colors is a local, per-device preference (see `ProfileColor.swift`),
+    /// so it has no meaning when looking at someone else's profile.
+    private var avatarTint: Color? {
+        guard canEdit, entitlement.isFirstClass else { return nil }
+        return profileColor.color
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -107,7 +117,7 @@ struct ProfileReadContent: View {
 
     private var avatar: some View {
         Button(action: onAvatarTap) {
-            AvatarView(profile: profile, size: .large)
+            AvatarView(profile: profile, size: .large, tint: avatarTint)
                 .background {
                     Color.clear.matchedGeometryEffect(id: ProfileGeometryID.avatarImage, in: namespace)
                 }

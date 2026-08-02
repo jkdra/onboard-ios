@@ -130,6 +130,19 @@ final class BoardStore {
         let postSignatures: [String]
         let showsNewPost: Bool
         let newPostEnabled: Bool
+        let adsEligible: Bool
+    }
+
+    /// Whether promoted slots may be woven into the feed. Set from `AdsGateway`
+    /// (see `On_BoardApp`) rather than read from it — the store stays ignorant of
+    /// *why* someone is ineligible, so entitlements never leak into feed
+    /// composition. Flipping it rebuilds the feed, which is exactly what should
+    /// happen the moment someone subscribes.
+    var adsEligible = false {
+        didSet {
+            guard adsEligible != oldValue else { return }
+            clearFeedItemsCache()
+        }
     }
 
     /// True when a Supabase client is configured for this session.
@@ -365,7 +378,8 @@ final class BoardStore {
         let cacheKey = FeedItemsCacheKey(
             postSignatures: weekPosts.map { "\($0.id.uuidString)-\($0.tone.rawValue)" },
             showsNewPost: showsNewPost,
-            newPostEnabled: newPostEnabled
+            newPostEnabled: newPostEnabled,
+            adsEligible: adsEligible
         )
 
         if feedItemsCacheKeys[week.id] == cacheKey,
@@ -377,7 +391,23 @@ final class BoardStore {
         if showsNewPost {
             items.append(.newPost(isEnabled: newPostEnabled, weekID: week.id))
         }
-        items += weekPosts.map { .post(id: $0.id, tone: $0.tone) }
+
+        // Promoted slots are woven into the *post run* only — never among the
+        // countdown/compose header cards, which is what keeps them out of the
+        // first viewport regardless of how the masonry happens to balance.
+        let slots = Set(AdSlotPlanner.slotPositions(
+            postCount: weekPosts.count,
+            isEligible: adsEligible,
+            isReadOnly: week.isReadOnly
+        ))
+        var slotOrdinal = 0
+        for (index, post) in weekPosts.enumerated() {
+            if slots.contains(index) {
+                items.append(.promoted(slot: slotOrdinal, weekID: week.id))
+                slotOrdinal += 1
+            }
+            items.append(.post(id: post.id, tone: post.tone))
+        }
 
         cachedFeedItemsByWeek[week.id] = items
         feedItemsCacheKeys[week.id] = cacheKey

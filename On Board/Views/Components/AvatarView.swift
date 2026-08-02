@@ -35,6 +35,11 @@ enum AvatarSize {
 struct AvatarView: View {
     let profile: Profile
     var size: AvatarSize = .medium
+    /// First Class's Profile Colors perk — an accent ring, `nil` for the
+    /// default neutral one. Only ever passed for the CURRENT user's own
+    /// avatar (see `ProfileReadContent`); other profiles never set this, so
+    /// there's no per-avatar entitlement lookup happening here.
+    var tint: Color? = nil
 
     var body: some View {
         ZStack {
@@ -44,7 +49,7 @@ struct AvatarView: View {
                 .fill(Color(.secondarySystemFill))
                 .frame(width: size.diameter, height: size.diameter)
                 .overlay(
-                    Circle().stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                    Circle().stroke(tint ?? Color.secondary.opacity(0.3), lineWidth: tint == nil ? 1 : 2.5)
                 )
 
             if let urlString = profile.avatarUrl, let url = URL(string: urlString) {

@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(BoardStore.self) private var store
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(EntitlementStore.self) private var entitlement
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
@@ -19,6 +20,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var showProfanityInfo = false
+    @State private var showFirstClass = false
 
     var body: some View {
         // No wrapping NavigationStack — this is pushed as a BoardRoute.settings
@@ -108,6 +110,8 @@ struct SettingsView: View {
                 Text("Customize the look, feel, and content of On Board.")
                     .fontStyle(.footnote)
             }
+
+            firstClassSection
 
             accountSection
 
@@ -258,6 +262,27 @@ struct SettingsView: View {
     // MARK: - Account section
 
     @ViewBuilder
+    private var firstClassSection: some View {
+        // Its own section above Account. Full-bleed boarding-pass card (a Button,
+        // not a NavigationLink, so no disclosure chevron fights the ticket art);
+        // pushes FirstClassView onto the existing stack.
+        Section {
+            Button {
+                showFirstClass = true
+            } label: {
+                FirstClassBoardingPassCard(
+                    mode: entitlement.isFirstClass ? .member(renewal: nil) : .promo
+                )
+            }
+            .buttonStyle(.plain)
+            .listRowInsets(EdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 16))
+            .listRowBackground(Color.clear)
+            .navigationDestination(isPresented: $showFirstClass) {
+                FirstClassView()
+            }
+        }
+    }
+
     private var accountSection: some View {
         Section {
             if let profile = store.currentUser {

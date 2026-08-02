@@ -16,11 +16,11 @@ final class PolishWalkthroughUITests: XCTestCase {
     }
 
     @MainActor
-    private func launchAsMaya() -> XCUIApplication {
+    private func launchAsMaya(extraArguments: [String] = []) -> XCUIApplication {
         let session = #"{"userId":"A0000000-0000-4000-8000-000000000001","primaryProvider":"email","email":"student@example.edu","phone":null,"hasEmailIdentity":true,"hasPhoneIdentity":false,"hasPassword":false,"linkedIdentities":[{"id":"mock-email","provider":"email","email":"student@example.edu"}]}"#
         let hex = Data(session.utf8).map { String(format: "%02x", $0) }.joined()
         let app = XCUIApplication()
-        app.launchArguments = ["-mock.auth.session", "<\(hex)>"]
+        app.launchArguments = ["-mock.auth.session", "<\(hex)>"] + extraArguments
         app.launch()
 
         let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
@@ -31,18 +31,21 @@ final class PolishWalkthroughUITests: XCTestCase {
     }
 
     /// Taps the nav-bar ellipsis menu whatever XCUI decides to call it.
+    ///
+    /// On this simulator OS the toolbar `Menu` reports an "Automation type
+    /// mismatch: computed Button from legacy attributes vs PopUpButton from
+    /// modern attribute" — the semantic `.tap()` sometimes fails to actually
+    /// open the menu even though the element `.exists`. A coordinate tap on
+    /// the same frame sidesteps the ambiguous synthesis path.
     @MainActor
     private func tapMoreMenu(_ app: XCUIApplication) {
         let bar = app.navigationBars.firstMatch
-        for candidate in [bar.buttons["More"], bar.buttons["ellipsis"]] where candidate.exists {
-            candidate.tap()
-            return
-        }
-        // Fallback: trailing-most nav bar button.
-        let buttons = bar.buttons
-        if buttons.count > 0 {
-            buttons.element(boundBy: buttons.count - 1).tap()
-        }
+        let candidate: XCUIElement = {
+            for c in [bar.buttons["More"], bar.buttons["ellipsis"]] where c.exists { return c }
+            let buttons = bar.buttons
+            return buttons.count > 0 ? buttons.element(boundBy: buttons.count - 1) : bar.buttons.firstMatch
+        }()
+        candidate.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     @MainActor
@@ -442,6 +445,168 @@ final class PolishWalkthroughUITests: XCTestCase {
         snap(app, "13-dynamic-type-accessibility-xxxl-menu-plus-circle")
     }
 
+
+    // TEMPORARY — verification (2026-07-29 First Class subscription shell).
+    // Drives Settings -> boarding-pass card -> FirstClassView, capturing the
+    // promo state, plan selection, purchase, and resulting membership state.
+    // Requires the app's UserDefaults key "mock.firstclass.subscribed" to be
+    // unset before this runs (fresh install / deleted via
+    // `simctl spawn <udid> defaults delete org.onboardapp.onboard mock.firstclass.subscribed`).
+    @MainActor
+    func test20_FirstClassPromoAndPurchase() throws {
+        let app = launchAsMaya(extraArguments: ["-dev.openSettings"])
+        sleep(1)
+
+        // Matched across any element type, not just .buttons: this card's
+        // accessibility node gets inconsistently classified (Button/Link/
+        // PopUpButton) across runs on this simulator OS — the same class of
+        // "Automation type mismatch" seen on the toolbar `Menu` — so a
+        // type-constrained query intermittently misses it entirely.
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "First Class"))
+            .firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 6), "First Class boarding-pass card in Settings")
+        snap(app, "fc-01-settings-with-boarding-pass-card")
+        card.tap()
+
+        XCTAssertTrue(app.staticTexts["First Class"].waitForExistence(timeout: 8), "First Class hero title")
+        XCTAssertTrue(app.staticTexts["What you get"].waitForExistence(timeout: 8), "perks section")
+        snap(app, "fc-02-promo-state-perks-and-plans")
+
+        // Switch plan selection.
+        let monthly = app.staticTexts["Monthly"]
+        if monthly.waitForExistence(timeout: 6) {
+            monthly.tap()
+            snap(app, "fc-03-monthly-selected")
+        }
+        let yearly = app.staticTexts["Yearly"]
+        if yearly.waitForExistence(timeout: 6) {
+            yearly.tap()
+            snap(app, "fc-04-yearly-selected")
+        }
+
+        // Purchase.
+        let cta = app.buttons
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "trial"))
+            .firstMatch
+        XCTAssertTrue(cta.waitForExistence(timeout: 8), "purchase CTA")
+        cta.tap()
+        sleep(1)
+        snap(app, "fc-05-purchasing-spinner")
+
+        let memberTitle = app.staticTexts
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "First Class"))
+            .firstMatch
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "flying First Class"))
+                .firstMatch.waitForExistence(timeout: 6),
+            "member confirmation copy"
+        )
+        snap(app, "fc-06-member-state-after-purchase")
+
+        // Back to Settings — the hero card should now read as a membership pass.
+        let back = app.navigationBars.buttons.firstMatch
+        if back.exists { back.tap() }
+        sleep(1)
+        snap(app, "fc-07-settings-card-now-membership-pass")
+        _ = memberTitle
+
+        // Profile Colors: now that we're First Class, the profile edit screen
+        // should show the swatch picker instead of the locked upsell row.
+        // Soft (`if`-gated, not asserted) on purpose — this tail is a nice-to-
+        // have screenshot of a separate feature, not what this walkthrough
+        // exists to prove; it shouldn't fail the whole purchase-flow test
+        // under a slow simulator.
+        let profileRow = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "maya"))
+            .firstMatch
+        if profileRow.waitForExistence(timeout: 8) {
+            profileRow.tap()
+            sleep(1)
+            let editProfile = app.buttons["Edit Profile"]
+            if editProfile.waitForExistence(timeout: 8) {
+                editProfile.tap()
+                sleep(1)
+                if app.staticTexts["Profile Color"].waitForExistence(timeout: 8) {
+                    snap(app, "fc-09-profile-colors-swatch-picker-unlocked")
+                    let coral = app.buttons["Coral"]
+                    if coral.waitForExistence(timeout: 4) {
+                        coral.tap()
+                        sleep(1)
+                        snap(app, "fc-10-profile-colors-coral-selected")
+                    }
+                }
+            }
+        }
+    }
+
+    // TEMPORARY — verification. Restore path on a fresh (unsubscribed) install.
+    @MainActor
+    func test21_FirstClassRestore() throws {
+        let app = launchAsMaya(extraArguments: ["-dev.openSettings"])
+        sleep(1)
+
+        // Matched across any element type, not just .buttons: this card's
+        // accessibility node gets inconsistently classified (Button/Link/
+        // PopUpButton) across runs on this simulator OS — the same class of
+        // "Automation type mismatch" seen on the toolbar `Menu` — so a
+        // type-constrained query intermittently misses it entirely.
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "First Class"))
+            .firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 6), "First Class boarding-pass card")
+
+        // Intermittently on this simulator OS a tap lands without the pushed
+        // destination mounting (same class of synthesis flake seen on the
+        // toolbar `Menu`) — retry the tap a couple of times rather than fail
+        // the whole walkthrough on a missed hit.
+        let restore = app.buttons["Restore purchase"]
+        for attempt in 0..<3 where !restore.exists {
+            if attempt > 0 { sleep(1) }
+            card.tap()
+            _ = restore.waitForExistence(timeout: 4)
+        }
+        XCTAssertTrue(restore.waitForExistence(timeout: 4), "Restore purchase button")
+        restore.tap()
+
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS[c] %@", "flying First Class"))
+                .firstMatch.waitForExistence(timeout: 6),
+            "restore flips to member state"
+        )
+        snap(app, "fc-08-restored-member-state")
+    }
+
+    // TEMPORARY — verification (2026-07-29 Host-peek contrast fix). Captures
+    // the FirstClassView hero (with its Host peek + backdrop) in whatever
+    // light/dark appearance the simulator is currently set to via
+    // `xcrun simctl ui <udid> appearance light|dark` — run this test once per
+    // appearance from the host to compare both.
+    @MainActor
+    func test22_FirstClassHeroAppearanceCheck() throws {
+        let app = launchAsMaya(extraArguments: ["-dev.openSettings"])
+        sleep(1)
+
+        let card = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label CONTAINS[c] %@", "First Class"))
+            .firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 6), "First Class boarding-pass card")
+        sleep(1)
+
+        // "First Class" alone also matches the compact Settings card's own
+        // title text — "What you get" only exists on the pushed FirstClassView.
+        let heroTitle = app.staticTexts["What you get"]
+        for attempt in 0..<3 where !heroTitle.exists {
+            if attempt > 0 { sleep(1) }
+            card.tap()
+            _ = heroTitle.waitForExistence(timeout: 4)
+        }
+        XCTAssertTrue(heroTitle.waitForExistence(timeout: 4), "navigated to FirstClassView hero")
+        sleep(2)
+        snap(app, "fc-11-hero-appearance-check")   // celebration moment
+        sleep(6)                                    // let the celebration fully resolve
+        snap(app, "fc-12-hero-steady-after-celebration")
+    }
 }
 
 // MARK: - Board clearing walkthrough
