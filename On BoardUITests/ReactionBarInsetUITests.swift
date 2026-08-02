@@ -30,8 +30,22 @@
 //  plus the animated stripes) keep the app from ever reaching idle, which makes
 //  XCUITest gesture delivery unreliable on this screen.
 //
-//  Reviving this likely needs the non-idle animations suppressed under a launch
-//  argument, the way `-dev.hideDevBlock` suppresses the scratch block.
+//  Also ruled out (2026-08-02, second pass): **Reduce Motion is not the cause.**
+//  ContentView's remaining `repeatForever` (the urgent red pulse, line ~293) is
+//  already gated behind `guard !reduceMotion`, and the mock board sits in the
+//  urgent state — so it looked like the culprit. Enabling Reduce Motion on the
+//  simulator (`simctl spawn <udid> defaults write com.apple.Accessibility
+//  ReduceMotionEnabled -bool true`) changed nothing: `stillOnFeedAfterTap` stayed
+//  true. Whatever swallows the tap is not that animation.
+//
+//  Five hypotheses tested, five failed. This needs a dedicated investigation
+//  rather than another guess in the margins of other work. Next things I would
+//  try, in order: check whether the grid card's composed gestures (the
+//  single/double-tap disambiguation documented in CLAUDE.md) swallow a
+//  synthesized tap; try `XCUIApplication.launchEnvironment` to disable animations
+//  wholesale; or drive the app through a deep link (`onboard://post/<uuid>` via
+//  `simctl openurl`) to reach PostDetailView without touching the feed at all —
+//  that last one sidesteps the harness entirely for the "clean open" control.
 //
 
 import XCTest
