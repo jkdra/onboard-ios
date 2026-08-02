@@ -219,6 +219,22 @@ struct RemoteConfigStoreTests {
         #expect(store.isEnabled(.zoomTransition, for: nil))
     }
 
+    /// The test bundle has no Secrets.xcconfig, so the factory hands back no
+    /// client — refresh must record that as `.unavailable` (an expected state
+    /// the inspector displays), never as an error.
+    @Test func refreshWithoutAClientReportsUnavailable() async {
+        // An explicitly unconfigured AppConfiguration, NOT .current: with
+        // Secrets.xcconfig present the test host is live-configured, and this
+        // test must not depend on which build flavor it runs in (or make a
+        // real network call from the suite).
+        let unconfigured = AppConfiguration(supabaseURL: nil, supabaseAnonKey: nil, googleClientID: nil)
+        let store = RemoteConfigStore(defaults: isolatedDefaults("test.rc.status"), configuration: unconfigured)
+        #expect(store.fetchStatus == .notYetFetched)
+        await store.refresh()
+        #expect(store.fetchStatus == .unavailable)
+        #expect(store.config == .empty)
+    }
+
     @Test func applyingIdenticalValuesLeavesStorageUnchanged() {
         let defaults = isolatedDefaults("test.rc.nowrite")
         let store = RemoteConfigStore(defaults: defaults)

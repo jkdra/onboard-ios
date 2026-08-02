@@ -169,6 +169,8 @@ Supabase migrations live in `supabase/migrations/` (gitignored — the backend i
 
   > Debugging these: `XCUIElement.tap()` blocks until the app is idle, so XCUITest screenshots **always** land after the animation. Capture with `xcrun simctl io <udid> recordVideo` and decode with `AVAssetReader` — `AVAssetImageGenerator` snaps to sparse keyframes and silently returns the same frame.
 
+  > **XCUITest tap delivery is currently broken under this Xcode (verified 2026-08-02).** Synthesized taps on SwiftUI elements silently do nothing — feed grid cards, the compose card, and the nav-bar ••• `Menu` trigger all fail, the last with an explicit `Automation type mismatch: computed Button from legacy attributes vs PopUpButton from modern attribute` (`SwiftUI.AccessibilityNode`). Reproduces identically on the iOS 18.5 and 27.0 runtimes, so it's the Xcode XCUITest layer, not a runtime or app regression — and not the perpetual-animation idle issue, which was ruled out separately (Reduce Motion changed nothing). Before writing any UI test that taps, check whether this still reproduces; prefer deep links (`simctl openurl`) or `-dev.*` launch arguments to reach screens without synthesized interaction. Full investigation log: `On BoardUITests/ReactionBarInsetUITests.swift`'s header.
+
 ### Push Notifications
 Push is delivered via APNs using a `.p8` key stored as a Supabase Edge Function secret. The `send-notifications` Edge Function dispatches on a `trigger` string. Two families reach it:
 

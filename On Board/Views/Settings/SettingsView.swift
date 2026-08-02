@@ -165,6 +165,22 @@ struct SettingsView: View {
                     .fontStyle(.subheadline)
             }
 
+            #if DEBUG
+            // Debug builds only — compiled out of releases, matching the
+            // inspector view itself. Shows what THIS device resolved from
+            // remote config, per flag, with the why.
+            Section {
+                NavigationLink {
+                    RemoteConfigInspectorView()
+                } label: {
+                    SettingsRowLabel(title: "Remote Config [DEV]", systemImage: "flag.2.crossed.fill")
+                }
+            } header: {
+                Text("Developer")
+                    .fontStyle(.subheadline)
+            }
+            #endif
+
             Section {
                 if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
                    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {

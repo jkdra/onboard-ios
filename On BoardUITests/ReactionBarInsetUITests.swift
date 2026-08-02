@@ -38,14 +38,23 @@
 //  ReduceMotionEnabled -bool true`) changed nothing: `stillOnFeedAfterTap` stayed
 //  true. Whatever swallows the tap is not that animation.
 //
-//  Five hypotheses tested, five failed. This needs a dedicated investigation
-//  rather than another guess in the margins of other work. Next things I would
-//  try, in order: check whether the grid card's composed gestures (the
-//  single/double-tap disambiguation documented in CLAUDE.md) swallow a
-//  synthesized tap; try `XCUIApplication.launchEnvironment` to disable animations
-//  wholesale; or drive the app through a deep link (`onboard://post/<uuid>` via
-//  `simctl openurl`) to reach PostDetailView without touching the feed at all —
-//  that last one sidesteps the harness entirely for the "clean open" control.
+//  ROOT CAUSE FOUND (2026-08-02, via RemoteConfigInspectorUITests): the failures
+//  are a toolchain bug, not app code and not animations. XCUITest reports:
+//
+//      Automation type mismatch: computed Button from legacy attributes vs
+//      PopUpButton from modern attribute.
+//      XC_kAXXCAttributeElementType = "SwiftUI.AccessibilityNode"
+//
+//  — and reproduces IDENTICALLY on the iOS 18.5 and iOS 27.0 runtimes, so it is
+//  this Xcode's XCUITest layer mishandling SwiftUI accessibility nodes, not a
+//  runtime regression. July's walkthrough tests predate this Xcode; that is why
+//  they worked then and their suites fail now.
+//
+//  Do NOT burn another session tapping harder. Options, best first:
+//   1. Reach screens by deep link (`simctl openurl onboard://post/<uuid>`) or a
+//      house-style `-dev.route` launch argument — no synthesized taps at all.
+//   2. Retest after the next Xcode update; this smells like a beta-cycle bug.
+//   3. If interaction is unavoidable, file the FB number here when reported.
 //
 
 import XCTest
@@ -132,6 +141,11 @@ final class ReactionBarInsetUITests: XCTestCase {
     /// Control: straight to a post, no composer involved.
     @MainActor
     func testA_CleanOpenGap() throws {
+        // Re-enable by setting ONBOARD_UITEST_TAPS_FIXED=1 once a newer Xcode
+        // delivers taps to SwiftUI elements again.
+        if ProcessInfo.processInfo.environment["ONBOARD_UITEST_TAPS_FIXED"] == nil {
+            throw XCTSkip("Xcode XCUITest 'Automation type mismatch' on SwiftUI elements — see ReactionBarInsetUITests.swift header.")
+        }
         let app = launchAsMaya()
         openFirstPost(app)
         _ = report("clean", app)
@@ -141,6 +155,11 @@ final class ReactionBarInsetUITests: XCTestCase {
     /// then straight into a post.
     @MainActor
     func testB_AfterComposerCancelGap() throws {
+        // Re-enable by setting ONBOARD_UITEST_TAPS_FIXED=1 once a newer Xcode
+        // delivers taps to SwiftUI elements again.
+        if ProcessInfo.processInfo.environment["ONBOARD_UITEST_TAPS_FIXED"] == nil {
+            throw XCTSkip("Xcode XCUITest 'Automation type mismatch' on SwiftUI elements — see ReactionBarInsetUITests.swift header.")
+        }
         let app = launchAsMaya()
 
         // Two elements answer to "New post": the toolbar plus (55x44) and the
