@@ -1230,7 +1230,36 @@ git commit -m "Document remote config and feature flag conventions"
 - [ ] Seed `feed_poll_seconds = 120`, foreground the app, confirm the poll interval changes. Delete the key afterward.
 - [ ] `AppLinks.appStoreURL` has the real Apple ID, not the placeholder.
 
-## Post-ship rollout
+## Deferred from Task 6 — and why
+
+Four of the eight constants were **not** routed through config. Recording the
+reasoning so this isn't mistaken for an oversight.
+
+**`BoardPhase` thresholds (3h / 1h) — deferred, needs a different design.**
+`BoardSchedule.phase(...)` is a static function called from ~15 sites with no
+environment access. The obvious fix — a static configuration var set at launch —
+is wrong here: **a static var isn't observable**, so a server change would not
+re-render the countdown or the posting gate; it would silently use stale
+thresholds until some unrelated relayout. These gates decide whether posting is
+open, so a half-working version is worse than none. Doing this properly means
+either threading thresholds through the call sites that render, or making the
+schedule an observable object — a real refactor, not a wiring change.
+
+**Handle-change window (14d / max 2) — deferred, same reason.**
+`Profile.handleChangeAvailableAt` is a computed property on a `Codable` struct
+with no environment access, and it explicitly mirrors a server rule. Same
+observability problem, lower payoff.
+
+**Field limits (comment 280, bio 300, display name 50) — deferred, low value.**
+Each requires converting `CommentComposerState` / `ProfileDraft` to carry an
+injected limit and threading it through their construction sites. Doable, but the
+payoff is small and the server is the real authority — a client value larger than
+the server's just produces a confusing rejection.
+
+**`maxCachedArchiveWeeks` — deferred, negligible value.**
+
+What *was* routed (feed poll, OTP cooldown) is enough to keep the config path
+exercised under real traffic, which was the actual reason for routing anything.
 
 1. Ship 1.1.1 with no keys seeded.
 2. Confirm `select app_version, count(*) from device_tokens group by 1;` shows 1.1.1 installs landing.
