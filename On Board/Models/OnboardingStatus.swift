@@ -117,22 +117,35 @@ enum ReferralRewards {
     /// sharers.
     static let disclosureThreshold = 3
 
-    static func earnedFirstClassMonths(for count: Int) -> Int {
-        if count >= threeMonthThreshold { return 3 }
-        if count >= oneMonthThreshold { return 1 }
+    /// Thresholds are parameters (defaulting to the compiled constants) so the
+    /// waitlist screen can pass `RemoteConfig` values once First Class ships and
+    /// its call site is uncommented — retuning the viral loop is exactly the
+    /// kind of change you want without waiting on App Review.
+    static func earnedFirstClassMonths(
+        for count: Int,
+        oneMonth: Int = oneMonthThreshold,
+        threeMonth: Int = threeMonthThreshold
+    ) -> Int {
+        if count >= threeMonth { return 3 }
+        if count >= oneMonth { return 1 }
         return 0
     }
 
     /// Milestone line for the waitlist card; nil below the disclosure
     /// threshold (no First Class mention at all).
-    static func milestoneText(for count: Int) -> String? {
-        switch earnedFirstClassMonths(for: count) {
+    static func milestoneText(
+        for count: Int,
+        oneMonth: Int = oneMonthThreshold,
+        threeMonth: Int = threeMonthThreshold,
+        disclosure: Int = disclosureThreshold
+    ) -> String? {
+        switch earnedFirstClassMonths(for: count, oneMonth: oneMonth, threeMonth: threeMonth) {
         case 3:
             return "🏆 3 free months of First Class earned!"
         case 1:
             return "🎟️ Free month of First Class earned — 1 more invite makes it 3!"
         default:
-            guard count >= disclosureThreshold else { return nil }
+            guard count >= disclosure else { return nil }
             return "✨ 1 more invite to earn a free month of On Board First Class"
         }
     }

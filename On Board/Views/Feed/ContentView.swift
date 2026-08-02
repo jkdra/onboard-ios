@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(BoardStore.self) private var store
     @Environment(AuthStore.self) private var auth
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
@@ -313,7 +314,10 @@ struct ContentView: View {
             // stops it from silently hitting the network every 45s while the user isn't
             // even looking at the feed.
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(45))
+                // Server-tunable (`feed_poll_seconds`, default 45): a direct
+                // battery/freshness/DB-load dial that can be widened without a
+                // release if Supabase load spikes.
+                try? await Task.sleep(for: .seconds(remoteConfig.config.feedPollSeconds))
                 guard !Task.isCancelled else { break }
                 guard navigationPath.isEmpty else { continue }
                 await store.refresh(for: store.currentUserID)
