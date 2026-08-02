@@ -108,6 +108,7 @@ struct ContentView: View {
         // not in a #Preview's environment, and @Environment(_:.self) traps
         // when the object is absent.
         .environment(\.glassEffectsEnabled, remoteConfig.isEnabled(.glassEffects, for: auth.session?.userId))
+        .environment(\.photoAttachmentsEnabled, remoteConfig.isEnabled(.postPhotoAttachments, for: auth.session?.userId))
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.

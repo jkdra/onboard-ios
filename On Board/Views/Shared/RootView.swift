@@ -81,6 +81,11 @@ struct RootView: View {
             // path. A failed or slow fetch leaves the last-known (or compiled
             // default) values in place, which is always a usable app.
             Task { await remoteConfig.refresh() }
+            // Imperative engine, not a rendered view — set the kill switch
+            // directly rather than threading an environment value through
+            // WelcomeOnBoardView. Re-applied on foreground below so a config
+            // change takes effect without a relaunch.
+            HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
             store.configure(configuration: AppConfiguration.current)
             await auth.restoreSession()
             await syncSessionState()
@@ -117,6 +122,7 @@ struct RootView: View {
             // Above the isSignedIn guard on purpose — the version gate and any
             // auth-flow flag have to stay fresh for signed-out users too.
             Task { await remoteConfig.refresh() }
+            HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshOnForeground() }
         }

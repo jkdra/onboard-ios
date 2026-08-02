@@ -14,6 +14,7 @@ struct PostDetailView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var scheme
     @Environment(\.originatingProfileID) var originatingProfileID
+    @Environment(\.photoAttachmentsEnabled) var photoAttachmentsEnabled
     @Namespace var postNamespace
 
     // Post editing

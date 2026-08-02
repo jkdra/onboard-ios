@@ -90,6 +90,12 @@ private struct GlassEffectsEnabledKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct PhotoAttachmentsEnabledKey: EnvironmentKey {
+    /// Defaults to `true` for the same preview-safety reason as
+    /// `GlassEffectsEnabledKey`.
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     /// Gates the iOS 26 `glassEffect` styling. Set once at the app root from
     /// `FeatureFlag.glassEffects`; read by each `#available(iOS 26.0, *)` site.
@@ -99,5 +105,16 @@ extension EnvironmentValues {
     var glassEffectsEnabled: Bool {
         get { self[GlassEffectsEnabledKey.self] }
         set { self[GlassEffectsEnabledKey.self] = newValue }
+    }
+
+    /// Gates photo attachments on posts. Switching this off degrades the app to
+    /// text-only posting instead of taking it down, which is the useful move if
+    /// the upload path or image moderation has an incident.
+    ///
+    /// Existing posts keep their images; only the attach/replace control is
+    /// withdrawn.
+    var photoAttachmentsEnabled: Bool {
+        get { self[PhotoAttachmentsEnabledKey.self] }
+        set { self[PhotoAttachmentsEnabledKey.self] = newValue }
     }
 }

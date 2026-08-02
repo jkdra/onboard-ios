@@ -12,6 +12,7 @@ import PhotosUI
 import Supabase
 
 struct NewPostView: View {
+    @Environment(\.photoAttachmentsEnabled) private var photoAttachmentsEnabled
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
@@ -263,7 +264,9 @@ struct NewPostView: View {
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            if photoAttachmentsEnabled {
+                PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            }
 
             if photo.uploadFailed {
                 Label("Image couldn't be uploaded — post will be text-only.", systemImage: "exclamationmark.triangle")
