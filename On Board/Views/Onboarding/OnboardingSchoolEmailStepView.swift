@@ -7,6 +7,7 @@ import SwiftUI
 
 struct OnboardingSchoolEmailStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
 
     @State private var email = ""
     @State private var otpCode = ""
@@ -241,11 +242,10 @@ struct OnboardingSchoolEmailStepView: View {
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
             codeSent = true
-            // Deliberately 30s, not the 60s `otp_cooldown_seconds` used by
-            // sign-in: school verification sits mid-onboarding where a long wait
-            // reads as broken and costs completions. Left un-unified on purpose —
-            // consolidating would change shipped behavior.
-            resendCooldown.start(duration: 30, destination: normalizedEmail)
+            resendCooldown.start(
+                duration: remoteConfig.config.otpCooldownSeconds,
+                destination: normalizedEmail
+            )
         }
     }
 
@@ -254,11 +254,10 @@ struct OnboardingSchoolEmailStepView: View {
         otpCode = ""
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
-            // Deliberately 30s, not the 60s `otp_cooldown_seconds` used by
-            // sign-in: school verification sits mid-onboarding where a long wait
-            // reads as broken and costs completions. Left un-unified on purpose —
-            // consolidating would change shipped behavior.
-            resendCooldown.start(duration: 30, destination: normalizedEmail)
+            resendCooldown.start(
+                duration: remoteConfig.config.otpCooldownSeconds,
+                destination: normalizedEmail
+            )
         }
     }
 

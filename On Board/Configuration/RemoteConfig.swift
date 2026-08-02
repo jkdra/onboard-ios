@@ -33,7 +33,16 @@ struct RemoteConfig: Sendable, Equatable {
     // MARK: - Timing
 
     var feedPollSeconds: TimeInterval { double("feed_poll_seconds") ?? 45 }
-    var otpCooldownSeconds: Int { int("otp_cooldown_seconds") ?? 60 }
+    /// Single-sourced across all four OTP resend sites (sign-in, provider
+    /// linking, and both school-email paths), which previously carried 60s and
+    /// 30s independently.
+    ///
+    /// Note: Supabase Auth applies its own server-side resend rate limit
+    /// (commonly 60s by default). If this is set below that, the client will
+    /// re-enable the button before the server will accept the request, and the
+    /// user gets a rate-limit error instead of a code. Raise this key rather
+    /// than shipping a build if that shows up.
+    var otpCooldownSeconds: Int { int("otp_cooldown_seconds") ?? 30 }
 
     // MARK: - Referral ladder
 

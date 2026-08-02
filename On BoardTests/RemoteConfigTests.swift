@@ -15,7 +15,7 @@ struct RemoteConfigDefaultsTests {
     @Test func emptyConfigReturnsCompiledDefaults() {
         let config = RemoteConfig.empty
         #expect(config.feedPollSeconds == 45)
-        #expect(config.otpCooldownSeconds == 60)
+        #expect(config.otpCooldownSeconds == 30)
         #expect(config.referralOneMonthThreshold == 4)
         #expect(config.referralThreeMonthThreshold == 5)
         #expect(config.referralDisclosureThreshold == 3)
@@ -35,7 +35,7 @@ struct RemoteConfigDefaultsTests {
         let config = RemoteConfig(values: ["feed_poll_seconds": "120", "comment_max_length": "500"])
         #expect(config.feedPollSeconds == 120)
         #expect(config.commentMaxLength == 500)
-        #expect(config.otpCooldownSeconds == 60)
+        #expect(config.otpCooldownSeconds == 30)
     }
 
     @Test func unparseableValuesFallBackInsteadOfCrashing() {
