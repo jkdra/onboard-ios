@@ -99,11 +99,21 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
 
     struct UserReactionRow: Decodable, Sendable {
         let postId: UUID
-        let type: Reaction
+        /// Raw wire value, deliberately **not** `Reaction`.
+        ///
+        /// `fetch_my_reactions_for_week` decodes `[UserReactionRow]`, so a
+        /// reaction type added in a future build would fail this whole array —
+        /// and with it the feed. Callers map via `Reaction(rawValue:)` and drop
+        /// `nil`: mapping an unknown reaction onto a known one would silently
+        /// inflate that reaction's count.
+        let type: String
     }
 
     struct UserCommentVoteRow: Decodable, Sendable {
         let commentId: UUID
-        let vote: CommentVote
+        /// Raw wire value, deliberately **not** `CommentVote` — same reasoning
+        /// as `UserReactionRow.type`. Callers map via `CommentVote(rawValue:)`
+        /// and drop `nil`, which reads as "no vote" rather than a wrong vote.
+        let vote: String
     }
 }

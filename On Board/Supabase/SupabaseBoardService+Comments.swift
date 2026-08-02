@@ -23,7 +23,11 @@ extension SupabaseBoardService {
 
         return CommentThread(
             comments: CommentTreeBuilder.buildTree(from: flat),
-            userVotes: Dictionary(uniqueKeysWithValues: voteRows.map { ($0.commentId, $0.vote) })
+            userVotes: Dictionary(
+                uniqueKeysWithValues: voteRows.compactMap { row in
+                    CommentVote(rawValue: row.vote).map { (row.commentId, $0) }
+                }
+            )
         )
     }
 

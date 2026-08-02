@@ -12,6 +12,7 @@ import Foundation
 import Testing
 @testable import On_Board
 
+@MainActor
 struct StableHashTests {
     @Test func isDeterministicForTheSameInput() {
         #expect(StableHash.fnv1a("onboard") == StableHash.fnv1a("onboard"))
@@ -27,6 +28,7 @@ struct StableHashTests {
     }
 }
 
+@MainActor
 struct PostToneDecodingTests {
     @Test func decodesKnownTone() throws {
         let tone = try JSONDecoder().decode(PostTone.self, from: Data(#""mint""#.utf8))
@@ -62,5 +64,95 @@ struct PostToneDecodingTests {
             let data = try JSONEncoder().encode(tone)
             #expect(try JSONDecoder().decode(PostTone.self, from: data) == tone)
         }
+    }
+}
+
+@MainActor
+struct BoardWeekStatusDecodingTests {
+    private func weekJSON(status: String) -> String {
+        """
+        {
+            "id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E01",
+            "board_id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E02",
+            "starts_at": "2026-08-03T00:00:00Z",
+            "ends_at": "2026-08-10T00:00:00Z",
+            "status": "\(status)",
+            "post_count": 4
+        }
+        """
+    }
+
+    private var decoder: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }
+
+    @Test func decodesKnownStatus() throws {
+        let week = try decoder.decode(BoardWeek.self, from: Data(weekJSON(status: "archived").utf8))
+        #expect(week.status == .archived)
+    }
+
+    @Test func unknownStatusDegradesToReadOnlyInsteadOfThrowing() throws {
+        let week = try decoder.decode(BoardWeek.self, from: Data(weekJSON(status: "frozen").utf8))
+        #expect(week.status == .archived)
+        #expect(week.isReadOnly)
+    }
+
+    @Test func arrayDecodeSurvivesOneUnknownStatus() throws {
+        let json = "[\(weekJSON(status: "active")),\(weekJSON(status: "frozen"))]"
+        let weeks = try decoder.decode([BoardWeek].self, from: Data(json.utf8))
+        #expect(weeks.count == 2)
+        #expect(weeks[0].status == .active)
+        #expect(weeks[1].status == .archived)
+    }
+}
+
+@MainActor
+struct ReactionRowDecodingTests {
+    @Test func arrayDecodeSurvivesAnUnknownReactionType() throws {
+        let json = Data("""
+        [
+            {"post_id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E01", "type": "like"},
+            {"post_id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E02", "type": "sparkle"}
+        ]
+        """.utf8)
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let rows = try decoder.decode([SupabaseBoardService.UserReactionRow].self, from: json)
+        #expect(rows.count == 2)
+
+        // The unknown type is dropped at mapping time, not decode time —
+        // mapping it onto a known reaction would inflate that reaction's count.
+        let mapped = Dictionary(uniqueKeysWithValues: rows.compactMap { row in
+            Reaction(rawValue: row.type).map { (row.postId, $0) }
+        })
+        #expect(mapped.count == 1)
+        #expect(mapped.values.first == .like)
+    }
+}
+
+@MainActor
+struct CommentVoteRowDecodingTests {
+    @Test func arrayDecodeSurvivesAnUnknownVote() throws {
+        let json = Data("""
+        [
+            {"comment_id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E01", "vote": "like"},
+            {"comment_id": "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E02", "vote": "superlike"}
+        ]
+        """.utf8)
+
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let rows = try decoder.decode([SupabaseBoardService.UserCommentVoteRow].self, from: json)
+        #expect(rows.count == 2)
+
+        let mapped = Dictionary(uniqueKeysWithValues: rows.compactMap { row in
+            CommentVote(rawValue: row.vote).map { (row.commentId, $0) }
+        })
+        #expect(mapped.count == 1)
+        #expect(mapped.values.first == .like)
     }
 }

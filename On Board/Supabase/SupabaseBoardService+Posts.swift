@@ -53,7 +53,11 @@ extension SupabaseBoardService {
                 post.tags = tagsByPost[row.id] ?? []
                 return post
             },
-            userReactions: Dictionary(uniqueKeysWithValues: reactionRows.map { ($0.postId, $0.type) })
+            userReactions: Dictionary(
+                uniqueKeysWithValues: reactionRows.compactMap { row in
+                    Reaction(rawValue: row.type).map { (row.postId, $0) }
+                }
+            )
         )
     }
 
