@@ -69,10 +69,32 @@ struct BoardWeek: Identifiable, Hashable, Codable {
         boardId = try container.decode(UUID.self, forKey: .boardId)
         startsAt = try container.decode(Date.self, forKey: .startsAt)
         endsAt = try container.decode(Date.self, forKey: .endsAt)
-        status = try container.decode(Status.self, forKey: .status)
+        status = Self.decodeStatus(from: container)
         archivedAt = try container.decodeIfPresent(Date.self, forKey: .archivedAt)
         promptClean = try container.decodeIfPresent(String.self, forKey: .promptClean)
         promptProfane = try container.decodeIfPresent(String.self, forKey: .promptProfane)
         postCount = try container.decodeIfPresent(Int.self, forKey: .postCount) ?? 0
+    }
+
+    /// Unknown statuses decode as `.archived` rather than throwing.
+    ///
+    /// A status added server-side would otherwise fail the whole
+    /// `list_board_weeks` response and leave the app with no board at all.
+    /// `.archived` (read-only) is the safer of the two landing spots: statuses
+    /// get added to express *new restrictions* (frozen, locked, moderated), not
+    /// new permissions, so read-only is the more likely-correct reading. It also
+    /// never costs the user written work — `.active` would let them compose a
+    /// post the server then rejects.
+    ///
+    /// The real fix for an old client seeing an unknown status is to prompt it
+    /// to update; that arrives with the version gate. This keeps it alive until
+    /// then.
+    nonisolated private static func decodeStatus(
+        from container: KeyedDecodingContainer<CodingKeys>
+    ) -> Status {
+        guard let raw = try? container.decode(String.self, forKey: .status) else {
+            return .archived
+        }
+        return Status(rawValue: raw) ?? .archived
     }
 }

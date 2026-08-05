@@ -53,7 +53,17 @@ extension SupabaseBoardService {
                 post.tags = tagsByPost[row.id] ?? []
                 return post
             },
-            userReactions: Dictionary(uniqueKeysWithValues: reactionRows.map { ($0.postId, $0.type) })
+            // uniquingKeysWith, not uniqueKeysWithValues: the latter *traps* on a
+            // duplicate key. Today the reactions PK (post_id, user_id) makes
+            // duplicates impossible, but that safety lives entirely in a database
+            // constraint this code can't see — an RPC or join change would turn a
+            // data anomaly into a hard crash with no rollback and no error path.
+            userReactions: Dictionary(
+                reactionRows.compactMap { row in
+                    Reaction(rawValue: row.type).map { (row.postId, $0) }
+                },
+                uniquingKeysWith: { _, latest in latest }
+            )
         )
     }
 

@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct GridCard: View {
+    @Environment(\.enabledReactions) private var enabledReactions
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let post: Post
     var userReaction: Reaction?
     var currentUser: Profile?
@@ -325,7 +327,7 @@ struct GridCard: View {
 
     private var displayedReactions: [ReactionDisplayEntry] {
         Array(
-            Reaction.defaultOrder
+            enabledReactions
                 .map { ReactionDisplayEntry(reaction: $0, count: post.reactionCounts[$0] ?? 0) }
                 .sorted { $0.count > $1.count }
                 .prefix(3)
@@ -336,7 +338,7 @@ struct GridCard: View {
 
     @ViewBuilder
     private var cardBackground: some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(
                     .regular.tint(tone.color.opacity(0.20)),

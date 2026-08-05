@@ -47,6 +47,7 @@ struct On_BoardApp: App {
     @State private var network: NetworkMonitor
     @State private var auth: AuthStore
     @State private var onboarding: OnboardingStore
+    @State private var remoteConfig = RemoteConfigStore()
 
     init() {
         NavigationBarAppearance.configureIfNeeded()
@@ -74,6 +75,7 @@ struct On_BoardApp: App {
                 .environment(auth)
                 .environment(onboarding)
                 .environment(network)
+                .environment(remoteConfig)
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }

@@ -24,6 +24,7 @@ struct ProfileView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.profileFieldLimits) private var profileFieldLimits
     @Namespace private var profileNamespace
     @State private var showAvatarViewer = false
     @State private var avatarViewerScale: CGFloat = 1.0
@@ -273,6 +274,10 @@ struct ProfileView: View {
     // MARK: - Edit lifecycle
 
     private func beginEditing() {
+        // Hand the (possibly remote-overridden) limits to the draft before it
+        // starts validating — it's a model, not a View, so it can't read them.
+        draft.displayNameLimit = profileFieldLimits.displayName
+        draft.bioLimit = profileFieldLimits.bio
         draft.begin(from: displayedProfile) { candidate in
             await store.checkHandleAvailable(candidate)
         }

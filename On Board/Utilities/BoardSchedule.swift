@@ -46,6 +46,24 @@ enum BoardPhase: Equatable {
 }
 
 enum BoardSchedule {
+
+    /// The two windows that shape the end of a week. Compiled values are the
+    /// shipped behavior; call sites pass `RemoteConfig` values so both can be
+    /// retuned without a release.
+    ///
+    /// Propagation when the server changes them: view call sites re-evaluate
+    /// every countdown tick (≤1s); `BoardStore`'s gates pick the new values up
+    /// when `RootView` re-hands them on foreground/refresh (≤ one poll cycle).
+    /// The posting gate is UX-only either way — the server independently
+    /// enforces the window via `is_post_in_active_week`.
+    struct Thresholds: Equatable, Sendable {
+        /// Urgent styling begins this many hours before the reset.
+        var clearingSoonHours: Int
+        /// Posting closes this many hours before the reset.
+        var finalHourLockoutHours: Int
+
+        static let compiled = Thresholds(clearingSoonHours: 3, finalHourLockoutHours: 1)
+    }
     private static func mondayCalendar(_ calendar: Calendar) -> Calendar {
         var calendar = calendar
         calendar.firstWeekday = 2
@@ -131,7 +149,8 @@ enum BoardSchedule {
     static func phase(
         weekEnd: Date? = nil,
         from now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: Thresholds = .compiled
     ) -> BoardPhase {
         // Undeterminable schedule: treat as a normal open week rather than
         // locking the board down over a calendar failure.
@@ -139,8 +158,8 @@ enum BoardSchedule {
             return .open
         }
         if remaining <= 0 { return .expired }
-        if remaining < 3_600 { return .finalHour }
-        if remaining < 10_800 { return .clearingSoon }
+        if remaining < Double(thresholds.finalHourLockoutHours) * 3_600 { return .finalHour }
+        if remaining < Double(thresholds.clearingSoonHours) * 3_600 { return .clearingSoon }
         return .open
     }
 
@@ -150,27 +169,30 @@ enum BoardSchedule {
     static func isWithinFinalHour(
         weekEnd: Date? = nil,
         from now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: Thresholds = .compiled
     ) -> Bool {
-        phase(weekEnd: weekEnd, from: now, calendar: calendar) == .finalHour
+        phase(weekEnd: weekEnd, from: now, calendar: calendar, thresholds: thresholds) == .finalHour
     }
 
     /// True once the week's deadline has passed and the rollover hasn't landed.
     static func isExpired(
         weekEnd: Date? = nil,
         from now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: Thresholds = .compiled
     ) -> Bool {
-        phase(weekEnd: weekEnd, from: now, calendar: calendar) == .expired
+        phase(weekEnd: weekEnd, from: now, calendar: calendar, thresholds: thresholds) == .expired
     }
 
     /// Banner text for the closed-posting window. Nil while posting is still open.
     static func finalHourBannerText(
         weekEnd: Date? = nil,
         from now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: Thresholds = .compiled
     ) -> String? {
-        let phase = phase(weekEnd: weekEnd, from: now, calendar: calendar)
+        let phase = phase(weekEnd: weekEnd, from: now, calendar: calendar, thresholds: thresholds)
         guard !phase.allowsPosting else { return nil }
         guard phase != .expired else { return "This board has closed" }
         let t = timeRemaining(weekEnd: weekEnd, from: now, calendar: calendar)
@@ -189,9 +211,10 @@ enum BoardSchedule {
     static func isClearingSoon(
         weekEnd: Date? = nil,
         from now: Date = .now,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        thresholds: Thresholds = .compiled
     ) -> Bool {
-        phase(weekEnd: weekEnd, from: now, calendar: calendar).isUrgent
+        phase(weekEnd: weekEnd, from: now, calendar: calendar, thresholds: thresholds).isUrgent
     }
 
     static func timeRemaining(

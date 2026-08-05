@@ -7,6 +7,7 @@ import SwiftUI
 
 struct OnboardingSchoolEmailStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
 
     @State private var email = ""
     @State private var otpCode = ""
@@ -241,7 +242,10 @@ struct OnboardingSchoolEmailStepView: View {
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
             codeSent = true
-            resendCooldown.start(duration: 30, destination: normalizedEmail)
+            resendCooldown.start(
+                duration: remoteConfig.config.otpCooldownSeconds,
+                destination: normalizedEmail
+            )
         }
     }
 
@@ -250,7 +254,10 @@ struct OnboardingSchoolEmailStepView: View {
         otpCode = ""
         let success = await onboarding.sendSchoolVerificationCode(to: normalizedEmail)
         if success {
-            resendCooldown.start(duration: 30, destination: normalizedEmail)
+            resendCooldown.start(
+                duration: remoteConfig.config.otpCooldownSeconds,
+                destination: normalizedEmail
+            )
         }
     }
 

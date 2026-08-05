@@ -12,6 +12,8 @@ import PhotosUI
 import Supabase
 
 struct NewPostView: View {
+    @Environment(RemoteConfigStore.self) private var remoteConfig
+    @Environment(\.photoAttachmentsEnabled) private var photoAttachmentsEnabled
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
@@ -263,7 +265,9 @@ struct NewPostView: View {
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            if photoAttachmentsEnabled {
+                PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            }
 
             if photo.uploadFailed {
                 Label("Image couldn't be uploaded — post will be text-only.", systemImage: "exclamationmark.triangle")
@@ -280,8 +284,8 @@ struct NewPostView: View {
         // `allowsPosting` rather than `isWithinFinalHour` so an expired week keeps the
         // composer locked. It also *reopens* the composer the moment a new week lands,
         // which is what lets a draft ride through the rollover and post to the new board.
-        isWithinFinalHour = !BoardSchedule.phase(weekEnd: weekEnd).allowsPosting
-        finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd)
+        isWithinFinalHour = !BoardSchedule.phase(weekEnd: weekEnd, thresholds: remoteConfig.config.boardThresholds).allowsPosting
+        finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd, thresholds: remoteConfig.config.boardThresholds)
     }
 
     // MARK: - Submit

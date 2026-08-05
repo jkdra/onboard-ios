@@ -113,18 +113,21 @@ struct Profile: Identifiable, Hashable, Codable {
     // MARK: - Handle change limit (2 per rolling 14 days)
 
     /// When the user may next change their username, or nil if they can change
-    /// it right now. Mirrors the server rule so the UI can gate proactively.
-    var handleChangeAvailableAt: Date? {
-        let window: TimeInterval = 14 * 24 * 60 * 60
+    /// it right now. Mirrors the server rule so the UI can gate proactively —
+    /// the parameters exist so call sites can pass `RemoteConfig` values and a
+    /// server-side retune of the rule reaches the UI without a release. The
+    /// server stays authoritative either way; this only gates proactively.
+    func handleChangeAvailableAt(windowDays: Int = 14, maxPerWindow: Int = 2) -> Date? {
+        let window = TimeInterval(windowDays) * 24 * 60 * 60
         let cutoff = Date().addingTimeInterval(-window)
         let recent = (handleChangeHistory ?? []).filter { $0 > cutoff }
-        guard recent.count >= 2, let oldest = recent.min() else { return nil }
+        guard recent.count >= maxPerWindow, let oldest = recent.min() else { return nil }
         return oldest.addingTimeInterval(window)
     }
 
     /// True when the username may be changed now.
-    var canChangeHandle: Bool {
-        guard let available = handleChangeAvailableAt else { return true }
+    func canChangeHandle(windowDays: Int = 14, maxPerWindow: Int = 2) -> Bool {
+        guard let available = handleChangeAvailableAt(windowDays: windowDays, maxPerWindow: maxPerWindow) else { return true }
         return available <= .now
     }
 }

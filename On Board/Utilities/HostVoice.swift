@@ -54,6 +54,15 @@ enum SoundEffectsMode: String, CaseIterable, Identifiable {
 @MainActor
 final class HostVoice {
     static let shared = HostVoice()
+
+    /// Kill switch for the Host's speech synthesis, set once at launch from
+    /// `FeatureFlag.hostVoice`. Gated here rather than at each call site so
+    /// every current and future caller is covered — and because this is an
+    /// imperative audio engine read at call time, not a view read at render
+    /// time, a plain stored property is sufficient (no observation needed).
+    ///
+    /// Defaults to `true`: with no remote config, behavior is unchanged.
+    static var isEnabled = true
     private init() {}
 
     private let engine = AVAudioEngine()
@@ -138,6 +147,7 @@ final class HostVoice {
     /// Both mix with other audio. Safe to call repeatedly — it only reconfigures
     /// when the silent-switch preference changes.
     func prepare(playsWhenSilenced: Bool) {
+        guard Self.isEnabled else { return }
         if !started || currentPlaysWhenSilenced != playsWhenSilenced {
             currentPlaysWhenSilenced = playsWhenSilenced
             // AVAudioSession activation is synchronous and can hitch the UI on the
@@ -224,6 +234,7 @@ final class HostVoice {
     /// digraph are silent (they're the pauses/tails). `bright` selects the happy
     /// set + a slightly higher base pitch for the reveal beat.
     func speak(_ character: Character, at index: Int, in line: String, bright: Bool) {
+        guard Self.isEnabled else { return }
         guard started, engine.isRunning else { return }
         let set = bright ? happyBlips : neutralBlips
         guard !set.isEmpty else { chirpFallback(bright: bright, seed: index); return }

@@ -7,6 +7,7 @@ import SwiftUI
 import UIKit
 
 struct CountdownCard: View {
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let week: BoardWeek?
     let isArchived: Bool
     var columnWidth: CGFloat = 0
@@ -287,7 +288,7 @@ struct CountdownCard: View {
     @ViewBuilder
     private func cardBackground(showRed: Bool = false) -> some View {
         let border = showRed ? Color.red.opacity(0.4) : Color.secondary.opacity(0.25)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(
                     showRed ? .regular.tint(Color.red.opacity(0.12)) : .regular,

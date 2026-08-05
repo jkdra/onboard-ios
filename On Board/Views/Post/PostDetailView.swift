@@ -14,6 +14,7 @@ struct PostDetailView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var scheme
     @Environment(\.originatingProfileID) var originatingProfileID
+    @Environment(\.photoAttachmentsEnabled) var photoAttachmentsEnabled
     @Namespace var postNamespace
 
     // Post editing
@@ -95,7 +96,8 @@ struct PostDetailView: View {
     var clearingSoonWeekEnd: Date? {
         guard !isReadOnly,
               let endsAt = store.activeBoardWeek?.endsAt,
-              BoardSchedule.isClearingSoon(weekEnd: endsAt) else { return nil }
+              BoardSchedule.isClearingSoon(weekEnd: endsAt,
+                                           thresholds: store.boardThresholds) else { return nil }
         return endsAt
     }
 
@@ -199,6 +201,31 @@ struct PostDetailView: View {
                         // handoff as a cancel and wipe the draft.
                         isSheetPresented: showExpandedComposer,
                         isErrorPresented: alertError != nil
+                    )
+                    // The bar should only ride the keyboard when it OWNS the
+                    // keyboard. `CommentComposerBar` keeps `isFieldFocused` and
+                    // `composer.isComposing` in lockstep (focus is set from
+                    // isComposing, and losing focus clears it), so in browse mode
+                    // nothing here is focused — and any bottom keyboard inset is
+                    // therefore stale, inherited from a sheet (NewPostView,
+                    // CommentComposerSheet) that was dismissed just before this
+                    // screen was pushed. Honouring it strands the reaction bar
+                    // mid-screen until something else forces a relayout.
+                    //
+                    // The earlier fix for this dismissed the keyboard at the
+                    // *sender* before dismissing the sheet. That reduces the
+                    // window but cannot close it: it races the keyboard's hide
+                    // animation, which is why the symptom kept coming back
+                    // intermittently. This makes position depend on state we
+                    // control rather than on winning a race, and it holds no
+                    // matter which screen preceded this one.
+                    //
+                    // An empty edge set (rather than an if/else) keeps the bar's
+                    // view identity stable so the browse/compose morph animation
+                    // is unaffected.
+                    .ignoresSafeArea(
+                        .keyboard,
+                        edges: composer.isComposing ? [] : .bottom
                     )
                 }
             }

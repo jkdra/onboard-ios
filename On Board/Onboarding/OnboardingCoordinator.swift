@@ -41,6 +41,10 @@ struct OnboardingCoordinator: View {
     private var effectiveStep: OnboardingStep {
         guard let status = onboarding.status else { return .birthday }
         let backendStep = status.effectiveOnboardingStep
+        // A step this build doesn't recognize short-circuits everything below —
+        // the client-inserted steps and rank() arithmetic are meaningless once
+        // the server is running a flow we don't know about.
+        if backendStep == .unrecognized { return .unrecognized }
         // .contentPreferences has no backing DB state, so it can't come back from
         // effectiveOnboardingStep — insert it locally once profile is behind the
         // user and it hasn't been shown yet.
@@ -85,6 +89,12 @@ struct OnboardingCoordinator: View {
                             OnboardingGraduationStepView()
                         case .waitlist:
                             OnboardingWaitlistStepView()
+                        case .unrecognized:
+                            // The server is running an onboarding flow this build
+                            // doesn't know. Explicit case, not the `default` below:
+                            // falling through to EmptyView would strand the user on
+                            // a blank screen with no way forward.
+                            OnboardingUpdateRequiredView()
                         default:
                             EmptyView()
                         }
@@ -198,6 +208,10 @@ struct OnboardingCoordinator: View {
         case .schoolVerify:        return [.birthday, .username, .profile, .contentPreferences, .schoolVerify]
         case .graduation:          return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation]
         case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
+        // Pushed alone, with none of the real steps beneath it: the preceding
+        // steps are meaningless when the server's flow is one this build can't
+        // complete, and stacking them would offer a back button into it.
+        case .unrecognized:        return [.unrecognized]
         }
     }
 }

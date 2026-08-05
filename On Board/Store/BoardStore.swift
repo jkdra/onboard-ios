@@ -118,7 +118,19 @@ final class BoardStore {
 
     // MARK: - Archive LRU
 
+    /// Compiled default; `archiveWeekCacheLimit` below is what the prune reads.
     static let maxCachedArchiveWeeks = 3
+
+    /// Set from `RemoteConfig` by RootView. Read at prune time rather than
+    /// render time, so a plain stored property is fine here — no observation
+    /// is needed for it to take effect on the next refresh.
+    var archiveWeekCacheLimit = BoardStore.maxCachedArchiveWeeks
+
+    /// Set from `RemoteConfig` by RootView (launch + foreground), same pattern
+    /// as `archiveWeekCacheLimit`. Read at feed-build/gate time, so a server
+    /// change takes effect on the next refresh — and the write gate it feeds is
+    /// UX-only, since the server enforces the posting window independently.
+    var boardThresholds: BoardSchedule.Thresholds = .compiled
     static let maxConnectivityRetries = 2
     // Only BoardStore+Refresh.swift touches this (archive LRU bookkeeping).
     var cachedArchiveWeekIDs: [UUID] = []
@@ -361,7 +373,7 @@ final class BoardStore {
         // zero, inviting a post into a week that had already ended.
         let showsNewPost = canInteract(with: week)
         let newPostEnabled = showsNewPost
-            && BoardSchedule.phase(weekEnd: week.endsAt).allowsPosting
+            && BoardSchedule.phase(weekEnd: week.endsAt, thresholds: boardThresholds).allowsPosting
         let cacheKey = FeedItemsCacheKey(
             postSignatures: weekPosts.map { "\($0.id.uuidString)-\($0.tone.rawValue)" },
             showsNewPost: showsNewPost,

@@ -75,7 +75,10 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
     /// author has no matching row — an account deleted after posting — fall back
     /// to a stub built from the post's denormalized author handle, same as before.
     func mergeProfiles(current: Profile, fetched: [Profile], posts: [Post]) -> [Profile] {
-        var byID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0) })
+        // uniquingKeysWith, not uniqueKeysWithValues, which traps on duplicates.
+        // A profiles query that ever returns the same id twice (a join gaining a
+        // one-to-many) would otherwise crash the feed rather than degrade.
+        var byID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
         var seen = Set([current.id])
         var merged = [current]
 
@@ -99,11 +102,21 @@ final class SupabaseBoardService: BoardService, @unchecked Sendable {
 
     struct UserReactionRow: Decodable, Sendable {
         let postId: UUID
-        let type: Reaction
+        /// Raw wire value, deliberately **not** `Reaction`.
+        ///
+        /// `fetch_my_reactions_for_week` decodes `[UserReactionRow]`, so a
+        /// reaction type added in a future build would fail this whole array —
+        /// and with it the feed. Callers map via `Reaction(rawValue:)` and drop
+        /// `nil`: mapping an unknown reaction onto a known one would silently
+        /// inflate that reaction's count.
+        let type: String
     }
 
     struct UserCommentVoteRow: Decodable, Sendable {
         let commentId: UUID
-        let vote: CommentVote
+        /// Raw wire value, deliberately **not** `CommentVote` — same reasoning
+        /// as `UserReactionRow.type`. Callers map via `CommentVote(rawValue:)`
+        /// and drop `nil`, which reads as "no vote" rather than a wrong vote.
+        let vote: String
     }
 }

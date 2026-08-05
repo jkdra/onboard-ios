@@ -13,6 +13,7 @@
 import SwiftUI
 
 struct OnboardingProgressBar: View {
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let step: Int
     var totalSteps: Int = 4
     /// Preview-only: shows a button that replays the fill + sweep on demand.
@@ -108,7 +109,7 @@ struct OnboardingProgressBar: View {
 
     @ViewBuilder
     private var trackBackground: some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(.regular, in: Capsule(style: .continuous))
                 .overlay(

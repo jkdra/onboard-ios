@@ -263,7 +263,16 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
     private static func match(for email: String) -> SchoolMatch? {
         let normalized = EmailNormalizer.normalized(email)
         guard SchoolEmailRules.isValid(normalized),
-              normalized.hasSuffix("@example.edu") else {
+              let domain = normalized.split(separator: "@").last.map(String.init) else {
+            return nil
+        }
+
+        // Mirrors the live gate's subdomain-family semantics
+        // (school_domains.match_subdomains): example.edu and any *.example.edu
+        // subdomain both match, with the dot boundary enforced — so mock mode
+        // and previews can exercise the same flow a cs.fullerton.edu student
+        // hits in production. evilexample.edu must NOT match, same as live.
+        guard domain == "example.edu" || domain.hasSuffix(".example.edu") else {
             return nil
         }
 

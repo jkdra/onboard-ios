@@ -407,12 +407,14 @@ extension PostDetailView {
                 .foregroundStyle(.secondary)
         }
 
-        PhotoAttachmentTile(
-            controller: editPhoto,
-            onCapture: { editPhoto.uncroppedImage = $0 },
-            existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
-            tone: tone,
-            onRemove: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
-        )
+        if photoAttachmentsEnabled {
+            PhotoAttachmentTile(
+                controller: editPhoto,
+                onCapture: { editPhoto.uncroppedImage = $0 },
+                existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
+                tone: tone,
+                onRemove: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
+            )
+        }
     }
 }

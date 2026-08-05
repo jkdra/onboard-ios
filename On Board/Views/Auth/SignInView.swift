@@ -27,6 +27,7 @@ struct SignInView: View {
     @Environment(AuthStore.self) var auth
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(NetworkMonitor.self) var network
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.colorScheme) private var scheme
 
     @State private var credentialMode: CredentialMode = .phone
@@ -53,7 +54,9 @@ struct SignInView: View {
     /// window so we never swap in a separate loading screen here.
     @State var resolvingProvider: AuthProvider?
 
-    private let otpCooldownSeconds = 60
+    /// Server-tunable (`otp_cooldown_seconds`, default 60) — an anti-abuse dial
+    /// on an endpoint that costs real money per send.
+    private var otpCooldownSeconds: Int { remoteConfig.config.otpCooldownSeconds }
 
     /// True from the moment sign-in succeeds until onboarding status is known —
     /// the page is disabled and the tapped button keeps spinning during it.
