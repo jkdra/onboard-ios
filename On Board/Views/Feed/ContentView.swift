@@ -109,6 +109,11 @@ struct ContentView: View {
         // when the object is absent.
         .environment(\.glassEffectsEnabled, remoteConfig.isEnabled(.glassEffects, for: auth.session?.userId))
         .environment(\.photoAttachmentsEnabled, remoteConfig.isEnabled(.postPhotoAttachments, for: auth.session?.userId))
+        // Falls back to the compiled set when unset, so the bar is never empty.
+        .environment(\.enabledReactions, remoteConfig.config.enabledReactions ?? Reaction.defaultOrder)
+        .environment(\.commentMaxLength, remoteConfig.config.commentMaxLength)
+        .environment(\.profileFieldLimits, (displayName: remoteConfig.config.displayNameMaxLength,
+                                            bio: remoteConfig.config.bioMaxLength))
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.

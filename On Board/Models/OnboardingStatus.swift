@@ -98,11 +98,27 @@ enum InviteLink {
 
     /// Instant-invite copy while the sharer has golden tickets left; waitlist
     /// priority copy otherwise.
-    static func shareMessage(code: String, hasInstantInvites: Bool) -> String {
+    /// `instantOverride` / `waitlistOverride` come from `RemoteConfig` so the
+    /// growth copy can be retuned without a release — the highest-churn strings
+    /// in the app. `{code}` in an override is replaced with the uppercased code;
+    /// an override without it still works, it just won't name the code.
+    static func shareMessage(
+        code: String,
+        hasInstantInvites: Bool,
+        instantOverride: String? = nil,
+        waitlistOverride: String? = nil
+    ) -> String {
+        let upper = code.uppercased()
         if hasInstantInvites {
-            return "I've got an instant invite to On Board — use my code \(code.uppercased()) to skip the waitlist!"
+            if let instantOverride {
+                return instantOverride.replacingOccurrences(of: "{code}", with: upper)
+            }
+            return "I've got an instant invite to On Board — use my code \(upper) to skip the waitlist!"
         }
-        return "I'm on the waitlist for On Board. Use my code \(code.uppercased()) to skip the line!"
+        if let waitlistOverride {
+            return waitlistOverride.replacingOccurrences(of: "{code}", with: upper)
+        }
+        return "I'm on the waitlist for On Board. Use my code \(upper) to skip the line!"
     }
 }
 

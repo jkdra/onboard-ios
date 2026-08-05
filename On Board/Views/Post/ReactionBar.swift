@@ -10,6 +10,7 @@
 import SwiftUI
 
 struct ReactionBar: View {
+    @Environment(\.enabledReactions) private var enabledReactions
     @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let counts: [Reaction: Int]
     let tone: PostTone
@@ -46,7 +47,7 @@ struct ReactionBar: View {
             accessibleMenu
         } else {
             HStack(spacing: interButtonSpacing) {
-                ForEach(Array(Reaction.defaultOrder.enumerated()), id: \.element) { index, reaction in
+                ForEach(Array(enabledReactions.enumerated()), id: \.element) { index, reaction in
                     button(for: reaction, position: position(at: index))
                 }
             }
@@ -63,7 +64,7 @@ struct ReactionBar: View {
             style: .continuous
         )
         HStack(spacing: 0) {
-            ForEach(Array(Reaction.defaultOrder.enumerated()), id: \.element) { index, reaction in
+            ForEach(Array(enabledReactions.enumerated()), id: \.element) { index, reaction in
                 let count = displayCount(for: reaction)
                 HStack(spacing: 5) {
                     Text(reaction.emoji)
@@ -86,7 +87,7 @@ struct ReactionBar: View {
                 }
                 .frame(maxWidth: .infinity)
 
-                if index < Reaction.defaultOrder.count - 1 {
+                if index < enabledReactions.count - 1 {
                     Circle().foregroundStyle(.quaternary)
                         .frame(width: 4, height: 4)
                 }
@@ -112,7 +113,7 @@ struct ReactionBar: View {
             style: .continuous
         )
         return Menu {
-            ForEach(Reaction.defaultOrder, id: \.self) { reaction in
+            ForEach(enabledReactions, id: \.self) { reaction in
                 let count = displayCount(for: reaction)
                 Button {
                     guard isInteractive else { return }
@@ -210,7 +211,7 @@ struct ReactionBar: View {
 
     private func position(at index: Int) -> Position {
         if index == 0 { return .first }
-        if index == Reaction.allCases.count - 1 { return .last }
+        if index == enabledReactions.count - 1 { return .last }
         return .middle
     }
 

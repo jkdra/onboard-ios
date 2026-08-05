@@ -118,7 +118,13 @@ final class BoardStore {
 
     // MARK: - Archive LRU
 
+    /// Compiled default; `archiveWeekCacheLimit` below is what the prune reads.
     static let maxCachedArchiveWeeks = 3
+
+    /// Set from `RemoteConfig` by RootView. Read at prune time rather than
+    /// render time, so a plain stored property is fine here — no observation
+    /// is needed for it to take effect on the next refresh.
+    var archiveWeekCacheLimit = BoardStore.maxCachedArchiveWeeks
     static let maxConnectivityRetries = 2
     // Only BoardStore+Refresh.swift touches this (archive LRU bookkeeping).
     var cachedArchiveWeekIDs: [UUID] = []

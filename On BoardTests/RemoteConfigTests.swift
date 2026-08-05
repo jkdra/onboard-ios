@@ -59,6 +59,83 @@ struct RemoteConfigDefaultsTests {
 }
 
 @MainActor
+struct EnabledReactionsTests {
+    @Test func absentKeyMeansUseTheCompiledSet() {
+        #expect(RemoteConfig.empty.enabledReactions == nil)
+    }
+
+    @Test func parsesAnOrderedSubset() {
+        let config = RemoteConfig(values: ["enabled_reactions": "like,laugh,hug"])
+        #expect(config.enabledReactions == [.like, .laugh, .hug])
+    }
+
+    @Test func toleratesWhitespace() {
+        let config = RemoteConfig(values: ["enabled_reactions": "like , laugh"])
+        #expect(config.enabledReactions == [.like, .laugh])
+    }
+
+    /// A value written for a newer build must degrade, not blank the bar.
+    @Test func dropsUnknownNamesRatherThanFailing() {
+        let config = RemoteConfig(values: ["enabled_reactions": "like,sparkle,hug"])
+        #expect(config.enabledReactions == [.like, .hug])
+    }
+
+    /// Every fallback path must land on the compiled set — an empty reaction bar
+    /// is never a valid resolution.
+    @Test func unusableValuesFallBackToTheCompiledSet() {
+        for raw in ["", "   ", "sparkle,glimmer", ",,,"] {
+            let config = RemoteConfig(values: ["enabled_reactions": raw])
+            #expect(config.enabledReactions == nil, "\(raw) should fall back")
+        }
+    }
+
+    @Test func orderIsPreservedNotNormalized() {
+        let config = RemoteConfig(values: ["enabled_reactions": "hug,like"])
+        #expect(config.enabledReactions == [.hug, .like])
+    }
+}
+
+@MainActor
+struct ShareMessageOverrideTests {
+    @Test func defaultsMatchTheShippedCopy() {
+        let waitlist = InviteLink.shareMessage(code: "abc123", hasInstantInvites: false)
+        #expect(waitlist.contains("ABC123"))
+        #expect(waitlist.contains("skip the line"))
+
+        let instant = InviteLink.shareMessage(code: "abc123", hasInstantInvites: true)
+        #expect(instant.contains("skip the waitlist"))
+    }
+
+    @Test func overrideSubstitutesTheCode() {
+        let message = InviteLink.shareMessage(
+            code: "abc123",
+            hasInstantInvites: false,
+            waitlistOverride: "Join me on On Board — code {code}"
+        )
+        #expect(message == "Join me on On Board — code ABC123")
+    }
+
+    @Test func overrideWithoutAPlaceholderStillWorks() {
+        let message = InviteLink.shareMessage(
+            code: "abc123",
+            hasInstantInvites: false,
+            waitlistOverride: "Join me on On Board"
+        )
+        #expect(message == "Join me on On Board")
+    }
+
+    @Test func instantAndWaitlistOverridesDoNotCrossOver() {
+        let message = InviteLink.shareMessage(
+            code: "abc123",
+            hasInstantInvites: true,
+            instantOverride: "instant {code}",
+            waitlistOverride: "waitlist {code}"
+        )
+        #expect(message == "instant ABC123")
+    }
+}
+
+@MainActor
 struct FeatureFlagTests {
     private let identity = UUID(uuidString: "6BFB4A31-3D2E-4E0E-9B39-6E0B0C9E9E01")!
 

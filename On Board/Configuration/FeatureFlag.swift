@@ -96,6 +96,22 @@ private struct PhotoAttachmentsEnabledKey: EnvironmentKey {
     static let defaultValue = true
 }
 
+private struct CommentMaxLengthKey: EnvironmentKey {
+    static let defaultValue = 280
+}
+
+private struct ProfileFieldLimitsKey: EnvironmentKey {
+    /// (displayName, bio). Paired because both captions and `canSave` read them
+    /// together, and splitting them into two keys would let one drift.
+    static let defaultValue = (displayName: 50, bio: 300)
+}
+
+private struct EnabledReactionsKey: EnvironmentKey {
+    /// The compiled set, so previews and any view outside the app's environment
+    /// render the full bar.
+    static let defaultValue = Reaction.defaultOrder
+}
+
 extension EnvironmentValues {
     /// Gates the iOS 26 `glassEffect` styling. Set once at the app root from
     /// `FeatureFlag.glassEffects`; read by each `#available(iOS 26.0, *)` site.
@@ -116,5 +132,31 @@ extension EnvironmentValues {
     var photoAttachmentsEnabled: Bool {
         get { self[PhotoAttachmentsEnabledKey.self] }
         set { self[PhotoAttachmentsEnabledKey.self] = newValue }
+    }
+
+    /// Which reactions the UI offers, in order. Set once at the app root from
+    /// `RemoteConfig.enabledReactions`; read by `ReactionBar`, `GridCard`'s
+    /// top-3 row, and `PopScoreView`.
+    ///
+    /// This is the lever for withdrawing a reaction — `dislike` on a campus
+    /// board being the obvious candidate if it turns into a pile-on mechanism —
+    /// without waiting on App Review. Display-only: existing rows keep counting
+    /// server-side and return intact when the key is removed.
+    var enabledReactions: [Reaction] {
+        get { self[EnabledReactionsKey.self] }
+        set { self[EnabledReactionsKey.self] = newValue }
+    }
+
+    /// Max comment length. A display + validation hint only — `comments.body`
+    /// is server-authoritative, so raise the column before raising this.
+    var commentMaxLength: Int {
+        get { self[CommentMaxLengthKey.self] }
+        set { self[CommentMaxLengthKey.self] = newValue }
+    }
+
+    /// Profile display-name and bio limits. Same server-authoritative caveat.
+    var profileFieldLimits: (displayName: Int, bio: Int) {
+        get { self[ProfileFieldLimitsKey.self] }
+        set { self[ProfileFieldLimitsKey.self] = newValue }
     }
 }

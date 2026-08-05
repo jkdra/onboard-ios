@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct GridCard: View {
+    @Environment(\.enabledReactions) private var enabledReactions
     @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let post: Post
     var userReaction: Reaction?
@@ -326,7 +327,7 @@ struct GridCard: View {
 
     private var displayedReactions: [ReactionDisplayEntry] {
         Array(
-            Reaction.defaultOrder
+            enabledReactions
                 .map { ReactionDisplayEntry(reaction: $0, count: post.reactionCounts[$0] ?? 0) }
                 .sorted { $0.count > $1.count }
                 .prefix(3)

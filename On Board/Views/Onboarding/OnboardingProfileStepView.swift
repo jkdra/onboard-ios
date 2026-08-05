@@ -8,6 +8,7 @@ import PhotosUI
 import Supabase
 
 struct OnboardingProfileStepView: View {
+    @Environment(\.profileFieldLimits) private var profileFieldLimits
     @Environment(OnboardingStore.self) private var onboarding
 
     @State private var displayName = ""
@@ -22,15 +23,14 @@ struct OnboardingProfileStepView: View {
 
     private enum Field { case displayName, bio }
 
-    private let displayNameLimit = 50
-    private let bioLimit = 300
+
 
     // Display name is optional — a user can identify by just their handle,
     // set on the next step.
     private var canContinue: Bool {
         !onboarding.isSubmitting
-            && displayName.count <= displayNameLimit
-            && bio.count <= bioLimit
+            && displayName.count <= profileFieldLimits.displayName
+            && bio.count <= profileFieldLimits.bio
     }
 
     private func charCountColor(count: Int, limit: Int) -> Color {
@@ -60,10 +60,10 @@ struct OnboardingProfileStepView: View {
                         .textContentType(.name)
                         .textInputAutocapitalization(.words)
                         .focused($focus, equals: .displayName)
-                    if displayName.count >= Int(Double(displayNameLimit) * 0.8) {
-                        Text("\(displayName.count)/\(displayNameLimit)")
+                    if displayName.count >= Int(Double(profileFieldLimits.displayName) * 0.8) {
+                        Text("\(displayName.count)/\(profileFieldLimits.displayName)")
                             .fontStyle(.caption2)
-                            .foregroundStyle(charCountColor(count: displayName.count, limit: displayNameLimit))
+                            .foregroundStyle(charCountColor(count: displayName.count, limit: profileFieldLimits.displayName))
                             .monospacedDigit()
                             .animation(.easeInOut(duration: 0.15), value: displayName.count)
                     }
@@ -77,10 +77,10 @@ struct OnboardingProfileStepView: View {
                         .keyboardType(.twitter)
                         .focused($focus, equals: .bio)
                         .fontStyle(.body)
-                    if bio.count >= Int(Double(bioLimit) * 0.8) {
-                        Text("\(bio.count)/\(bioLimit)")
+                    if bio.count >= Int(Double(profileFieldLimits.bio) * 0.8) {
+                        Text("\(bio.count)/\(profileFieldLimits.bio)")
                             .fontStyle(.caption2)
-                            .foregroundStyle(charCountColor(count: bio.count, limit: bioLimit))
+                            .foregroundStyle(charCountColor(count: bio.count, limit: profileFieldLimits.bio))
                             .monospacedDigit()
                             .animation(.easeInOut(duration: 0.15), value: bio.count)
                     }

@@ -80,6 +80,26 @@ struct RemoteConfig: Sendable, Equatable {
 
     var maxCachedArchiveWeeks: Int { int("max_cached_archive_weeks") ?? 3 }
 
+    // MARK: - Reactions
+
+    /// Which reactions the UI offers, in order. Comma-separated raw values,
+    /// e.g. `"like,laugh,hug"` to withdraw `dislike` without a build.
+    ///
+    /// Returns `nil` — meaning "use the compiled set" — when the key is absent,
+    /// contains no recognizable reaction, or would resolve to an empty bar.
+    /// Unknown names are dropped rather than failing the whole list, so a value
+    /// written for a newer build degrades instead of blanking the reaction bar.
+    ///
+    /// Withdrawing a reaction is display-only: rows already in Postgres keep
+    /// counting server-side and reappear intact if the key is removed.
+    var enabledReactions: [Reaction]? {
+        guard let raw = values["enabled_reactions"] else { return nil }
+        let parsed = raw
+            .split(separator: ",")
+            .compactMap { Reaction(rawValue: $0.trimmingCharacters(in: .whitespaces)) }
+        return parsed.isEmpty ? nil : parsed
+    }
+
     // MARK: - Version gate
 
     var minSupportedVersion: String? { values["min_supported_version"] }

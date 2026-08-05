@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(BoardStore.self) private var store
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
@@ -252,7 +253,12 @@ struct SettingsView: View {
 
                 ShareLink(
                     item: url,
-                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: instantRemaining > 0))
+                    message: Text(InviteLink.shareMessage(
+                        code: code,
+                        hasInstantInvites: instantRemaining > 0,
+                        instantOverride: remoteConfig.config.referralShareMessageInstant,
+                        waitlistOverride: remoteConfig.config.referralShareMessage
+                    ))
                 ) {
                     SettingsRowLabel(title: "Share Invite", systemImage: "square.and.arrow.up.fill")
                 }

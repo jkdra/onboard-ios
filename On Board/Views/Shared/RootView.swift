@@ -87,6 +87,7 @@ struct RootView: View {
             // change takes effect without a relaunch.
             HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
             store.configure(configuration: AppConfiguration.current)
+            store.archiveWeekCacheLimit = remoteConfig.config.maxCachedArchiveWeeks
             await auth.restoreSession()
             await syncSessionState()
             // Smile, hold briefly, then hand off. This deliberately adds ~0.33s to

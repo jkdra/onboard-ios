@@ -6,6 +6,7 @@
 import SwiftUI
 
 struct CommentView: View {
+    @Environment(\.commentMaxLength) private var commentMaxLength
     let postID: UUID
     let comment: Comment
     let tone: PostTone
@@ -166,7 +167,7 @@ struct CommentView: View {
                             .textFieldStyle(.plain)
                             .lineLimit(1...8)
                             .focused($isEditorFocused)
-                            .characterLimited($draftCommentBody, to: CommentComposerState.maxLength)
+                            .characterLimited($draftCommentBody, to: commentMaxLength)
                             // Multi-line editing: confirmed via the toolbar "Save" button. Return
                             // inserts a newline instead of submitting, so a pasted line break or a
                             // deliberate paragraph no longer silently ends the edit.

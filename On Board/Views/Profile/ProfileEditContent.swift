@@ -12,6 +12,7 @@ import PhotosUI
 import SwiftUI
 
 struct ProfileEditContent: View {
+    @Environment(\.profileFieldLimits) private var profileFieldLimits
     let profile: Profile
     let namespace: Namespace.ID
     @Bindable var draft: ProfileDraft
@@ -70,7 +71,7 @@ struct ProfileEditContent: View {
                 .textContentType(.name)
                 .textInputAutocapitalization(.words)
                 .matchedFieldText(id: ProfileGeometryID.displayName, in: namespace, variant: .title)
-            FieldLimitCaption(count: draft.displayName.count, limit: ProfileDraft.displayNameLimit)
+            FieldLimitCaption(count: draft.displayName.count, limit: profileFieldLimits.displayName)
 
             if profile.canChangeHandle {
                 TextField("username", text: $draft.handle)
@@ -156,7 +157,7 @@ struct ProfileEditContent: View {
             .foregroundStyle(.primary)
             .keyboardType(.twitter)
             .matchedFieldText(id: ProfileGeometryID.bio, in: namespace, variant: .body)
-        FieldLimitCaption(count: draft.bio.count, limit: ProfileDraft.bioLimit)
+        FieldLimitCaption(count: draft.bio.count, limit: profileFieldLimits.bio)
     }
 
     // MARK: - Birthday
