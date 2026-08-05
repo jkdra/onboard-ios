@@ -116,8 +116,15 @@ final class NotificationService {
         let hex = tokenData.map { String(format: "%02.2hhx", $0) }.joined()
         currentTokenHex = hex
         guard let client = SupabaseClientFactory.client(for: .current) else { return }
+        // p_app_version is what makes a staged rollout measurable — without it
+        // there's no way to ask what share of users are on a build that can
+        // read remote config at all. Older clients omit it and the RPC defaults
+        // it to null, so both versions coexist safely in the field.
         _ = try? await client
-            .rpc("register_device_token", params: ["p_token": hex])
+            .rpc("register_device_token", params: [
+                "p_token": hex,
+                "p_app_version": AppVersion.current
+            ])
             .execute()
     }
 
