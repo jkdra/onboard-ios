@@ -61,6 +61,12 @@ struct RemoteConfig: Sendable, Equatable {
     var boardClearingSoonHours: Int { int("board_clearing_soon_hours") ?? 3 }
     var boardFinalHourLockoutHours: Int { int("board_final_hour_lockout_hours") ?? 1 }
 
+    /// The two window values bundled for `BoardSchedule` call sites.
+    var boardThresholds: BoardSchedule.Thresholds {
+        .init(clearingSoonHours: boardClearingSoonHours,
+              finalHourLockoutHours: boardFinalHourLockoutHours)
+    }
+
     // MARK: - Account rules (mirrors of server rules)
 
     var handleChangeWindowDays: Int { int("handle_change_window_days") ?? 14 }

@@ -67,7 +67,8 @@ struct ContentView: View {
         ProcessInfo.processInfo.arguments.contains("-dev.hideDevBlock")
 
     private var clearingSoon: Bool {
-        BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt)
+        BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt,
+                                     thresholds: remoteConfig.config.boardThresholds)
     }
 
     /// True only while the feed actually contains an *enabled* compose card — i.e.
@@ -114,6 +115,8 @@ struct ContentView: View {
         .environment(\.commentMaxLength, remoteConfig.config.commentMaxLength)
         .environment(\.profileFieldLimits, (displayName: remoteConfig.config.displayNameMaxLength,
                                             bio: remoteConfig.config.bioMaxLength))
+        .environment(\.handleChangeRule, (windowDays: remoteConfig.config.handleChangeWindowDays,
+                                          maxPerWindow: remoteConfig.config.handleChangeMaxPerWindow))
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.

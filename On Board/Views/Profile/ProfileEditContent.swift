@@ -12,6 +12,7 @@ import PhotosUI
 import SwiftUI
 
 struct ProfileEditContent: View {
+    @Environment(\.handleChangeRule) private var handleChangeRule
     @Environment(\.profileFieldLimits) private var profileFieldLimits
     let profile: Profile
     let namespace: Namespace.ID
@@ -30,7 +31,8 @@ struct ProfileEditContent: View {
 
     /// Friendly "in 6 days" for when the username may next be changed.
     private var handleUnlockText: String {
-        guard let at = profile.handleChangeAvailableAt else { return "soon" }
+        guard let at = profile.handleChangeAvailableAt(windowDays: handleChangeRule.windowDays,
+                                                       maxPerWindow: handleChangeRule.maxPerWindow) else { return "soon" }
         return Self.relativeDateTimeFormatter.localizedString(for: at, relativeTo: .now)
     }
 
@@ -73,7 +75,8 @@ struct ProfileEditContent: View {
                 .matchedFieldText(id: ProfileGeometryID.displayName, in: namespace, variant: .title)
             FieldLimitCaption(count: draft.displayName.count, limit: profileFieldLimits.displayName)
 
-            if profile.canChangeHandle {
+            if profile.canChangeHandle(windowDays: handleChangeRule.windowDays,
+                                       maxPerWindow: handleChangeRule.maxPerWindow) {
                 TextField("username", text: $draft.handle)
                     .textFieldStyle(.boardUsername)
                     .lineLimit(1)

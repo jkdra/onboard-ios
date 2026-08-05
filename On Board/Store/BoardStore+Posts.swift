@@ -19,7 +19,7 @@ extension BoardStore {
         // composer left open from before the cutoff). Covers expiry too: `allowsPosting`
         // is false once the deadline passes, so a stale composer can't write into a week
         // that has already ended while the client waits on the rollover.
-        guard BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt).allowsPosting else {
+        guard BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt, thresholds: boardThresholds).allowsPosting else {
             loadError = "Posting is closed for the final hour before the board clears."
             return false
         }

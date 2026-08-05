@@ -96,7 +96,8 @@ struct PostDetailView: View {
     var clearingSoonWeekEnd: Date? {
         guard !isReadOnly,
               let endsAt = store.activeBoardWeek?.endsAt,
-              BoardSchedule.isClearingSoon(weekEnd: endsAt) else { return nil }
+              BoardSchedule.isClearingSoon(weekEnd: endsAt,
+                                           thresholds: store.boardThresholds) else { return nil }
         return endsAt
     }
 

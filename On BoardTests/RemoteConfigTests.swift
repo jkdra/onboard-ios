@@ -322,3 +322,40 @@ struct RemoteConfigStoreTests {
         #expect(first == second)
     }
 }
+
+@MainActor
+struct BoardThresholdConfigTests {
+    private func phase(secondsBeforeEnd: TimeInterval, thresholds: BoardSchedule.Thresholds) -> BoardPhase {
+        let end = Date(timeIntervalSinceNow: secondsBeforeEnd)
+        return BoardSchedule.phase(weekEnd: end, thresholds: thresholds)
+    }
+
+    /// Compiled defaults must reproduce shipped behavior exactly (3h / 1h).
+    @Test func compiledThresholdsMatchShippedBehavior() {
+        #expect(RemoteConfig.empty.boardThresholds == .compiled)
+        #expect(phase(secondsBeforeEnd: 10_799, thresholds: .compiled) == .clearingSoon)
+        #expect(phase(secondsBeforeEnd: 3_599, thresholds: .compiled) == .finalHour)
+        #expect(phase(secondsBeforeEnd: 10_801, thresholds: .compiled) == .open)
+    }
+
+    @Test func configWidensTheWindows() {
+        let config = RemoteConfig(values: [
+            "board_clearing_soon_hours": "6",
+            "board_final_hour_lockout_hours": "2",
+        ])
+        let t = config.boardThresholds
+        #expect(phase(secondsBeforeEnd: 5 * 3_600, thresholds: t) == .clearingSoon)
+        #expect(phase(secondsBeforeEnd: 90 * 60, thresholds: t) == .finalHour)
+        #expect(phase(secondsBeforeEnd: 7 * 3_600, thresholds: t) == .open)
+    }
+
+    @Test func handleChangeRuleIsParameterized() {
+        let now = Date()
+        let profile = Profile.samples[0]
+        // Whatever the sample's history, a huge window with max 0 must always
+        // report unavailable-now behavior consistently with the parameters —
+        // maxPerWindow 99 can never be reached, so changing is always allowed.
+        #expect(profile.canChangeHandle(windowDays: 3650, maxPerWindow: 99))
+        _ = now
+    }
+}

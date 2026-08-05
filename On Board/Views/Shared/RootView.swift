@@ -88,6 +88,7 @@ struct RootView: View {
             HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
             store.configure(configuration: AppConfiguration.current)
             store.archiveWeekCacheLimit = remoteConfig.config.maxCachedArchiveWeeks
+            store.boardThresholds = remoteConfig.config.boardThresholds
             await auth.restoreSession()
             await syncSessionState()
             // Smile, hold briefly, then hand off. This deliberately adds ~0.33s to
@@ -124,6 +125,7 @@ struct RootView: View {
             // auth-flow flag have to stay fresh for signed-out users too.
             Task { await remoteConfig.refresh() }
             HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
+            store.boardThresholds = remoteConfig.config.boardThresholds
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshOnForeground() }
         }

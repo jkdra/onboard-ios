@@ -106,6 +106,11 @@ private struct ProfileFieldLimitsKey: EnvironmentKey {
     static let defaultValue = (displayName: 50, bio: 300)
 }
 
+private struct HandleChangeRuleKey: EnvironmentKey {
+    /// (windowDays, maxPerWindow) — mirrors the server's username-change rule.
+    static let defaultValue = (windowDays: 14, maxPerWindow: 2)
+}
+
 private struct EnabledReactionsKey: EnvironmentKey {
     /// The compiled set, so previews and any view outside the app's environment
     /// render the full bar.
@@ -158,5 +163,13 @@ extension EnvironmentValues {
     var profileFieldLimits: (displayName: Int, bio: Int) {
         get { self[ProfileFieldLimitsKey.self] }
         set { self[ProfileFieldLimitsKey.self] = newValue }
+    }
+
+    /// Username-change rate limit shown in the profile editor. Mirrors the
+    /// server rule; passing it through config means a server-side retune
+    /// reaches the UI without a release.
+    var handleChangeRule: (windowDays: Int, maxPerWindow: Int) {
+        get { self[HandleChangeRuleKey.self] }
+        set { self[HandleChangeRuleKey.self] = newValue }
     }
 }
