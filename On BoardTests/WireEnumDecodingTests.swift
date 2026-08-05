@@ -196,3 +196,32 @@ struct CommentVoteRowDecodingTests {
         #expect(mapped.values.first == .like)
     }
 }
+
+@MainActor
+struct MockSchoolMatchTests {
+    private func lookup(_ email: String) async throws -> SchoolMatch? {
+        let defaults = UserDefaults(suiteName: "test.mock.school")!
+        defaults.removePersistentDomain(forName: "test.mock.school")
+        return try await MockOnboardingService(defaults: defaults).lookupSchool(for: email)
+    }
+
+    /// The mock must mirror the live gate's subdomain-family semantics
+    /// (`school_domains.match_subdomains`), or mock mode can't exercise the
+    /// flow a cs.fullerton.edu student hits in production.
+    @Test func matchesTheExactDomain() async throws {
+        #expect(try await lookup("a@example.edu")?.schoolName == "Example University")
+    }
+
+    @Test func matchesSubdomainFamily() async throws {
+        #expect(try await lookup("a@cs.example.edu")?.schoolName == "Example University")
+    }
+
+    /// Same dot-boundary rule as the live `'%.' || domain` pattern.
+    @Test func rejectsLookalikeDomains() async throws {
+        #expect(try await lookup("a@evilexample.edu") == nil)
+    }
+
+    @Test func rejectsUnknownDomains() async throws {
+        #expect(try await lookup("a@lbcc.edu") == nil)
+    }
+}
