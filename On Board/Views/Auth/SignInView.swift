@@ -54,7 +54,7 @@ struct SignInView: View {
     /// window so we never swap in a separate loading screen here.
     @State var resolvingProvider: AuthProvider?
 
-    /// Server-tunable (`otp_cooldown_seconds`, default 60) — an anti-abuse dial
+    /// Server-tunable (`otp_cooldown_seconds`, default 30) — an anti-abuse dial
     /// on an endpoint that costs real money per send.
     private var otpCooldownSeconds: Int { remoteConfig.config.otpCooldownSeconds }
 
@@ -593,4 +593,5 @@ struct SignInView: View {
         ))
         .environment(BoardStore.sampleBoard())
         .environment(NetworkMonitor())
+        .environment(RemoteConfigStore())
 }

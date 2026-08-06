@@ -105,18 +105,11 @@ struct ContentView: View {
         // ArchivedWeekView) inherit it too. Every BoardFeedView beneath this point
         // registers its zoom sources in the namespace routeDestination zooms from.
         .environment(\.cardNamespace, activeCardNamespace)
-        // Set once here rather than read per leaf view: RemoteConfigStore is
-        // not in a #Preview's environment, and @Environment(_:.self) traps
-        // when the object is absent.
-        .environment(\.glassEffectsEnabled, remoteConfig.isEnabled(.glassEffects, for: auth.session?.userId))
-        .environment(\.photoAttachmentsEnabled, remoteConfig.isEnabled(.postPhotoAttachments, for: auth.session?.userId))
-        // Falls back to the compiled set when unset, so the bar is never empty.
-        .environment(\.enabledReactions, remoteConfig.config.enabledReactions ?? Reaction.defaultOrder)
-        .environment(\.commentMaxLength, remoteConfig.config.commentMaxLength)
-        .environment(\.profileFieldLimits, (displayName: remoteConfig.config.displayNameMaxLength,
-                                            bio: remoteConfig.config.bioMaxLength))
-        .environment(\.handleChangeRule, (windowDays: remoteConfig.config.handleChangeWindowDays,
-                                          maxPerWindow: remoteConfig.config.handleChangeMaxPerWindow))
+        // The config-driven environment values (glass, photo attachments,
+        // reactions, field limits…) are injected in RootView, not here — this
+        // view is a *sibling* of OnboardingCoordinator, and injections made
+        // here never reached the onboarding subtree (its profile step
+        // silently validated against the compiled limits).
         // Notification deep-link: fires on warm relaunch (post already cached),
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
@@ -648,10 +641,12 @@ struct ContentView: View {
     ContentView()
         .environment(BoardStore.previewBoard())
         .environment(AuthStore(service: MockAuthService()))
+        .environment(RemoteConfigStore())
 }
 
 #Preview("Live Feed") {
     LiveFeedPreview()
+        .environment(RemoteConfigStore())
 }
 
 private struct LiveFeedPreview: View {

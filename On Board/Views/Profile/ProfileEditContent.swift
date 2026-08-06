@@ -54,7 +54,10 @@ struct ProfileEditContent: View {
         .alert("Username locked", isPresented: $showHandleLockedAlert) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("You can change your username twice every 14 days. You'll be able to change it again \(handleUnlockText).")
+            // Interpolated from the same rule the gate reads — hardcoding
+            // "twice every 14 days" here meant retuning the config made the
+            // explanation lie about the limit it was explaining.
+            Text("You can change your username \(handleChangeRule.maxPerWindow == 1 ? "once" : handleChangeRule.maxPerWindow == 2 ? "twice" : "\(handleChangeRule.maxPerWindow) times") every \(handleChangeRule.windowDays) days. You'll be able to change it again \(handleUnlockText).")
         }
     }
 

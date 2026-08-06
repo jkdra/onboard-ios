@@ -332,4 +332,5 @@ struct SettingsView: View {
         auth: AuthStore(service: MockAuthService()),
         network: NetworkMonitor()
     ))
+        .environment(RemoteConfigStore())
 }

@@ -17,7 +17,10 @@
 //  tips, covers, and popovers, and leaves the board usable behind it, which is
 //  the right posture for a nudge anyway.
 //
-//  A dismissed card stays dismissed for that version — nagging on every
+//  A dismissed card stays dismissed for that OFFER — the key stores the
+//  recommended_version string the user declined, not the running build, so
+//  "Not now" against 1.1.2 stays quiet until the server recommends something
+//  NEWER (1.1.3 re-prompts; re-seeding 1.1.2 doesn't). Nagging on every
 //  foreground trains people to dismiss without reading, which is exactly the
 //  reflex you don't want the day the hard wall appears for real.
 //
@@ -31,6 +34,11 @@ import SwiftUI
 
 struct UpdateAvailableModifier: ViewModifier {
     let requirement: UpdateRequirement
+    /// The `recommended_version` string this card is offering. Persisted on
+    /// dismiss so the same offer stays dismissed while a newer one re-prompts
+    /// — storing `AppVersion.current` here (the original design) silenced
+    /// every future recommendation for the life of the running build.
+    let offeredVersion: String?
 
     @Environment(\.openURL) private var openURL
     @Environment(\.dynamicTypeSize) private var typeSize
@@ -55,8 +63,11 @@ struct UpdateAvailableModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
             .onChange(of: requirement, initial: true) { _, requirement in
-                showingCard = requirement == .recommended
-                    && dismissedForVersion != AppVersion.current
+                guard requirement == .recommended, let offeredVersion else {
+                    showingCard = false
+                    return
+                }
+                showingCard = dismissedForVersion != offeredVersion
             }
             .overlay(alignment: .bottom) {
                 if showingCard {
@@ -68,7 +79,7 @@ struct UpdateAvailableModifier: ViewModifier {
     }
 
     private func dismiss() {
-        dismissedForVersion = AppVersion.current
+        dismissedForVersion = offeredVersion ?? ""
         showingCard = false
     }
 
@@ -170,8 +181,8 @@ struct UpdateAvailableModifier: ViewModifier {
 }
 
 extension View {
-    func updatePrompt(_ requirement: UpdateRequirement) -> some View {
-        modifier(UpdateAvailableModifier(requirement: requirement))
+    func updatePrompt(_ requirement: UpdateRequirement, offeredVersion: String?) -> some View {
+        modifier(UpdateAvailableModifier(requirement: requirement, offeredVersion: offeredVersion))
     }
 }
 

@@ -5,12 +5,13 @@
 //  The blocking "this build is too old" wall, in the same visual family as
 //  OfflineGateView — the app's established full-screen system-wall look
 //  (flat blue, heavy text glyph, white type, monospaced stop code, angular
-//  outline button). Two situations present it:
+//  outline button). Two situations show it:
 //
-//  * the remote version gate (`min_supported_version`), via
-//    UpdateAvailableModifier's full-screen cover, and
+//  * the remote version gate (`min_supported_version`), as a root BRANCH in
+//    RootView — never a presentation; a branch can't silently fail to appear
+//    the way the original fullScreenCover did, and
 //  * `OnboardingStep.unrecognized`, when the server's onboarding flow is newer
-//    than this build understands.
+//    than this build understands (OnboardingUpdateRequiredView wraps this).
 //
 //  Deliberately no dismiss affordance of any kind: the wall only appears when
 //  no local behavior is correct, so every way out leads through the App Store.
@@ -39,7 +40,10 @@ struct UpdateRequiredWall: View {
                 Text(title)
                     .fontStyle(.title3)
                     .fontWeight(.semibold)
-                    .accessibilityLabel("Update required")
+                    // A heading trait, NOT a replacement label — an override
+                    // here silenced the actual title (including the custom one
+                    // OnboardingUpdateRequiredView passes) for VoiceOver users.
+                    .accessibilityAddTraits(.isHeader)
 
                 Text(message)
                     .fontStyle(.body)
@@ -71,7 +75,6 @@ struct UpdateRequiredWall: View {
         .environment(\.colorScheme, .light)
         .statusBarHidden()
         .safeAreaPadding()
-        .interactiveDismissDisabled()
     }
 }
 

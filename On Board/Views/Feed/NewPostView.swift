@@ -316,4 +316,5 @@ struct NewPostView: View {
     NewPostView()
         .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
         .environment(AuthStore(service: MockAuthService()))
+        .environment(RemoteConfigStore())
 }

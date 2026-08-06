@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 On Board is a campus bulletin board iOS app built with SwiftUI + Supabase. Students join a weekly board and post under their handle, react, and comment. It is **not** an anonymous app: posts are authored by a handle with a profile, avatar, and follow graph. Authorship is merely quiet on the feed grid — cards show a timestamp, not a name — but the opened post shows who wrote it and links to their profile. New boards open every Monday at midnight.
 
-**Core functions:** per-campus weekly boards (open Monday, cleared at the next reset) shown as a tone-colored masonry feed; handle + profile identity with avatars, following, and a "Pop Score"; posts with optional images and tags; four reactions (like / hug / laugh / spark) and threaded comments; campus-email verification; an invite-gated waitlist with a viral referral ladder (instant invites skip it); push notifications; a weekly archive; and expected-graduation collection (alumni-only boards are planned, not yet built). A mascot, **The Host** (the app icon with a face), narrates the post-admission welcome + pledge.
+**Core functions:** per-campus weekly boards (open Monday, cleared at the next reset) shown as a tone-colored masonry feed; handle + profile identity with avatars, following, and a "Pop Score"; posts with optional images and tags; four reactions (like / dislike / laugh / hug — matching the `reaction_type` Postgres enum and `Reaction.swift`) and threaded comments; campus-email verification; an invite-gated waitlist with a viral referral ladder (instant invites skip it); push notifications; a weekly archive; and expected-graduation collection (alumni-only boards are planned, not yet built). A mascot, **The Host** (the app icon with a face), narrates the post-admission welcome + pledge.
 
 ## Associated Projects
 
@@ -211,6 +211,7 @@ Push is delivered via APNs using a `.p8` key stored as a Supabase Edge Function 
 | `reaction` | `notify_on_reaction` | `push_reactions` |
 | `comment` | `notify_on_comment` | `push_comments` |
 | `followed_post` | `trg_notify_on_followed_post` on `posts` | `push_followed_posts` + `push_notification_ledger` dedupe |
+| `report` | `trg_notify_on_report` on `reports` | none (emails support@onboardapp.org, not a push) |
 
 > **Every `notify_push` trigger name needs a matching `case` in the Edge Function's
 > `switch`.** `followed_post` shipped without one for weeks: the DB trigger fired, the

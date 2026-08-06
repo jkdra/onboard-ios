@@ -269,4 +269,5 @@ struct OnboardingWaitlistStepView: View {
         auth: AuthStore(service: MockAuthService()),
         network: NetworkMonitor()
     ))
+        .environment(RemoteConfigStore())
 }

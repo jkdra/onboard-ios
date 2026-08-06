@@ -24,8 +24,15 @@ struct GlassBackground<S: Shape>: View {
     var interactive: Bool = false
     var fallback: AnyShapeStyle = AnyShapeStyle(.regularMaterial)
 
+    // The remote kill switch (`flag_glassEffects`). Honored here so the flag
+    // covers every surface routed through this primitive — before this read,
+    // only the four hand-rolled #available sites obeyed it, and pulling the
+    // switch mid-incident would have produced a half-glass app that no one
+    // had ever seen. Preview-safe: the key defaults to true.
+    @Environment(\.glassEffectsEnabled) private var glassEnabled
+
     var body: some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEnabled {
             Color.clear.glassEffect(interactive ? .regular.interactive() : .regular, in: shape)
         } else {
             shape.fill(fallback)

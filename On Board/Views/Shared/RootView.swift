@@ -77,13 +77,26 @@ struct RootView: View {
                 }
             } else {
                 mainContent
-                    // Soft update prompt lives here, on the settled post-bootstrap
-                    // tree — presenting from the outer Group during the bootstrap
-                    // swap is how it silently failed to appear. No-op until
-                    // recommended_version is seeded.
-                    .updatePrompt(remoteConfig.config.updateRequirement())
             }
         }
+        // Config-driven environment values are injected HERE, on the root
+        // Group, so every branch sees them — ContentView and
+        // OnboardingCoordinator are siblings, and injecting these on
+        // ContentView (as originally shipped) left the onboarding subtree
+        // reading each EnvironmentKey's compiled default: the profile step
+        // validated against hardcoded limits and the progress bar ignored the
+        // glass kill switch. Set once here rather than read per leaf view:
+        // RemoteConfigStore is not in a #Preview's environment, and
+        // @Environment(_:.self) traps when the object is absent.
+        .environment(\.glassEffectsEnabled, remoteConfig.isEnabled(.glassEffects, for: auth.session?.userId))
+        .environment(\.photoAttachmentsEnabled, remoteConfig.isEnabled(.postPhotoAttachments, for: auth.session?.userId))
+        // Falls back to the compiled set when unset, so the bar is never empty.
+        .environment(\.enabledReactions, remoteConfig.config.enabledReactions ?? Reaction.defaultOrder)
+        .environment(\.commentMaxLength, remoteConfig.config.commentMaxLength)
+        .environment(\.profileFieldLimits, (displayName: remoteConfig.config.displayNameMaxLength,
+                                            bio: remoteConfig.config.bioMaxLength))
+        .environment(\.handleChangeRule, (windowDays: remoteConfig.config.handleChangeWindowDays,
+                                          maxPerWindow: remoteConfig.config.handleChangeMaxPerWindow))
         .animation(.smooth, value: auth.isSignedIn)
         .animation(.smooth, value: onboarding.isComplete)
         .task {
@@ -92,14 +105,13 @@ struct RootView: View {
             // path. A failed or slow fetch leaves the last-known (or compiled
             // default) values in place, which is always a usable app.
             Task { await remoteConfig.refresh() }
-            // Imperative engine, not a rendered view — set the kill switch
-            // directly rather than threading an environment value through
-            // WelcomeOnBoardView. Re-applied on foreground below so a config
-            // change takes effect without a relaunch.
-            HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
             store.configure(configuration: AppConfiguration.current)
-            store.archiveWeekCacheLimit = remoteConfig.config.maxCachedArchiveWeeks
-            store.boardThresholds = remoteConfig.config.boardThresholds
+            // From the *cached* config, synchronously — the fetch above hasn't
+            // landed yet. The .onChange(of: remoteConfig.config) below re-runs
+            // this the moment any fetch actually changes something, so the
+            // imperative consumers are never a refresh cycle behind the
+            // observable ones.
+            applyImperativeConfig()
             await auth.restoreSession()
             await syncSessionState()
             // Smile, hold briefly, then hand off. This deliberately adds ~0.33s to
@@ -133,12 +145,19 @@ struct RootView: View {
             guard didBootstrap, phase == .active else { return }
             network.recheck()
             // Above the isSignedIn guard on purpose — the version gate and any
-            // auth-flow flag have to stay fresh for signed-out users too.
+            // auth-flow flag have to stay fresh for signed-out users too. The
+            // config onChange below picks up whatever this fetch changes.
             Task { await remoteConfig.refresh() }
-            HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
-            store.boardThresholds = remoteConfig.config.boardThresholds
             guard auth.isSignedIn else { return }
             Task { await onboarding.refreshOnForeground() }
+        }
+        // The imperative consumers (HostVoice, BoardStore's copies) don't
+        // observe RemoteConfigStore, so re-apply them whenever a fetch lands a
+        // real change. Without this they ran one full refresh cycle stale: a
+        // flag pulled mid-incident took effect on the SECOND foreground, not
+        // the first.
+        .onChange(of: remoteConfig.config) { _, _ in
+            applyImperativeConfig()
         }
         .onChange(of: onboarding.needsOnboarding) { _, needsOnboarding in
             if needsOnboarding {
@@ -161,6 +180,9 @@ struct RootView: View {
         }
         .onChange(of: auth.isSignedIn) { _, isSignedIn in
             if !isSignedIn { sawIncompleteOnboarding = false }
+            // hostVoice buckets per user, so its resolution can flip on
+            // sign-in/out even though the config itself didn't change.
+            applyImperativeConfig()
         }
         .fullScreenCover(isPresented: $showWelcome) {
             WelcomeOnBoardView(boardName: onboarding.status?.boardName)
@@ -176,6 +198,16 @@ struct RootView: View {
             onboardingErrorView(message)
         } else if auth.isSignedIn, onboarding.isComplete {
             ContentView()
+                // Soft update prompt: on the settled post-bootstrap tree
+                // (presenting from the outer Group during the bootstrap swap is
+                // how it silently failed to appear), and deliberately on the
+                // FEED branch only — as a bottom overlay it composited over the
+                // sign-in/onboarding funnel, covering low-anchored Continue
+                // buttons with a dismissible nag. A user mid-funnel gets it
+                // right here the moment they land. No-op until
+                // recommended_version is seeded.
+                .updatePrompt(remoteConfig.config.updateRequirement(),
+                              offeredVersion: remoteConfig.config.recommendedVersion)
                 .preferredColorScheme(appearance.colorScheme)
         } else {
             // Covers: not signed in, signed in + loading status, signed in + needs onboarding.
@@ -185,6 +217,18 @@ struct RootView: View {
     }
 
 
+
+    /// Pushes config into the consumers that can't observe RemoteConfigStore
+    /// themselves: HostVoice is an imperative engine (a static isn't
+    /// observable), and BoardStore holds copies because a model object can't
+    /// read the SwiftUI environment. Called from the launch task (cached
+    /// config, synchronously), from the config onChange (fresh fetches), and
+    /// on sign-in/out (per-user flag bucketing).
+    private func applyImperativeConfig() {
+        HostVoice.isEnabled = remoteConfig.isEnabled(.hostVoice, for: auth.session?.userId)
+        store.archiveWeekCacheLimit = remoteConfig.config.maxCachedArchiveWeeks
+        store.boardThresholds = remoteConfig.config.boardThresholds
+    }
 
     /// One orchestration path per auth/onboarding change — avoids duplicate refresh RPCs.
     private var sessionSyncToken: SessionSyncToken {
@@ -290,4 +334,5 @@ private struct SessionSyncToken: Equatable {
         ))
         .environment(BoardStore.previewBoard())
         .environment(NetworkMonitor())
+        .environment(RemoteConfigStore())
 }

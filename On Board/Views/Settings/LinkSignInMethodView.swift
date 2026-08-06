@@ -34,7 +34,7 @@ struct LinkSignInMethodView: View {
     @State private var submittedDestination = ""
     @State private var resendCooldown = OTPCooldown()
 
-    /// Server-tunable (`otp_cooldown_seconds`, default 60) — see SignInView.
+    /// Server-tunable (`otp_cooldown_seconds`, default 30) — see SignInView.
     private var otpCooldownSeconds: Int { remoteConfig.config.otpCooldownSeconds }
 
     private var usesLiveBackend: Bool {

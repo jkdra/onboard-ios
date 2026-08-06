@@ -133,9 +133,13 @@ struct RemoteConfig: Sendable, Equatable {
 // MARK: - Version gating
 
 enum AppVersion {
-    /// Current `CFBundleShortVersionString`, e.g. "1.1.1".
+    /// Current `CFBundleShortVersionString`, e.g. "1.1.1". Empty when the
+    /// Info.plist key is somehow missing — NOT "0": "0" is older than every
+    /// possible gate, so that fallback would hard-wall every user with no
+    /// local escape, while "" is unparseable and `isOlder` deliberately never
+    /// gates on anything it can't parse.
     nonisolated static var current: String {
-        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     }
 
     /// Numeric, component-wise comparison. A plain string compare reads "1.10"
