@@ -21,6 +21,11 @@
 //  foreground trains people to dismiss without reading, which is exactly the
 //  reflex you don't want the day the hard wall appears for real.
 //
+//  The card's corner radius is *derived*, not a constant: concentric corners
+//  require outer radius = inner radius + the gap between them, so it is the
+//  buttons' measured capsule radius plus `cardPadding`. Hardcoding it would
+//  drift the moment Dynamic Type changed the button height.
+//
 
 import SwiftUI
 
@@ -28,8 +33,24 @@ struct UpdateAvailableModifier: ViewModifier {
     let requirement: UpdateRequirement
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("update.dismissedForVersion") private var dismissedForVersion = ""
     @State private var showingCard = false
+    @State private var buttonHeight: CGFloat = 0
+
+    @ScaledMetric(relativeTo: .title2) private var logoSize: CGFloat = 34
+
+    /// Gap between the buttons and the card edge — also the term that keeps
+    /// the card's corners concentric with the capsule buttons.
+    private static let cardPadding: CGFloat = 18
+
+    /// Concentric outer radius: the capsules' own radius (half their measured
+    /// height, so it tracks Dynamic Type) plus the padding between them and
+    /// the card edge. The fallback only paints the first frame, before the
+    /// buttons have reported a height.
+    private var cardCornerRadius: CGFloat {
+        buttonHeight > 0 ? buttonHeight / 2 + Self.cardPadding : 43
+    }
 
     func body(content: Content) -> some View {
         content
@@ -53,45 +74,28 @@ struct UpdateAvailableModifier: ViewModifier {
 
     private var updateCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                BrandLogo(size: 34)
-                Text("A new On Board is out.")
-                    .fontStyle(.title3)
-                Spacer(minLength: 0)
+            header
+
+            // Dropped at accessibility sizes, same call UpdateRequiredWall
+            // makes with its stop code: four wrapped lines of pure flavor push
+            // the buttons off a small screen, and the title plus a labelled
+            // Update button already say everything load-bearing.
+            if !typeSize.isAccessibilitySize {
+                Text("Fixes, polish, the works — it only takes a second to grab.")
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Fixes, polish, the works — it only takes a second to grab.")
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 12) {
-                Button {
-                    dismiss()
-                } label: {
-                    Text("Not now")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.boardSecondary)
-
-                Button {
-                    openURL(AppLinks.appStoreURL)
-                    dismiss()
-                } label: {
-                    Label("Update", systemImage: "arrow.down.circle")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.boardPrimary)
-            }
-            .padding(.top, 4)
+            actions
+                .padding(.top, 4)
         }
-        .padding(18)
+        .padding(Self.cardPadding)
         .background {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
+            let shape = RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+            shape
                 .fill(.regularMaterial)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .strokeBorder(.primary.opacity(0.10), lineWidth: 1)
-                }
+                .overlay { shape.strokeBorder(.primary.opacity(0.10), lineWidth: 1) }
                 .shadow(color: .black.opacity(0.18), radius: 18, y: 6)
         }
         .padding(.horizontal, 16)
@@ -99,10 +103,86 @@ struct UpdateAvailableModifier: ViewModifier {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Update available")
     }
+
+    /// The mark sits beside the title normally, above it at accessibility
+    /// sizes — a 34pt-scaled logo plus wrapped title leaves the row no usable
+    /// width for text.
+    @ViewBuilder
+    private var header: some View {
+        // Scales with type, but capped: unbounded, AX5 takes it past 80pt and
+        // the mark alone costs more vertical space than both buttons.
+        let logo = BrandLogo(size: min(logoSize, 52))
+        let title = Text("A new On Board is out.")
+            .fontStyle(.title3)
+            .fixedSize(horizontal: false, vertical: true)
+
+        if typeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
+                logo
+                title
+            }
+        } else {
+            HStack(spacing: 12) {
+                logo
+                title
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    /// Side-by-side normally; stacked at accessibility sizes, where two
+    /// half-width capsules would wrap their labels to three lines each.
+    /// Update leads when stacked — vertical order carries the emphasis that
+    /// filled-vs-outline carries in the row.
+    @ViewBuilder
+    private var actions: some View {
+        let notNow = Button(action: dismiss) {
+            Text("Not now")
+                .buttonLabelFit()
+        }
+        .buttonStyle(.boardSecondary)
+
+        let update = Button {
+            openURL(AppLinks.appStoreURL)
+            dismiss()
+        } label: {
+            Label("Update", systemImage: "arrow.down.circle")
+                .buttonLabelFit()
+        }
+        .buttonStyle(.boardPrimary)
+        // Measured on one button, not the row: stacked, the row is two
+        // capsules tall and would over-round the card. Both capsules are the
+        // same height in either layout, so either one is representative.
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { buttonHeight = $0 }
+
+        if typeSize.isAccessibilitySize {
+            VStack(spacing: 10) {
+                update
+                notNow
+            }
+        } else {
+            HStack(spacing: 12) {
+                notNow
+                update
+            }
+        }
+    }
 }
 
 extension View {
     func updatePrompt(_ requirement: UpdateRequirement) -> some View {
         modifier(UpdateAvailableModifier(requirement: requirement))
+    }
+}
+
+private extension View {
+    /// Fills its half of the row and shrinks rather than wraps. Without the
+    /// line limit, "Update" broke to "Updat / e" at xxxLarge — which also made
+    /// the two capsules different heights, so the card's derived corner radius
+    /// no longer matched the button it was measured from.
+    func buttonLabelFit() -> some View {
+        lineLimit(1)
+            .minimumScaleFactor(0.75)
+            .frame(maxWidth: .infinity)
     }
 }
