@@ -440,7 +440,11 @@ struct ContentView: View {
             // anti-pattern that caused the nav-principal slide bug above. Keeping
             // the item mounted and fading its content via `showsBottomBarNewPost`
             // instead keeps the toolbar's item count stable while scrolling.
-            if postingEnabled {
+            // iOS 26+ only: there the button rides the bottom bar's liquid
+            // glass and looks native. The pre-26 fallback (a hand-rolled
+            // material circle) never sat right against the masonry — on 18–25
+            // the in-feed compose card is the sole entry point.
+            if postingEnabled, isIOS26OrLater {
                 ToolbarItem(placement: .bottomBar) {
                     bottomBarNewPostButton
                 }
@@ -449,11 +453,11 @@ struct ContentView: View {
     }
 
     /// Icon-only compose button surfaced in the bottom bar once the in-feed card
-    /// scrolls away. On iOS 26 the toolbar's glass sits behind it; earlier versions
-    /// get a circular material of their own (the bar background is hidden above).
-    @ViewBuilder
+    /// scrolls away. iOS 26+ only (gated at the ToolbarItem) — the toolbar's
+    /// liquid glass is what makes it look native, and no pre-26 approximation
+    /// of that material read as anything but off.
     private var bottomBarNewPostButton: some View {
-        let button = Button {
+        Button {
             showNewPost = true
         } label: {
             Label("New post", systemImage: "plus")
@@ -464,14 +468,6 @@ struct ContentView: View {
         .accessibilityHidden(!showsBottomBarNewPost)
         .allowsHitTesting(showsBottomBarNewPost)
         .opacity(showsBottomBarNewPost ? 1 : 0)
-
-        if isIOS26OrLater {
-            button
-        } else {
-            button
-                .padding(12)
-                .background(.regularMaterial, in: Circle())
-        }
     }
 
     @ViewBuilder
