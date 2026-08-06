@@ -51,7 +51,13 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if shouldShowOfflineGate {
+            if remoteConfig.config.updateRequirement() == .required {
+                // A root branch, not a presentation — same mechanism as the
+                // offline gate below, and for the same reason: this must never
+                // silently fail to appear. Checked first: an out-of-date build
+                // is out of date regardless of connectivity or bootstrap state.
+                UpdateRequiredWall()
+            } else if shouldShowOfflineGate {
                 OfflineGateView {
                     network.recheck()
                     Task { await retryAfterConnectivityRestored() }
@@ -71,6 +77,11 @@ struct RootView: View {
                 }
             } else {
                 mainContent
+                    // Soft update prompt lives here, on the settled post-bootstrap
+                    // tree — presenting from the outer Group during the bootstrap
+                    // swap is how it silently failed to appear. No-op until
+                    // recommended_version is seeded.
+                    .updatePrompt(remoteConfig.config.updateRequirement())
             }
         }
         .animation(.smooth, value: auth.isSignedIn)
@@ -155,8 +166,6 @@ struct RootView: View {
             WelcomeOnBoardView(boardName: onboarding.status?.boardName)
                 .preferredColorScheme(appearance.colorScheme)
         }
-        // No-op until min_supported_version / recommended_version are seeded.
-        .updatePrompt(remoteConfig.config.updateRequirement())
     }
 
 
