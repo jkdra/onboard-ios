@@ -64,11 +64,14 @@ struct UpdateAvailableModifier: ViewModifier {
                 .fontStyle(.footnote)
                 .foregroundStyle(.secondary)
 
-            HStack(spacing: 14) {
-                Button("Not now", action: dismiss)
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 6)
+            HStack(spacing: 12) {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Not now")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.boardSecondary)
 
                 Button {
                     openURL(AppLinks.appStoreURL)
