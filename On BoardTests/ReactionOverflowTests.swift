@@ -121,4 +121,53 @@ struct ReactionOverflowTests {
         #expect(!bar.hasOverflow)
         #expect(bar.total == 2)
     }
+
+    // MARK: - The peek
+
+    /// The peek may read counts — it changes only the slot's transient FACE,
+    /// never the layout. These pin the relative threshold: dominant overflow
+    /// reaction, ≥15% of the post's total, floors of 3 uses / 5 total.
+    @Test func peekPicksTheDominantOverflowReaction() {
+        let candidate = ReactionBar.peekCandidate(
+            overflow: [.laugh, .hug],
+            counts: [.like: 22, .dislike: 0, .laugh: 47, .hug: 6]
+        )
+        #expect(candidate == .laugh)
+    }
+
+    /// A permanent reaction dominating the post must not produce a peek —
+    /// only what's BEHIND the menu is worth hinting at.
+    @Test func peekIgnoresPermanentReactions() {
+        let candidate = ReactionBar.peekCandidate(
+            overflow: [.laugh, .hug],
+            counts: [.like: 89, .laugh: 1, .hug: 0]
+        )
+        #expect(candidate == nil)
+    }
+
+    /// Relative, not absolute: 3 laughs is a signal on a quiet post…
+    @Test func smallCountsPeekWhenTheShareIsReal() {
+        let candidate = ReactionBar.peekCandidate(
+            overflow: [.laugh, .hug],
+            counts: [.like: 4, .laugh: 3]
+        )
+        #expect(candidate == .laugh)
+    }
+
+    /// …and 3 laughs is noise on a loud one.
+    @Test func smallShareDoesNotPeekOnALoudPost() {
+        let candidate = ReactionBar.peekCandidate(
+            overflow: [.laugh, .hug],
+            counts: [.like: 200, .laugh: 3]
+        )
+        #expect(candidate == nil)
+    }
+
+    @Test func quietPostsNeverPeek() {
+        let candidate = ReactionBar.peekCandidate(
+            overflow: [.laugh, .hug],
+            counts: [.laugh: 2]
+        )
+        #expect(candidate == nil)
+    }
 }

@@ -20,7 +20,12 @@ struct ReactionBar: View {
     var isRecord: Bool = false
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
+
+    /// Transient face on the overflow slot — see `peekCandidate`. Driven by
+    /// the one-shot `.task` below; never persisted, never announced.
+    @State private var peekedReaction: Reaction?
 
     private let outerRadius: CGFloat = 32
     private let innerRadius: CGFloat = 4
@@ -87,6 +92,31 @@ struct ReactionBar: View {
         )
     }
 
+    // MARK: - The peek
+
+    /// Which overflow reaction (if any) the "+" briefly peeks on appearance —
+    /// a post where laugh is doing real work hints that more reactions live
+    /// behind the menu, without the slot ever *being* anything but the menu
+    /// button. Thresholds are RELATIVE (share of the post's total) plus a
+    /// small floor: an absolute cutoff behaves completely differently on a
+    /// board of 15 and a board of 500.
+    ///
+    /// This is the one place counts may influence the overflow slot, and only
+    /// its transient FACE — never its identity, position, or behavior. The
+    /// layout rule (`slots` takes no counts) stays intact.
+    static func peekCandidate(
+        overflow: [Reaction],
+        counts: [Reaction: Int]
+    ) -> Reaction? {
+        let total = counts.values.reduce(0, +)
+        guard total >= 5 else { return nil }
+        let best = overflow
+            .compactMap { reaction in counts[reaction].map { (reaction, $0) } }
+            .max { $0.1 < $1.1 }
+        guard let best, best.1 >= 3, Double(best.1) / Double(total) >= 0.15 else { return nil }
+        return best.0
+    }
+
     var body: some View {
         reactionStrip
             .sensoryFeedback(trigger: selected) { _, _ in
@@ -94,6 +124,26 @@ struct ReactionBar: View {
             }
             .allowsHitTesting(isInteractive && !isRecord)
             .opacity(isRecord ? 1 : (isInteractive ? 1 : 0.85))
+            .task {
+                // The peek: ~2s of the post's dominant overflow reaction, at
+                // reduced opacity, on the "+" — then back. ONE-SHOT per
+                // appearance (`.task` cancels on disappear; nothing loops,
+                // per the repeatForever/UI-test lesson), only when nothing is
+                // selected (a dimmed peek and a tinted selection are the same
+                // emoji — gating on `overflowFace == nil` is what keeps them
+                // unambiguous), and skipped entirely under Reduce Motion.
+                guard reactionOverflowEnabled, isInteractive, !isRecord, !reduceMotion,
+                      !typeSize.isAccessibilitySize else { return }
+                let slots = self.slots
+                guard slots.hasOverflow, slots.overflowFace == nil,
+                      let candidate = Self.peekCandidate(overflow: slots.overflow, counts: counts)
+                else { return }
+                try? await Task.sleep(for: .seconds(0.8))
+                guard !Task.isCancelled, self.slots.overflowFace == nil else { return }
+                withAnimation(.smooth(duration: 0.35)) { peekedReaction = candidate }
+                try? await Task.sleep(for: .seconds(2))
+                withAnimation(.smooth(duration: 0.35)) { peekedReaction = nil }
+            }
     }
 
     @ViewBuilder
@@ -166,8 +216,21 @@ struct ReactionBar: View {
                         .contentTransition(.numericText(value: Double(displayCount(for: face))))
                         .animation(.snappy(duration: 0.35), value: displayCount(for: face))
                 } else {
-                    Image(systemName: "plus.circle.fill")
-                        .fontStyle(.caption)
+                    // Plus and peek layered so the swap is a pure crossfade —
+                    // no layout change, no width shift. The peek is a HINT:
+                    // dimmed enough that it can't read as a selected state
+                    // (selection is full-opacity on a tinted pill).
+                    ZStack {
+                        Image(systemName: "plus.circle.fill")
+                            .fontStyle(.caption)
+                            .opacity(peekedReaction == nil ? 1 : 0)
+                        if let peeked = peekedReaction {
+                            Text(peeked.emoji)
+                                .fontStyle(.caption)
+                                .opacity(0.55)
+                                .transition(.opacity)
+                        }
+                    }
                 }
             }
             .foregroundStyle(face != nil ? tone.legibleForeground : .primary)
