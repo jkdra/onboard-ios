@@ -38,23 +38,151 @@ import UIKit
 final class MarkupEditorController {
     weak var textView: UITextView?
     var currentBlock: PostBlockKind = .body
+    /// The inline traits considered "applied" at the current caret/selection —
+    /// drives the toolbar's highlighted state. Caret: the traits of the run
+    /// the caret sits in. Selection: a trait is active only if EVERY selected
+    /// character carries it.
+    var activeTraits: InlineTraits = []
     /// Bumped by the coordinator after any programmatic edit so SwiftUI
     /// pulls the new text into the binding.
     fileprivate var onProgrammaticChange: (() -> Void)?
 
+    static func trait(for delimiter: String) -> InlineTraits {
+        switch delimiter {
+        case "**": .bold
+        case "*": .italic
+        case "__": .underline
+        case "~~": .strikethrough
+        default: []
+        }
+    }
+
+    private static func traits(forToken token: String) -> InlineTraits {
+        switch token {
+        case "***": [.bold, .italic]
+        default: trait(for: token)
+        }
+    }
+
     func applyInline(_ delimiter: String) {
-        guard let textView, let selection = textView.selectedTextRange else { return }
-        let selected = textView.text(in: selection) ?? ""
+        guard let textView else { return }
+        let trait = Self.trait(for: delimiter)
+
+        // Toggle OFF: the trait is already applied here — remove the
+        // enclosing pair for the WHOLE run, whether the user has a bare
+        // caret, a partial selection, or the exact run selected.
+        if activeTraits.contains(trait) {
+            removeEnclosingPair(for: trait)
+            onProgrammaticChange?()
+            return
+        }
+
+        let selection = textView.selectedRange
+        guard let uiSelection = uiRange(textView, selection) else { return }
+        let selected = textView.text(in: uiSelection) ?? ""
         if selected.isEmpty {
             // Insert a pair, park the caret between them.
-            textView.replace(selection, withText: delimiter + delimiter)
-            if let position = textView.position(from: selection.start, offset: delimiter.count) {
-                textView.selectedTextRange = textView.textRange(from: position, to: position)
-            }
+            textView.replace(uiSelection, withText: delimiter + delimiter)
+            textView.selectedRange = NSRange(location: selection.location + delimiter.count, length: 0)
         } else {
-            textView.replace(selection, withText: delimiter + selected + delimiter)
+            textView.replace(uiSelection, withText: delimiter + selected + delimiter)
+            // KEEP the text selected (shifted past the opening delimiter) —
+            // collapsing to the end forces reselection for every follow-up.
+            textView.selectedRange = NSRange(location: selection.location + delimiter.count,
+                                             length: (selected as NSString).length)
         }
         onProgrammaticChange?()
+    }
+
+    /// Removes the delimiter pair introducing `trait` around the caret /
+    /// selection. Handles the stacked token: un-bolding `***x***` leaves
+    /// `*x*`, un-italicising it leaves `**x**`.
+    private func removeEnclosingPair(for trait: InlineTraits) {
+        guard let textView else { return }
+        let sourceText = textView.text ?? ""
+        let markup = PostMarkup.parse(sourceText)
+        let selection = textView.selectedRange
+        let probe = selection.length > 0
+            ? selection.location
+            : max(selection.location - 1, 0)
+
+        // The content span carrying the trait at the probe point.
+        guard let anchorIndex = markup.spans.firstIndex(where: { span in
+            guard !span.isMarker, span.traits.contains(trait) else { return false }
+            let range = NSRange(span.range, in: sourceText)
+            return probe >= range.location && probe <= range.upperBound
+        }) else { return }
+
+        func tokenText(_ span: PostMarkup.Span) -> String { String(sourceText[span.range]) }
+
+        // Nearest introducing marker before the anchor, and its mate after.
+        guard let openIndex = stride(from: anchorIndex - 1, through: 0, by: -1).first(where: { index in
+            let span = markup.spans[index]
+            return span.isMarker && Self.traits(forToken: tokenText(span)).contains(trait)
+        }) else { return }
+        guard let closeIndex = ((anchorIndex + 1)..<markup.spans.count).first(where: { index in
+            let span = markup.spans[index]
+            return span.isMarker && tokenText(span) == tokenText(markup.spans[openIndex])
+        }) else { return }
+
+        let token = tokenText(markup.spans[openIndex])
+        // Removing bold ("**") from "***" must leave "*"; every plain token
+        // removes to nothing.
+        let replacement = reducedToken(token, removing: trait)
+
+        let openNS = NSRange(markup.spans[openIndex].range, in: sourceText)
+        let closeNS = NSRange(markup.spans[closeIndex].range, in: sourceText)
+
+        // Back to front so the open range stays valid.
+        if let closeRange = uiRange(textView, closeNS) { textView.replace(closeRange, withText: replacement) }
+        if let openRange = uiRange(textView, openNS) { textView.replace(openRange, withText: replacement) }
+
+        // Restore something sensible: the original selection shifted by the
+        // characters removed ahead of it.
+        let removedAhead = openNS.length - (replacement as NSString).length
+        let newLocation = max(selection.location - (selection.location > openNS.location ? removedAhead : 0), 0)
+        textView.selectedRange = NSRange(location: newLocation, length: selection.length)
+    }
+
+    private func reducedToken(_ token: String, removing trait: InlineTraits) -> String {
+        if token == "***" {
+            return trait == .bold ? "*" : trait == .italic ? "**" : ""
+        }
+        return ""
+    }
+
+    func refreshActiveTraits() {
+        guard let textView, let sourceText = textView.text, !sourceText.isEmpty else {
+            activeTraits = []
+            return
+        }
+        let markup = PostMarkup.parse(sourceText)
+        let selection = textView.selectedRange
+        let contentSpans = markup.spans.filter { !$0.isMarker }
+
+        if selection.length == 0 {
+            let probe = max(selection.location - 1, 0)
+            let hit = contentSpans.first { span in
+                let range = NSRange(span.range, in: sourceText)
+                return probe >= range.location && probe < range.upperBound
+            }
+            activeTraits = hit?.traits.subtracting(.tag) ?? []
+        } else {
+            // Intersection over every content span the selection overlaps.
+            var intersection: InlineTraits? = nil
+            for span in contentSpans {
+                let range = NSRange(span.range, in: sourceText)
+                guard NSIntersectionRange(range, selection).length > 0 else { continue }
+                intersection = intersection.map { $0.intersection(span.traits) } ?? span.traits
+            }
+            activeTraits = intersection?.subtracting(.tag) ?? []
+        }
+    }
+
+    private func uiRange(_ textView: UITextView, _ range: NSRange) -> UITextRange? {
+        guard let start = textView.position(from: textView.beginningOfDocument, offset: range.location),
+              let end = textView.position(from: start, offset: range.length) else { return nil }
+        return textView.textRange(from: start, to: end)
     }
 
     /// Line-scoped styles. Applying to a partial selection promotes it onto
@@ -206,6 +334,7 @@ struct MarkupTextEditor: UIViewRepresentable {
             text.wrappedValue = textView.text
             placeholderLabel?.isHidden = !textView.text.isEmpty
             updateCurrentBlock(textView)
+            controller.refreshActiveTraits()
             textView.invalidateIntrinsicContentSize()
         }
 
@@ -213,6 +342,7 @@ struct MarkupTextEditor: UIViewRepresentable {
             // Rule 3: derived styling must never leak into new typing.
             textView.typingAttributes = MarkupStyler.baseAttributes
             updateCurrentBlock(textView)
+            controller.refreshActiveTraits()
         }
 
         /// One parse, applied in-place. Attribute-only edits preserve the
@@ -326,6 +456,9 @@ enum MarkupStyler {
 struct ComposerToolbar: View {
     let controller: MarkupEditorController
     @Binding var toneSelection: PostTone?
+    /// "Any Color!" is the composer's deferred-random option; edit mode
+    /// requires a concrete tone and hides it.
+    var includeRandomTone = true
 
     private var blockLabel: String {
         switch controller.currentBlock {
@@ -339,6 +472,10 @@ struct ComposerToolbar: View {
         HStack(spacing: 2) {
             toneMenu
 
+            Divider()
+                .frame(height: 22)
+                .padding(.horizontal, 2)
+
             Menu {
                 Button("Title") { controller.applyBlock(.title) }
                 Button("Subtitle") { controller.applyBlock(.subtitle) }
@@ -347,29 +484,38 @@ struct ComposerToolbar: View {
                 HStack(spacing: 4) {
                     Text(blockLabel)
                         .fontStyle(.subheadline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
+                        // Fixed slot sized to the widest label ("Subtitle") so
+                        // the center cluster never shifts when the style
+                        // changes — a wandering B/I/U/S row reads as broken.
+                        .frame(width: 64, alignment: .leading)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
-                .padding(.horizontal, 10)
+                .padding(.leading, 10)
                 .padding(.vertical, 13)
                 .contentShape(.rect)
             }
 
             Spacer(minLength: 0)
 
-            inlineButton("bold", "Bold") { controller.applyInline("**") }
-            inlineButton("italic", "Italic") { controller.applyInline("*") }
-            inlineButton("underline", "Underline") { controller.applyInline("__") }
-            inlineButton("strikethrough", "Strikethrough") { controller.applyInline("~~") }
+            inlineButton("bold", "Bold", "**")
+            inlineButton("italic", "Italic", "*")
+            inlineButton("underline", "Underline", "__")
+            inlineButton("strikethrough", "Strikethrough", "~~")
 
             Spacer(minLength: 0)
 
             Button {
                 KeyboardDismisser.dismiss()
             } label: {
-                Image(systemName: "keyboard.chevron.compact.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .padding(.horizontal, 12)
+                Text("Done")
+                    .fontStyle(.subheadline)
+                    .fontWeight(.semibold)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .padding(.horizontal, 10)
                     .padding(.vertical, 13)
                     .contentShape(.rect)
             }
@@ -384,12 +530,16 @@ struct ComposerToolbar: View {
         .padding(.bottom, 6)
     }
 
-    /// Compact tone control: just the swatch (rainbow when deferred-random).
-    /// Same Menu/Picker structure as TonePicker, sized for a toolbar.
+    /// Compact tone control. A rounded-RECTANGLE swatch on purpose — it is a
+    /// miniature of the post CARD, because a color dot beside B/I/U/S reads
+    /// as "text color" in every editor toolbar ever shipped. The divider
+    /// after it fences the post-level control off from the text-level ones.
     private var toneMenu: some View {
         Menu {
             Picker("Post Color", selection: $toneSelection) {
-                Text("Any Color!").tag(PostTone?.none)
+                if includeRandomTone {
+                    Text("Any Color!").tag(PostTone?.none)
+                }
                 ForEach(PostTone.allCases) { tone in
                     Text(tone.displayName).tag(Optional(tone))
                 }
@@ -397,16 +547,19 @@ struct ComposerToolbar: View {
         } label: {
             Group {
                 if let tone = toneSelection {
-                    Circle().fill(tone.color)
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(tone.color)
                 } else {
-                    Circle().fill(
-                        AngularGradient(colors: [.red, .yellow, .green, .teal, .blue, .purple, .red],
-                                        center: .center)
-                    )
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(
+                            AngularGradient(colors: [.red, .yellow, .green, .teal, .blue, .purple, .red],
+                                            center: .center)
+                        )
                 }
             }
-            .frame(width: 20, height: 20)
-            .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+            .frame(width: 17, height: 21)
+            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .strokeBorder(.primary.opacity(0.18), lineWidth: 1))
             .padding(.leading, 14)
             .padding(.trailing, 6)
             .padding(.vertical, 12)
@@ -415,13 +568,26 @@ struct ComposerToolbar: View {
         .accessibilityLabel("Post color: \(toneSelection?.displayName ?? "Any Color")")
     }
 
-    private func inlineButton(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+    private func inlineButton(_ icon: String, _ label: String, _ delimiter: String) -> some View {
+        let isActive = controller.activeTraits.contains(MarkupEditorController.trait(for: delimiter))
+        return Button {
+            controller.applyInline(delimiter)
+        } label: {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
-                .frame(width: 40, height: 46)
+                .frame(width: 38, height: 46)
+                .background {
+                    // Subtle applied-state highlight; tapping again removes
+                    // the modifier across the whole run.
+                    if isActive {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(.primary.opacity(0.14))
+                            .padding(.vertical, 6)
+                    }
+                }
                 .contentShape(.rect)
         }
         .accessibilityLabel(label)
+        .accessibilityAddTraits(isActive ? .isSelected : [])
     }
 }

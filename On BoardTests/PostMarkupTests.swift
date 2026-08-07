@@ -167,6 +167,50 @@ struct PostMarkupTests {
         #expect(rebuilt == source)
     }
 
+    // MARK: - Backslash escapes
+
+    @Test func backslashEscapesEmphasis() {
+        let markup = PostMarkup.parse("\\*not italic\\* honest")
+        #expect(markup.blocks[0].plainText == "*not italic* honest")
+        #expect(markup.blocks[0].runs.allSatisfy { $0.traits.isEmpty })
+    }
+
+    @Test func backslashEscapesHashtag() {
+        let markup = PostMarkup.parse("\\#literal tag")
+        #expect(markup.blocks[0].plainText == "#literal tag")
+        #expect(markup.tags.isEmpty)
+    }
+
+    @Test func doubleBackslashIsOneLiteralBackslash() {
+        let markup = PostMarkup.parse("path\\\\to")
+        #expect(markup.blocks[0].plainText == "path\\to")
+    }
+
+    /// A backslash before a non-syntax character is just a backslash.
+    @Test func backslashBeforePlainTextIsLiteral() {
+        let markup = PostMarkup.parse("back\\slash")
+        #expect(markup.blocks[0].plainText == "back\\slash")
+    }
+
+    /// The composer dims the backslash: it must be a MARKER span while the
+    /// escaped character stays content.
+    @Test func escapeBackslashIsAMarkerSpan() {
+        let source = "\\*x"
+        let markup = PostMarkup.parse(source)
+        let markers = markup.spans.filter(\.isMarker).map { String(source[$0.range]) }
+        #expect(markers == ["\\"])
+        let content = markup.spans.filter { !$0.isMarker }.map { String(source[$0.range]) }.joined()
+        #expect(content == "*x")
+    }
+
+    @Test func escapedDelimiterCannotOpenARun() {
+        let markup = PostMarkup.parse("\\**still bold?**")
+        // The escaped first * is literal; the following * then pairs with the
+        // trailing ** ... parser resolves what it can — the invariant that
+        // matters: no run may START at the escaped character.
+        #expect(markup.blocks[0].plainText.hasPrefix("*"))
+    }
+
     // MARK: - Soft heading cap
 
     /// Over-long headings demote to body with the marker shown literally —

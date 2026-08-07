@@ -20,6 +20,8 @@ struct PostDetailView: View {
     // Post editing
     @State var editMode = false
     @State var draftContent = ""
+    /// Toolbar↔editor bridge for edit mode's rich composer.
+    @State var editEditorController = MarkupEditorController()
     @State var draftTone: PostTone
     // Guards Save against a double-tap firing two concurrent updatePost
     // calls for the same post — the slower response would silently win.
@@ -176,6 +178,18 @@ struct PostDetailView: View {
             .task(id: livePost.id) {
                 guard let authorId = livePost.authorId else { return }
                 store.prefetchPopScore(for: authorId)
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if editMode {
+                    ComposerToolbar(
+                        controller: editEditorController,
+                        toneSelection: Binding(
+                            get: { draftTone },
+                            set: { if let tone = $0 { draftTone = tone } }
+                        ),
+                        includeRandomTone: false
+                    )
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Hidden while editing a post OR a comment — both put the keyboard

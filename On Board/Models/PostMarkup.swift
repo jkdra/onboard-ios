@@ -197,6 +197,22 @@ extension PostMarkup {
         }
 
         while i < end {
+            // Backslash escape: `\` before any syntax character makes it
+            // literal — the backslash renders as a dimmed marker in the
+            // composer and is stripped from the posted text, CommonMark
+            // style. Before a non-syntax character a backslash is just a
+            // backslash. Checked FIRST so an escape always wins.
+            if chars[i] == "\\", i + 1 < end, escapableCharacters.contains(chars[i + 1]) {
+                flushLiteral(upTo: i)
+                spans.append(Span(range: positions[i]..<positions[i + 1],
+                                  isMarker: true, blockKind: blockKind, traits: inherited))
+                runs.append(Run(text: String(chars[i + 1]), traits: inherited))
+                spans.append(Span(range: positions[i + 1]..<positions[i + 2],
+                                  isMarker: false, blockKind: blockKind, traits: inherited))
+                i += 2
+                literalStart = i
+                continue
+            }
             // Inline hashtag: `#` + [a-z0-9-] containing at least one letter,
             // and not glued to the preceding word ("word#tag" stays literal,
             // matching every major platform). The letter requirement keeps
@@ -242,6 +258,10 @@ extension PostMarkup {
         }
         flushLiteral(upTo: end)
     }
+
+    /// The characters a backslash can escape — the syntax set plus the
+    /// backslash itself (`\\` renders one literal backslash).
+    private static let escapableCharacters: Set<Character> = ["*", "_", "~", "#", "-", "\\"]
 
     /// A delimiter opens only when immediately followed by a non-space. This is
     /// what keeps `5 * 3 * 2` from italicising and `f*** ` from half-matching.

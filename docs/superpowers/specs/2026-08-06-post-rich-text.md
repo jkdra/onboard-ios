@@ -65,6 +65,11 @@ was a tag-convergence nudge — free-typed tags can fragment (`econ201` vs
 `econ-201`). Accepted at current scale; the future fix is composer
 autocomplete, which is additive.
 
+**Backslash escape** (added 2026-08-07): `\` before any syntax character
+(`* _ ~ # -` or `\` itself) makes it literal. The backslash is consumed —
+dimmed as a marker in the composer, stripped from rendered output. Before any
+other character a backslash is plain text.
+
 Inline markers work anywhere, and **stack**: `***x***` is bold + italic. To
 avoid formatting ordinary punctuation (`5 * 3 * 2`), an inline run only opens
 when the delimiter is immediately followed by a non-space, and only closes when

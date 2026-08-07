@@ -21,11 +21,6 @@ extension PostDetailView {
                 onCancel: cancelEditing,
                 onSave: saveEdits
             )
-            ToolbarItem(placement: .bottomBar) { Spacer() }
-            ToolbarItem(placement: .bottomBar) {
-                TonePicker(selection: $draftTone, showBackground: false)
-            }
-            ToolbarItem(placement: .bottomBar) { Spacer() }
         }
 
         if isReadOnly {
@@ -326,17 +321,15 @@ extension PostDetailView {
     var postEditContent: some View {
         // Panels occupy real space, so the outer VStack's 16pt spacing is the
         // true visible rhythm — no inner stack needed.
-        // Single-field edit, plain markup for now — the rich composer
-        // (toolbar + dimmed-marker live preview) replaces this per the
-        // 2026-08-06 spec's composer section.
-        TextField("What's on your mind?", text: $draftContent, axis: .vertical)
-            .textFieldStyle(.boardBody)
-            // Multi-line fields re-measure a beat after appearing; without
-            // this they settle unanimated mid-morph. Mirrors read mode's
-            // fixedSize note above.
-            .fixedSize(horizontal: false, vertical: true)
-            .fontStyle(.body)
-            .keyboardType(.twitter)
+        // The same rich composer as NewPostView: markers dim in place, the
+        // formatting toolbar (with the tone swatch) rides the keyboard via
+        // the safeAreaInset in PostDetailView's body.
+        MarkupTextEditor(text: $draftContent, controller: editEditorController)
+            .padding(14)
+            .background {
+                GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                                fallback: AnyShapeStyle(.thinMaterial))
+            }
             .matchedFieldText(id: "postContent", in: postNamespace, variant: .body)
 
         editImageSection
