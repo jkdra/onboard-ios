@@ -211,6 +211,7 @@ struct GridCard: View {
             PostMarkupText.cardText(PostMarkup.parse(post.content))
                 .lineLimit(7)
                 .truncationMode(.tail)
+                .lineSpacing(2.5)
 
             if !post.tags.isEmpty {
                 tagsRow

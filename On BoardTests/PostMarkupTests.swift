@@ -167,6 +167,40 @@ struct PostMarkupTests {
         #expect(rebuilt == source)
     }
 
+    // MARK: - Soft heading cap
+
+    /// Over-long headings demote to body with the marker shown literally —
+    /// a heading is an anchor, not a container, and demotion must be visible
+    /// (silently vanishing syntax is a mystery; syntax that didn't count is
+    /// a lesson).
+    @Test func overlongTitleDemotesToBodyWithLiteralMarker() {
+        let long = String(repeating: "a", count: PostMarkup.headingContentLimit + 1)
+        let markup = PostMarkup.parse("# " + long)
+        #expect(markup.blocks[0].kind == .body)
+        #expect(markup.blocks[0].plainText == "# " + long)
+        #expect(markup.spans.allSatisfy { !$0.isMarker })
+    }
+
+    @Test func titleAtExactLimitStaysATitle() {
+        let exact = String(repeating: "a", count: PostMarkup.headingContentLimit)
+        let markup = PostMarkup.parse("# " + exact)
+        #expect(markup.blocks[0].kind == .title)
+        #expect(markup.blocks[0].plainText == exact)
+    }
+
+    @Test func overlongSubtitleDemotesToo() {
+        let long = String(repeating: "b", count: PostMarkup.headingContentLimit + 1)
+        let markup = PostMarkup.parse("## " + long)
+        #expect(markup.blocks[0].kind == .body)
+    }
+
+    /// Bullets are exempt: a long bullet is just a long item.
+    @Test func longBulletStaysABullet() {
+        let long = String(repeating: "c", count: PostMarkup.headingContentLimit + 40)
+        let markup = PostMarkup.parse("* " + long)
+        #expect(markup.blocks[0].kind == .bullet)
+    }
+
     // MARK: - Inline hashtags as tags
 
     @Test func hashtagBecomesTagRun() {

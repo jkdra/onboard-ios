@@ -21,6 +21,14 @@ struct NewPostView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var content = ""
+    /// The hesitation loop is the composer's real user: type, lose nerve,
+    /// dismiss, come back. See PostDraftStore's header for the slot's rules
+    /// (one slot, this week, expires with the final-hour lockout).
+    private let draftStore = PostDraftStore()
+    /// What the draft slot held when this composer opened — dismissing with
+    /// content identical to it needs no dialog (nothing would be lost).
+    @State private var restoredDraft = ""
+    @State private var showDismissDialog = false
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
@@ -96,7 +104,14 @@ struct NewPostView: View {
                         .keyboardType(.twitter)
                         .focused($focus, equals: .content)
                         .fontStyle(.body)
-                        
+
+                    // The countdown lives on the feed; the STAKES live here.
+                    // Impermanence is the app's answer to posting anxiety, and
+                    // it was invisible at the exact moment of hesitation.
+                    Label("clears with the board on monday — nothing here is forever", systemImage: "clock.arrow.circlepath")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.secondary)
+
                     Divider()
                     
                     // Image attachment row
@@ -105,6 +120,7 @@ struct NewPostView: View {
                 .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
+            .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
             .background {
                 ZStack {
@@ -144,8 +160,14 @@ struct NewPostView: View {
                     // screen's bottom-pinned content up until something else
                     // forces a relayout.
                     Button {
-                        KeyboardDismisser.dismiss()
-                        dismiss()
+                        // Dialog only when data would actually be lost:
+                        // empty, or restored-and-untouched, dismisses silently.
+                        if content.trimmed.isEmpty || content == restoredDraft {
+                            KeyboardDismisser.dismiss()
+                            dismiss()
+                        } else {
+                            showDismissDialog = true
+                        }
                     } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
@@ -169,6 +191,16 @@ struct NewPostView: View {
             }
             .keyboardDoneToolbar()
             .onAppear {
+                let allowsPosting = BoardSchedule.phase(
+                    weekEnd: store.activeBoardWeek?.endsAt,
+                    thresholds: store.boardThresholds
+                ).allowsPosting
+                if content.isEmpty,
+                   let draft = draftStore.restore(weekID: store.activeBoardWeek?.id,
+                                                  allowsPosting: allowsPosting) {
+                    content = draft
+                    restoredDraft = draft
+                }
                 focus = .content
                 updateClearingState()
             }
@@ -190,6 +222,25 @@ struct NewPostView: View {
                 updateClearingState()
             }
             .animation(.smooth(duration: 0.3), value: isWithinFinalHour)
+            .confirmationDialog(
+                "Save this as a draft?",
+                isPresented: $showDismissDialog,
+                titleVisibility: .visible
+            ) {
+                Button("Save Draft") {
+                    draftStore.save(content, weekID: store.activeBoardWeek?.id)
+                    KeyboardDismisser.dismiss()
+                    dismiss()
+                }
+                Button("Discard", role: .destructive) {
+                    draftStore.clear()
+                    KeyboardDismisser.dismiss()
+                    dismiss()
+                }
+                Button("Keep Writing", role: .cancel) {}
+            } message: {
+                Text("One draft at a time — it clears an hour before the board does.")
+            }
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
             .presentableErrorAlert(error: $photo.alertError)
@@ -259,6 +310,7 @@ struct NewPostView: View {
             isSubmitting = false
             guard succeeded else { return }
             didSubmit = true
+            draftStore.clear()
             KeyboardDismisser.dismiss()
             dismiss()
         }

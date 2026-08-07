@@ -92,6 +92,15 @@ struct PostMarkup: Equatable, Sendable {
 
 extension PostMarkup {
 
+    /// Soft heading cap: a `# `/`## ` line whose content runs past this many
+    /// characters demotes to BODY text, marker rendered literally. A heading
+    /// is an anchor, not a container — past ~80 chars it's a paragraph
+    /// wearing a heading's font, and one such post can own a masonry column.
+    /// Demotion is visible on purpose (the `# ` shows as text): syntax that
+    /// silently vanishes is a mystery, syntax that visibly didn't count is a
+    /// lesson. Bullets are exempt — a long bullet is just a long item.
+    static let headingContentLimit = 80
+
     /// Block markers. Only ever recognised at column zero AND followed by a
     /// space — that single rule is what stops `#finals` (hashtag muscle
     /// memory) from becoming a heading, and what stops `* ` (bullet) from
@@ -137,6 +146,12 @@ extension PostMarkup {
                 guard lineStart + token.count <= lineEnd,
                       Array(chars[lineStart..<(lineStart + token.count)]) == token
                 else { continue }
+                // Soft heading cap — an over-long title/subtitle demotes to
+                // body, marker left in the text (see headingContentLimit).
+                if marker.kind == .title || marker.kind == .subtitle,
+                   lineEnd - (lineStart + token.count) > headingContentLimit {
+                    break
+                }
                 kind = marker.kind
                 contentStart = lineStart + token.count
                 spans.append(Span(range: positions[lineStart]..<positions[contentStart],

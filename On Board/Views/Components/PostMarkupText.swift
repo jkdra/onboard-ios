@@ -100,31 +100,55 @@ enum PostMarkupText {
         }
     }
 
+    /// Body emphasis (research-tuned, 2026-08-06): `.secondary` composites to
+    /// ~3.4:1 on light backgrounds — BELOW WCAG AA for 14pt regular text, and
+    /// worse on tinted cards. Design-system consensus for card body copy is
+    /// the 0.75–0.82 band (Primer #59636e, Polaris #616161, M3
+    /// onSurfaceVariant), hence primary at 0.78. And a card with NO heading
+    /// renders its body at FULL primary — X/Threads/Mastodon never render
+    /// post content as supporting text; the body IS the headline there.
+    private static let headedBodyOpacity = 0.78
+
     /// One concatenated Text for the whole post. The caller applies the global
-    /// `lineLimit` / `truncationMode`.
+    /// `lineLimit` / `truncationMode` (plus `.lineSpacing(2.5)` — lands 14pt
+    /// text at ~1.36 line ratio, between HIG and Material's 14/20).
     static func cardText(_ markup: PostMarkup) -> Text {
+        let hasHeading = markup.blocks.contains { $0.kind == .title || $0.kind == .subtitle }
+        let bodyColor: Color = hasHeading ? .primary.opacity(headedBodyOpacity) : .primary
+
         var result = Text(verbatim: "")
         var isFirst = true
+        var previousKind: PostBlockKind?
         for block in markup.blocks {
             // Skip fully-empty body lines at card scale — a blank spacer line
             // is rhythm the card doesn't have room for, and it burns a line of
             // the shared truncation budget.
             if block.kind == .body, block.plainText.isEmpty { continue }
 
-            if !isFirst { result = result + Text(verbatim: "\n") }
+            if !isFirst {
+                result = result + Text(verbatim: "\n")
+                // Paragraph gap after a heading (~6pt visual): a blank-line run
+                // at 4pt — 0.5em convention scaled to card density. Costs one
+                // line of the truncation budget; the anchor is worth it.
+                if previousKind == .title || previousKind == .subtitle {
+                    result = result + Text(verbatim: "\n").font(.system(size: 4))
+                }
+            }
             isFirst = false
+            previousKind = block.kind
 
             if block.kind == .bullet {
-                result = result + Text(verbatim: "•  ").font(cardFont(for: .bullet)).foregroundColor(.secondary)
+                result = result + Text(verbatim: "•  ").font(cardFont(for: .bullet)).foregroundColor(bodyColor)
             }
             for run in block.runs {
                 var segment = Text(verbatim: run.text)
                     .font(cardFont(for: block.kind, traits: run.traits))
                     .applying(run.traits)
                 if run.traits.contains(.tag) {
-                    // Semantic token, not body copy: pops to primary weight so
-                    // a trailing hashtag line reads as the post's tags.
-                    segment = segment.fontWeight(.semibold).foregroundColor(.primary)
+                    // ONE differentiating cue (weight), like every platform —
+                    // at body opacity, so a hashtag line can't outshout a
+                    // 16pt heavy heading two lines up.
+                    segment = segment.fontWeight(.semibold).foregroundColor(bodyColor)
                 } else {
                     switch block.kind {
                     case .title:
@@ -132,7 +156,7 @@ enum PostMarkupText {
                     case .subtitle:
                         segment = segment.fontWeight(.semibold).foregroundColor(.primary)
                     case .body, .bullet:
-                        segment = segment.foregroundColor(.secondary)
+                        segment = segment.foregroundColor(bodyColor)
                     }
                 }
                 result = result + segment
@@ -179,6 +203,7 @@ struct PostMarkupView: View {
         } else {
             inlineText(block)
                 .fixedSize(horizontal: false, vertical: true)
+                .lineSpacing(block.kind == .body ? 3 : 0)
         }
     }
 

@@ -42,6 +42,14 @@ So `#finals` is text, `I got a #1 ranking` is text, `   # indented` is text, and
 `# Finals week` is a Title. This is what keeps hashtag muscle memory from
 colliding with headings, and it is why `* ` (bullet) never fights `*italic*`.
 
+**Soft heading cap:** a `# `/`## ` line whose content exceeds **80
+characters** demotes to body text with the marker rendered literally. A
+heading is an anchor, not a container — past ~80 chars it's a paragraph in a
+heading's font, and one such post owns a masonry column. Demotion is visible
+by design: syntax that silently vanishes is a mystery; syntax that visibly
+didn't count is a lesson. Bullets are exempt. Cross-client constant:
+`PostMarkup.headingContentLimit`.
+
 **Inline hashtags are tags** (decided 2026-08-06, after the picker era):
 `#word` — where the token contains at least one letter, uses `[a-z0-9-]`, and
 is not glued to a preceding word character — parses as a tag run. `Post.tags`
