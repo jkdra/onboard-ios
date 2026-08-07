@@ -33,46 +33,55 @@ struct ReactionBar: View {
 
     // MARK: - What the strip renders
 
-    /// Which reactions get pills and which stay behind the "+".
+    /// The bar's slots.
     ///
-    /// A pure function of its inputs, and `internal` rather than private, so
-    /// the tests exercise THIS code instead of a copy of it — every interesting
-    /// state here depends on other people's counts landing a certain way, which
-    /// no amount of tapping around the simulator can stage.
+    /// **Counts are not an input.** The strip's shape is a function of config
+    /// and of the viewer's own selection — never of how other people reacted.
+    /// A slot that changes identity because a post got popular is a control
+    /// that means something different on every post, and no one can build a
+    /// habit against that. Layout adapts to user CONTENT; controls hold still.
     ///
-    /// Two rules worth not breaking:
+    /// So: the first two reactions are always the first two pills, and the
+    /// overflow slot is always in the same place doing the same job — open a
+    /// menu. All that changes is its face, which reflects what *you* picked.
     ///
-    /// * A reaction anyone has used is ALWAYS a pill. An earlier sketch gave
-    ///   the viewer one slot showing whichever of laugh/hug *they* picked —
-    ///   which meant choosing hug on a post with 12 laughs hid all 12, so a
-    ///   private choice erased the board's loudest signal for an audience of
-    ///   one, silently.
-    /// * Order follows `enabled`, never count magnitude. Pills that reshuffle
-    ///   as counts tick move the tap target out from under a finger already on
-    ///   its way down, and destroy any muscle memory for where dislike sits.
-    static func partition(
+    /// Pure and `internal` so the tests drive this exact code rather than a
+    /// copy of it.
+    static func slots(
         enabled: [Reaction],
-        counts: [Reaction: Int],
         selected: Reaction?,
         overflowEnabled: Bool
-    ) -> (visible: [Reaction], hidden: [Reaction]) {
-        guard overflowEnabled, enabled.count > permanentCount else { return (enabled, []) }
-        // Selection counts as weight too, so a pill can't blink out during the
-        // optimistic window before the count catches up.
-        func hasWeight(_ reaction: Reaction) -> Bool {
-            (counts[reaction] ?? 0) > 0 || selected == reaction
+    ) -> Slots {
+        guard overflowEnabled, enabled.count > permanentCount else {
+            return Slots(permanent: enabled, overflow: [], overflowFace: nil)
         }
-        let visible = enabled.enumerated()
-            .filter { $0.offset < permanentCount || hasWeight($0.element) }
-            .map(\.element)
-        let hidden = enabled.dropFirst(permanentCount).filter { !hasWeight($0) }
-        return (visible, Array(hidden))
+        let overflow = Array(enabled.dropFirst(permanentCount))
+        return Slots(
+            permanent: Array(enabled.prefix(permanentCount)),
+            overflow: overflow,
+            // Only an overflow reaction can wear the slot; picking `like`
+            // leaves it a plus, because `like` has its own pill.
+            overflowFace: selected.flatMap { overflow.contains($0) ? $0 : nil }
+        )
     }
 
-    private var layout: (visible: [Reaction], hidden: [Reaction]) {
-        Self.partition(
+    struct Slots: Equatable {
+        /// Always-present pills, in config order.
+        let permanent: [Reaction]
+        /// What the overflow menu offers. Empty means no overflow slot at all.
+        let overflow: [Reaction]
+        /// The reaction the overflow slot is currently wearing; `nil` shows the
+        /// plus. Driven by selection only.
+        let overflowFace: Reaction?
+
+        var hasOverflow: Bool { !overflow.isEmpty }
+        /// Rendered slot count, for the strip's corner radii.
+        var total: Int { permanent.count + (hasOverflow ? 1 : 0) }
+    }
+
+    private var slots: Slots {
+        Self.slots(
             enabled: enabledReactions,
-            counts: counts,
             selected: selected,
             overflowEnabled: reactionOverflowEnabled
         )
@@ -99,53 +108,76 @@ struct ReactionBar: View {
         } else if typeSize.isAccessibilitySize {
             accessibleMenu
         } else {
-            let (reactions, hidden) = layout
-            // +1 slot for the overflow menu when anything is still behind it,
-            // so the end pill gets the outer radius rather than a seam.
-            let slots = reactions.count + (hidden.isEmpty ? 0 : 1)
+            let slots = self.slots
             HStack(spacing: interButtonSpacing) {
-                ForEach(Array(reactions.enumerated()), id: \.element) { index, reaction in
-                    button(for: reaction, position: position(at: index, of: slots))
+                ForEach(Array(slots.permanent.enumerated()), id: \.element) { index, reaction in
+                    button(for: reaction, position: position(at: index, of: slots.total))
                 }
-                if !hidden.isEmpty {
-                    overflowMenu(hidden, position: position(at: slots - 1, of: slots))
+                if slots.hasOverflow {
+                    overflowMenu(slots, position: position(at: slots.total - 1, of: slots.total))
                 }
             }
         }
     }
 
-    /// The "+" pill. A real `Menu`, not a long-press on another pill: a hidden
-    /// gesture would be invisible to VoiceOver, and would have to win
-    /// arbitration against `DoubleTapHeart` and the zoom transition's
-    /// interactive pop on the same card.
-    private func overflowMenu(_ hidden: [Reaction], position: Position) -> some View {
+    /// The third control: always here, always opens the same menu.
+    ///
+    /// Wears a filled plus until you pick something from it, then wears that
+    /// reaction and its count — but it is still the same button in the same
+    /// place, so tapping it again reopens the menu to switch, or to tap your
+    /// current pick and clear it.
+    ///
+    /// A `Menu` rather than a long-press on another pill: a hidden gesture is
+    /// invisible to VoiceOver, and would have to win arbitration against
+    /// `DoubleTapHeart` and the zoom transition's interactive pop on the same
+    /// card.
+    private func overflowMenu(_ slots: Slots, position: Position) -> some View {
+        let face = slots.overflowFace
         let shape = UnevenRoundedRectangle(
             cornerRadii: position.corners(outer: outerRadius, inner: innerRadius),
             style: .continuous
         )
         return Menu {
-            ForEach(hidden, id: \.self) { reaction in
+            // Counts live HERE, for every overflow reaction, whether or not
+            // one is picked — one predictable place to read them, rather than
+            // a pill that only sometimes exists.
+            ForEach(slots.overflow, id: \.self) { reaction in
                 Button {
                     guard isInteractive else { return }
-                    withAnimation(.smooth(duration: 0.2)) { selected = reaction }
+                    withAnimation(.smooth(duration: 0.2)) {
+                        selected = selected == reaction ? nil : reaction
+                    }
                 } label: {
-                    // Emoji inline in the title: a menu row's `systemImage`
-                    // slot takes SF Symbols, not emoji, and the empty-string
-                    // trick used above is only there to reserve the checkmark.
-                    Text("\(reaction.emoji)  \(reaction.label)")
+                    Label(
+                        "\(reaction.emoji)  \(reaction.label)  \(displayCount(for: reaction).abbreviated)",
+                        systemImage: selected == reaction ? "checkmark" : ""
+                    )
                 }
             }
         } label: {
-            Image(systemName: "plus")
-                .fontStyle(.caption)
-                .foregroundStyle(.primary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical)
-                .contentShape(shape)
-                .background(reactionBackground(shape: shape, isSelected: false))
+            HStack(spacing: 6) {
+                if let face {
+                    Text(face.emoji)
+                        .fontStyle(.caption)
+                    Text(displayCount(for: face).abbreviated)
+                        .fontStyle(.caption)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .contentTransition(.numericText(value: Double(displayCount(for: face))))
+                        .animation(.snappy(duration: 0.35), value: displayCount(for: face))
+                } else {
+                    Image(systemName: "plus.circle.fill")
+                        .fontStyle(.caption)
+                }
+            }
+            .foregroundStyle(face != nil ? tone.legibleForeground : .primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical)
+            .contentShape(shape)
+            .background(reactionBackground(shape: shape, isSelected: face != nil))
         }
         .disabled(!isInteractive)
-        .accessibilityLabel("More reactions")
+        .accessibilityLabel(face.map { "\($0.label), \(displayCount(for: $0)), selected" } ?? "More reactions")
     }
 
     private var recordLayout: some View {
@@ -156,10 +188,11 @@ struct ReactionBar: View {
             ),
             style: .continuous
         )
-        // Same reduced set as the live bar, minus the "+" — an archived week
-        // can't be reacted to, so an affordance offering reactions nobody used
-        // would be a control that does nothing.
-        let reactions = layout.visible
+        // Untouched by the overflow layout: this is a RECORD, not a control.
+        // Nothing here is tappable, so there is no habit to protect and no
+        // menu to hide anything behind — an archived week just shows what the
+        // board actually did, every reaction and its final count.
+        let reactions = enabledReactions
         return HStack(spacing: 0) {
             ForEach(Array(reactions.enumerated()), id: \.element) { index, reaction in
                 let count = displayCount(for: reaction)

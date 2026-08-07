@@ -187,6 +187,14 @@ struct PostDetailView: View {
                 if ProcessInfo.processInfo.arguments.contains("-dev.editPost") {
                     beginEditing()
                 }
+                // DEV: `-dev.reactAs laugh` seeds the viewer's own reaction, so
+                // the reaction bar's selected states can be screenshotted —
+                // they otherwise need a tap, and taps on the bar's Menu don't
+                // deliver under this Xcode.
+                if let raw = UserDefaults.standard.string(forKey: "dev.reactAs"),
+                   let reaction = Reaction(rawValue: raw) {
+                    store.setReaction(postId: livePost.id, reaction: reaction)
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Hidden while editing a post OR a comment — both put the keyboard
