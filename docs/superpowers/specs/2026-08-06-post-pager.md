@@ -1,7 +1,8 @@
 # The board reader — vertical post paging
 
-**Status:** spec drafted 2026-08-06; research spike pending on the zoom
-retarget. Not started.
+**Status:** spec drafted 2026-08-06; research pass complete same day —
+construction and gesture approach DECIDED below; one empirical spike remains
+(zoom retarget verification on-device). Not started.
 **Depends on:** rich-text renderer (`feature/rich-text-posts`), comments
 infra, zoom navigation transition.
 
@@ -117,14 +118,71 @@ Mechanics (pending the research spike):
 
 Stage 1 is worth shipping even if 2 slips; nothing in it is throwaway.
 
-## Open questions for the spike
+## Decisions from the research pass (2026-08-06)
 
-1. Does zoom `sourceID` re-resolve at pop time from updated destination
-   state? (Prototype on a scratch project, both button-pop and interactive
-   edge-swipe — the interactive path re-resolves geometry per frame and is
-   where the documented collapse artifact lives.)
-2. Pager construction: `.scrollTargetBehavior(.paging)` vs rotated TabView
-   vs UIPageViewController bridge — which gives TikTok-feel with reliable
-   current-page callbacks on iOS 18?
-3. Gesture handoff implementation for expand/collapse (SwiftUI-native vs
-   UIGestureRecognizerRepresentable).
+**Construction (decided):** `ScrollView(.vertical)` + `LazyVStack(spacing: 0)
+.scrollTargetLayout()` + `.scrollTargetBehavior(.paging)`; every page
+`.containerRelativeFrame([.horizontal, .vertical])` (paging is by container
+extent — variable page heights drift); pager `ignoresSafeArea` with insets
+INSIDE pages (iOS 26 paging-offset bug, forum 801904). Current page via the
+`scrollPosition(id:)` BINDING — not `ScrollViewReader` (broken under Xcode
+16/iOS 18, forum 765771) and not the `ScrollPosition` object (silent no-op
+on iOS 26 beta, forum 793716). Settled-vs-dragging via `onScrollPhaseChange`;
+per-page side effects (seen-marking) via `onScrollVisibilityChange`.
+Rotated `TabView` is DISQUALIFIED — a rotated ancestor is exactly the
+"nothing may transform the source from above" zoom killer in CLAUDE.md.
+`UIPageViewController` bridge rejected: UIKit container between SwiftUI and
+the zoom transition, plus a duplicated-page bug (forum 740470).
+
+**Zoom retarget (fallback ladder, step 1 pending the spike):**
+1. Destination's `.navigationTransition(.zoom(sourceID:in:))` driven by the
+   pager's current route. UNDOCUMENTED whether SwiftUI re-reads it at pop —
+   but the underlying UIKit machinery re-resolves the source at dismissal by
+   design (WWDC24 10145; Douglas Hill's zoom guide: sourceViewProvider is
+   re-invoked at dismiss precisely for cell reuse), and SwiftUI's interactive
+   pop re-resolves source geometry per frame. Plausible; verify empirically
+   on an iOS 18 DEVICE, both back-button and interactive swipe.
+2. Load-bearing regardless: mirror the pager's current post into the grid's
+   `scrollPosition(id:)` AS PAGING HAPPENS so the target card is realized
+   and registered before pop. This converts the recycled-cell case into the
+   normal case (Photos does the same scroll-into-place).
+3. Residual no-source behavior is a CENTER-OF-CONTAINER zoom, not a
+   collapse (the collapse-to-zero artifact is the wrong-namespace case, a
+   different bug). Acceptable-ugly last resort.
+4. If step 1 fails verification: conditional transition — keep `.zoom` when
+   current == entry post, else `.navigationTransition(.automatic)`; if even
+   that misbehaves, nil the namespace after first page-away (the existing
+   nilable-namespace flag shape).
+   Known OS bugs cluster on INTERACTIVE swipe-back (FB21078443 / forum
+   807715: source item disappears, no workaround as of 26.2; forums 810944,
+   807208) — QA that path on physical devices; the back button always looks
+   fine and masks breakage.
+
+**Gesture handoff (decided):** deterministic mode-switching, not live nested
+scrolling. Collapsed page: inner content `.scrollDisabled(true)`, pager owns
+the gesture. Expanded: flip — pager disabled, inner scroll owns it; hand
+back when `onScrollGeometryChange` reports inner offset ≤ 0 and the drag
+continues downward. Nested same-axis scroll views are arbitration roulette
+(worse on iOS 26, forum 794212). If the two-mode feel disappoints, graduate
+to `UIGestureRecognizerRepresentable` (iOS 18+) modeled on FluidGroup's
+scrollview-interoperable-drag-gesture — no introspection.
+
+**Seen state (decided):** `seenPostIDs: Set<UUID>` on BoardStore, marked when
+a page becomes the SETTLED current page; persisted as a new Optional
+CacheEnvelope field — added to the hand-written CodingKeys/init/encode, per
+the envelope's Codable rule — keyed by week and dropped at reset. No server
+round-trip (no cross-device requirement; the weekly reset bounds the set).
+
+**Completion (note from the literature):** Instagram's "caught up" divider is
+widely read as symbolic because suggested content restarts the scroll (CHI
+2025). Ours can be sincere BECAUSE the board is finite — the terminal card
+must be an actual end-state (Host moment, countdown, compose nudge), never a
+segue into more content.
+
+## Remaining spike
+
+One scratch-project test: grid + paged detail, flip `sourceID` from state
+after paging, pop via back button AND interactive swipe on an iOS 18 physical
+device. Outcome selects rung 1 or rung 4 of the ladder. Everything else in
+this spec is buildable without it (stages 1 and 3 don't touch the
+transition).
