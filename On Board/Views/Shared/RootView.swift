@@ -143,6 +143,12 @@ struct RootView: View {
             Task { await retryAfterConnectivityRestored() }
         }
         .onChange(of: scenePhase) { _, phase in
+            // Leaving the foreground: land any coalesced cache write before
+            // the process can be suspended/killed — this is the durability
+            // half of persistToDisk moving off-main (see BoardCacheWriter).
+            if phase == .background {
+                Task { await store.flushCacheWrites() }
+            }
             guard didBootstrap, phase == .active else { return }
             network.recheck()
             // Above the isSignedIn guard on purpose — the version gate and any

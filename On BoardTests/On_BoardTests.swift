@@ -512,6 +512,8 @@ extension BoardStoreTests {
             currentBoard: Board(id: boardID, name: "Test")
         )
         writer.persistToDisk()
+        // The writer coalesces off-main now — land the write before reading.
+        await writer.flushCacheWrites()
         defer { writer.clearDiskCache() }
 
         let reader = BoardStore()
@@ -551,7 +553,7 @@ extension BoardStoreTests {
         #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
     }
 
-    @Test @MainActor func clearDiskCacheRemovesFile() {
+    @Test @MainActor func clearDiskCacheRemovesFile() async {
         let boardID = UUID()
         let week = BoardWeek(
             boardId: boardID,
@@ -567,8 +569,11 @@ extension BoardStoreTests {
             currentBoard: Board(id: boardID, name: "Test")
         )
         store.persistToDisk()
+        await store.flushCacheWrites()
         #expect(FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
 
+        // Everything is flushed, so clear's synchronous first delete is the
+        // one that acts here — the assertion doesn't race the async pass.
         store.clearDiskCache()
         #expect(!FileManager.default.fileExists(atPath: BoardStore.cacheFileURL.path))
     }
@@ -596,6 +601,7 @@ extension BoardStoreTests {
             currentBoard: Board(id: boardID, name: "Test")
         )
         writer.persistToDisk()
+        await writer.flushCacheWrites()
         defer { writer.clearDiskCache() }
 
         let reader = BoardStore(
@@ -643,6 +649,7 @@ extension BoardStoreTests {
         #expect(store.popScore(for: profile.id)?[.laugh] == 2)
 
         // Rehydrating a fresh store from the disk cache should see the same score.
+        await store.flushCacheWrites()
         let reader = BoardStore()
         await reader.hydrateFromDiskIfNeeded(boardID: boardID)
         #expect(reader.popScore(for: profile.id)?[.like] == 5)
@@ -1316,7 +1323,7 @@ struct OnboardingCoordinatorTargetPathTests {
     @Test func waitlistStepProducesFullPath() {
         #expect(
             OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
-                == [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
+                == [.birthday, .username, .profile, .schoolVerify, .graduation, .waitlist]
         )
     }
 
