@@ -253,6 +253,20 @@ struct MarkupTextEditor: UIViewRepresentable {
     var placeholder = "what's on your mind?"
     var autoFocus = true
 
+    /// Forwarded into the hosted accessory bar by hand: the bar lives in the
+    /// keyboard's view hierarchy, NOT in this view's, so it inherits nothing
+    /// from the SwiftUI environment. Traits (dark mode, Dynamic Type) still
+    /// flow through UIKit; explicitly-injected values like the glass kill
+    /// switch do not, and would silently read their default.
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
+
+    private func accessoryRoot() -> AnyView {
+        AnyView(
+            ComposerToolbar(controller: controller)
+                .environment(\.glassEffectsEnabled, glassEffectsEnabled)
+        )
+    }
+
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
         textView.backgroundColor = .clear
@@ -282,6 +296,20 @@ struct MarkupTextEditor: UIViewRepresentable {
             coordinator.textDidChange(textView)
         }
 
+        // The formatting bar IS the keyboard's toolbar. It used to be a
+        // `.safeAreaInset` on each host screen, which left it parked at the
+        // bottom of the sheet with the keyboard down — formatting controls
+        // for a field nobody was editing. `placement: .keyboard` can't do
+        // this job either: SwiftUI attaches that group to ITS OWN text
+        // inputs, and never sees a bridged UITextView. An input accessory
+        // is the real thing — present exactly while this view is first
+        // responder, and moving as part of the keyboard rather than chasing
+        // it through inset math (this codebase has been bitten by stale
+        // keyboard insets more than once).
+        let host = UIHostingController(rootView: accessoryRoot())
+        context.coordinator.accessoryHost = host
+        textView.inputAccessoryView = ComposerAccessoryContainer(host: host)
+
         if autoFocus {
             // Next runloop: the sheet's presentation must settle first.
             DispatchQueue.main.async { textView.becomeFirstResponder() }
@@ -290,6 +318,9 @@ struct MarkupTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
+        // Re-inject the environment the accessory can't inherit on its own.
+        context.coordinator.accessoryHost?.rootView = accessoryRoot()
+
         // External writes only (draft restore, dev prefill) — the common case
         // is our own binding echo, which this guard turns into a no-op.
         if textView.text != text {
@@ -316,6 +347,9 @@ struct MarkupTextEditor: UIViewRepresentable {
         let text: Binding<String>
         let controller: MarkupEditorController
         var placeholderLabel: UILabel?
+        /// Retained here — the container holds the hosting controller's VIEW,
+        /// and a released controller stops driving it.
+        var accessoryHost: UIHostingController<AnyView>?
 
         init(text: Binding<String>, controller: MarkupEditorController) {
             self.text = text
@@ -372,6 +406,52 @@ struct MarkupTextEditor: UIViewRepresentable {
                 : lineText.hasPrefix("* ") || lineText.hasPrefix("- ") ? .bullet
                 : .body
         }
+    }
+}
+
+// MARK: - Keyboard accessory
+
+/// Host for the formatting bar above the keyboard.
+///
+/// Two UIKit rules make this a class rather than a bare `host.view`:
+/// `inputAccessoryView` sizes from `intrinsicContentSize` only when the view
+/// opts in with `.flexibleHeight` (otherwise it gets the system's 44pt and
+/// clips the capsule), and the size must be re-derived rather than frozen so
+/// a Dynamic Type change grows the bar instead of cropping it.
+private final class ComposerAccessoryContainer: UIView {
+    private let host: UIHostingController<AnyView>
+
+    init(host: UIHostingController<AnyView>) {
+        self.host = host
+        super.init(frame: .zero)
+        autoresizingMask = .flexibleHeight
+        backgroundColor = .clear
+        // Without this the hosting controller pads the bar with the window's
+        // bottom safe-area inset — 34pt of dead space between the capsule and
+        // the keyboard it is supposed to be sitting on. The keyboard already
+        // covers the home indicator; the accessory must not inset for it too.
+        host.safeAreaRegions = []
+        host.view.backgroundColor = .clear
+        host.view.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(host.view)
+        NSLayoutConstraint.activate([
+            host.view.leadingAnchor.constraint(equalTo: leadingAnchor),
+            host.view.trailingAnchor.constraint(equalTo: trailingAnchor),
+            host.view.topAnchor.constraint(equalTo: topAnchor),
+            host.view.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (view: Self, _) in
+            view.invalidateIntrinsicContentSize()
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is unused") }
+
+    override var intrinsicContentSize: CGSize {
+        let width = bounds.width > 0 ? bounds.width : UIScreen.main.bounds.width
+        let fitting = host.sizeThatFits(in: CGSize(width: width, height: .greatestFiniteMagnitude))
+        return CGSize(width: UIView.noIntrinsicMetric, height: fitting.height)
     }
 }
 
@@ -447,12 +527,15 @@ enum MarkupStyler {
 
 // MARK: - Toolbar
 
-/// The composer's formatting bar: tone swatch + style menu leading, inline
-/// styles center, keyboard dismiss trailing. Lives in the sheet's bottom
-/// safe-area inset so it rides above the keyboard — which is also why the
-/// tone control lives HERE and not in the toolbar's bottomBar: a bottomBar
-/// sits underneath the keyboard on iOS 18, making the old placement
-/// unreachable during the entire time anyone is actually typing.
+/// The composer's formatting bar: style menu leading, inline styles center,
+/// keyboard dismiss trailing.
+///
+/// Installed as the editor's `inputAccessoryView` (see `MarkupTextEditor`),
+/// so it exists exactly while the field is being edited and never outlives
+/// the keyboard. Don't hand it to a host screen as a `.safeAreaInset` again —
+/// that's what left formatting controls sitting on screen with nothing
+/// focused.
+///
 /// TEXT controls only, on purpose: the post's tone lives in the nav bar's
 /// principal slot instead — a color control sitting beside B/I/U/S reads as
 /// text color no matter what shape it takes (learned the hard way).
@@ -520,7 +603,7 @@ struct ComposerToolbar: View {
                             fallback: AnyShapeStyle(.regularMaterial))
         }
         .padding(.horizontal, 12)
-        .padding(.bottom, 6)
+        .padding(.vertical, 6)
     }
 
     private func inlineButton(_ icon: String, _ label: String, _ delimiter: String) -> some View {

@@ -10,6 +10,7 @@
 //
 
 import Testing
+import SwiftUI
 import UIKit
 @testable import On_Board
 
@@ -122,5 +123,28 @@ struct MarkupEditorControllerTests {
         textView.selectedRange = NSRange(location: 5, length: 0)
         controller.applyBlock(.body)
         #expect(textView.text == "was a title")
+    }
+
+    // MARK: - The formatting bar belongs to the keyboard
+
+    /// The bar must be the text view's INPUT ACCESSORY, not something a host
+    /// screen places. As an accessory it cannot outlive first-responder status;
+    /// as a `.safeAreaInset` (what this used to be) it sat on screen offering
+    /// formatting controls for a field nobody was editing.
+    @Test func formattingBarIsInstalledAsTheKeyboardAccessory() {
+        let controller = MarkupEditorController()
+        let editor = MarkupTextEditor(text: .constant("hello"), controller: controller, autoFocus: false)
+        // A real window: `makeUIView` runs on a layout pass, not on init.
+        let host = UIHostingController(rootView: editor)
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 390, height: 600))
+        window.rootViewController = host
+        window.isHidden = false
+        window.layoutIfNeeded()
+
+        let textView = controller.textView
+        #expect(textView != nil)
+        #expect(textView?.inputAccessoryView != nil)
+        // And its height comes from the bar's own content, not UIKit's 44pt default.
+        #expect((textView?.inputAccessoryView?.intrinsicContentSize.height ?? 0) > 44)
     }
 }

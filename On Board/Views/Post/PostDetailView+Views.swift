@@ -328,9 +328,9 @@ extension PostDetailView {
     var postEditContent: some View {
         // Panels occupy real space, so the outer VStack's 16pt spacing is the
         // true visible rhythm — no inner stack needed.
-        // The same rich composer as NewPostView: markers dim in place, the
-        // formatting toolbar (with the tone swatch) rides the keyboard via
-        // the safeAreaInset in PostDetailView's body.
+        // The same rich composer as NewPostView: markers dim in place, and the
+        // formatting bar comes with it as the field's own keyboard accessory —
+        // nothing for this screen to place or gate.
         MarkupTextEditor(text: $draftContent, controller: editEditorController)
             .padding(14)
             .background {

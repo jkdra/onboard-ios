@@ -119,9 +119,6 @@ struct NewPostView: View {
                 .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                ComposerToolbar(controller: editorController)
-            }
             .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
             .background {
@@ -201,7 +198,9 @@ struct NewPostView: View {
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }
             }
-            .keyboardDoneToolbar()
+            // No `.keyboardDoneToolbar()` here: the formatting bar carries its
+            // own Done, and SwiftUI's keyboard group would have stacked a
+            // second one above it.
             .onAppear {
                 // DEV: `-dev.composeText "<markup>"` pre-fills the editor so
                 // headless walkthroughs can screenshot the live preview

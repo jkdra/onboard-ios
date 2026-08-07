@@ -179,9 +179,13 @@ struct PostDetailView: View {
                 guard let authorId = livePost.authorId else { return }
                 store.prefetchPopScore(for: authorId)
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if editMode {
-                    ComposerToolbar(controller: editEditorController)
+            .onAppear {
+                // DEV: `-dev.editPost` enters edit mode on appear. Edit mode is
+                // otherwise only reachable through the ••• menu, and synthesized
+                // taps on a SwiftUI Menu are broken under this Xcode — this is
+                // the only way to see the edit composer headlessly.
+                if ProcessInfo.processInfo.arguments.contains("-dev.editPost") {
+                    beginEditing()
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {

@@ -598,10 +598,12 @@ final class BoardClearingWalkthroughUITests: XCTestCase {
         XCTAssertTrue(compose.waitForExistence(timeout: 6), "compose card")
         compose.tap()
 
-        let titleField = app.textFields.firstMatch
-        XCTAssertTrue(titleField.waitForExistence(timeout: 6), "composer title field")
-        titleField.tap()
-        titleField.typeText("draft that must survive the wipe")
+        // One field, and it's a bridged UITextView — `textFields` (the old
+        // required Title) matches nothing since the composer was merged.
+        let contentField = app.textViews.firstMatch
+        XCTAssertTrue(contentField.waitForExistence(timeout: 6), "composer content field")
+        contentField.tap()
+        contentField.typeText("draft that must survive the wipe")
 
         // Countdown fires at ~18s, reset ~5s later — both while this sheet is up.
         sleep(20)
@@ -610,7 +612,7 @@ final class BoardClearingWalkthroughUITests: XCTestCase {
         let draft = app.staticTexts
             .matching(NSPredicate(format: "label CONTAINS[c] %@", "must survive"))
             .firstMatch
-        let draftField = app.textFields
+        let draftField = app.textViews
             .matching(NSPredicate(format: "value CONTAINS[c] %@", "must survive"))
             .firstMatch
         XCTAssertTrue(

@@ -122,12 +122,15 @@ struct ContentView: View {
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
         .onAppear { openPendingPostIfReady() }
-        .onAppear {
+        .task {
             // DEV: `-dev.openComposer` opens the compose sheet on launch —
             // headless composer screenshots, same rationale as openPostIndex.
-            if ProcessInfo.processInfo.arguments.contains("-dev.openComposer") {
-                showNewPost = true
-            }
+            // Deferred rather than set in `onAppear`: flipping it during the
+            // same appear pass that installs the `.sheet` is swallowed, and
+            // the arg silently did nothing.
+            guard ProcessInfo.processInfo.arguments.contains("-dev.openComposer") else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            showNewPost = true
         }
         .onAppear {
             guard let index = Self.devOpenPostIndex,
