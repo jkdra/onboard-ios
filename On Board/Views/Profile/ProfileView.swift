@@ -27,7 +27,7 @@ struct ProfileView: View {
     @Environment(\.profileFieldLimits) private var profileFieldLimits
     @Namespace private var profileNamespace
     @State private var showAvatarViewer = false
-    @State private var avatarViewerScale: CGFloat = 1.0
+    @State private var avatarViewerPhase: ImageViewerPhase = .closed
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
@@ -94,7 +94,7 @@ struct ProfileView: View {
                     sourceID: ProfileGeometryID.avatarImage,
                     isPresented: $showAvatarViewer,
                     aspectRatio: 1.0,
-                    currentScale: $avatarViewerScale
+                    phase: $avatarViewerPhase
                 )
                 .ignoresSafeArea()
                 .zIndex(100)
@@ -160,7 +160,7 @@ struct ProfileView: View {
                         onEditProfile: beginEditing,
                         onAvatarTap: {
                             if displayedProfile.avatarUrl != nil {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                                withAnimation(ImageViewerMotion.morphSpring) {
                                     showAvatarViewer = true
                                 }
                             }
@@ -244,10 +244,13 @@ struct ProfileView: View {
             }
         }
 
-        if showAvatarViewer, avatarViewerScale <= 1.0 {
+        // `.settled`, not `showAvatarViewer`: adopts the same deferred-chrome
+        // behavior as PostDetailView (X arrives after the open morph, never
+        // inside its transaction), which this call site previously lacked.
+        if avatarViewerPhase == .settled {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                    withAnimation(ImageViewerMotion.morphSpring) {
                         showAvatarViewer = false
                     }
                 } label: {

@@ -7,6 +7,14 @@ import SwiftUI
 import PhotosUI
 import Nuke
 
+/// Typed matched-geometry id for the card-image ↔ viewer hero handoff. The
+/// card anchor (`isSource: !showImageViewer`) and the viewer
+/// (`isSource: isPresented`) must reference the same id — a typed case makes
+/// that contract greppable instead of two magic strings.
+enum PostGeometryID {
+    case postImage
+}
+
 struct PostDetailView: View {
     let post: Post
 
@@ -46,16 +54,25 @@ struct PostDetailView: View {
     @State var alertError: PresentableAlertError?
     @State var isLoadingComments = false
     @State var showImageViewer = false
-    @State var imageViewerScale: CGFloat = 1.0
-    /// Nav-bar chrome for the viewer (X in, ••• out, back hidden), DEFERRED
-    /// past the open morph. Toolbar mutations are UIKit layout work, and when
-    /// they ran inside the opening transaction they were the enter-morph's
-    /// stutter — the swipe-close path was smooth precisely because its scale
-    /// gate removed the X *before* the morph, leaving pure geometry. Photos
-    /// does the same thing: zoom first, chrome after. On close this flips
-    /// false immediately (outside the animation), reproducing the proven
-    /// smooth path in both directions.
-    @State var viewerChromeVisible = false
+    /// The viewer's lifecycle, written by ImageViewerView. Nav-bar chrome
+    /// derives from it (X in, ••• out, back hidden — only once `.settled`,
+    /// never during `.morphing`): toolbar mutations are UIKit layout work,
+    /// and when they ran inside the opening transaction they were the
+    /// enter-morph's stutter. Photos does the same thing: zoom first,
+    /// chrome after. The viewer owns the settle timing — this view runs no
+    /// timer of its own.
+    @State var viewerPhase: ImageViewerPhase = .closed
+
+    /// The single open/close pair every call site uses — the tap, the
+    /// toolbar X, and the `-dev.imageViewerDemo` timer — so the morph
+    /// animation cannot diverge per path.
+    func openImageViewer() {
+        withAnimation(ImageViewerMotion.morphSpring) { showImageViewer = true }
+    }
+
+    func closeImageViewer() {
+        withAnimation(ImageViewerMotion.morphSpring) { showImageViewer = false }
+    }
 
     // Moderation
     @State var reportTarget: ReportTarget?
@@ -212,9 +229,9 @@ struct PostDetailView: View {
                    livePost.imageUrl != nil {
                     Task {
                         try? await Task.sleep(for: .seconds(1.5))
-                        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = true }
+                        openImageViewer()
                         try? await Task.sleep(for: .seconds(2))
-                        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = false }
+                        closeImageViewer()
                     }
                 }
             }
@@ -347,7 +364,7 @@ struct PostDetailView: View {
                 Text("This also removes any replies to it.")
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(editMode || viewerChromeVisible)
+            .navigationBarBackButtonHidden(editMode || viewerPhase.coversScreen)
             // Deliberately `showImageViewer`, NOT the deferred chrome flag:
             // this must flip the instant the viewer opens, or the 450ms chrome
             // window would leave the zoom-pop edge swipe live mid-morph — an
@@ -355,19 +372,6 @@ struct PostDetailView: View {
             // zoom-transition landmine documented in CLAUDE.md. It's a
             // presentation flag, not toolbar layout, so it's cheap in-transaction.
             .interactiveDismissDisabled(editMode || showImageViewer)
-            .onChange(of: showImageViewer) { _, open in
-                if open {
-                    Task {
-                        try? await Task.sleep(for: .milliseconds(450))
-                        guard showImageViewer else { return }
-                        withAnimation(.easeIn(duration: 0.15)) { viewerChromeVisible = true }
-                    }
-                } else {
-                    // Instant and unanimated on purpose — mirrors the
-                    // swipe-close path, which was the smooth one.
-                    viewerChromeVisible = false
-                }
-            }
             // Keep the single-finger interactive pop (governed above), but drop the
             // zoom transition's two-finger pinch-to-dismiss — it reads as accidental.
             .disableZoomPinchToDismiss()
@@ -376,10 +380,10 @@ struct PostDetailView: View {
                 ImageViewerView(
                     url: URL(string: livePost.imageUrl ?? ""),
                     namespace: postNamespace,
-                    sourceID: "postImage",
+                    sourceID: PostGeometryID.postImage,
                     isPresented: $showImageViewer,
                     aspectRatio: livePost.imageAspectRatio.map { CGFloat($0) },
-                    currentScale: $imageViewerScale
+                    phase: $viewerPhase
                 )
                 .ignoresSafeArea()
                 .zIndex(100)

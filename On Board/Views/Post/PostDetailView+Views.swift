@@ -46,12 +46,10 @@ extension PostDetailView {
             }
         }
 
-        if viewerChromeVisible, imageViewerScale <= 1.0 {
+        if viewerPhase == .settled {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
-                        showImageViewer = false
-                    }
+                    closeImageViewer()
                 } label: {
                     Label("Close", systemImage: "xmark")
                         .fontWeight(.semibold)
@@ -60,7 +58,7 @@ extension PostDetailView {
             }
         }
 
-        if !editMode, !isCommentEditing, !viewerChromeVisible {
+        if !editMode, !isCommentEditing, !viewerPhase.coversScreen {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if canEdit && !isReadOnly {
@@ -197,7 +195,7 @@ extension PostDetailView {
                     // sources for one id is undefined, and it's exactly what
                     // makes the close morph start from a stale frame.
                     Color.clear.matchedGeometryEffect(
-                        id: "postImage", in: postNamespace, isSource: !showImageViewer
+                        id: PostGeometryID.postImage, in: postNamespace, isSource: !showImageViewer
                     )
                 }
                 .opacity(showImageViewer ? 0 : 1)
@@ -206,7 +204,7 @@ extension PostDetailView {
                     isEnabled: !isReadOnly,
                     isLiked: { store.userReaction(for: livePost.id) == .like },
                     onLike: { store.setReaction(postId: livePost.id, reaction: .like) },
-                    onSingleTap: { withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = true } }
+                    onSingleTap: { openImageViewer() }
                 )
         }
     }
