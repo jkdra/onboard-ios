@@ -74,8 +74,10 @@ struct OnboardingCoordinator: View {
                             OnboardingProfileStepView()
                         case .schoolVerify:
                             OnboardingSchoolEmailStepView()
-                        case .graduation:
-                            OnboardingGraduationStepView()
+                        // .graduation renders no destination of its own: it
+                        // holds the user ON the school screen (same target
+                        // path) while its details stage collects graduation +
+                        // preferences. It can never appear in `path`.
                         case .waitlist:
                             OnboardingWaitlistStepView()
                         case .unrecognized:
@@ -194,8 +196,11 @@ struct OnboardingCoordinator: View {
         case .username:            return [.birthday, .username]
         case .profile:             return [.birthday, .username, .profile]
         case .schoolVerify:        return [.birthday, .username, .profile, .schoolVerify]
-        case .graduation:          return [.birthday, .username, .profile, .schoolVerify, .graduation]
-        case .waitlist:            return [.birthday, .username, .profile, .schoolVerify, .graduation, .waitlist]
+        // Same path as schoolVerify ON PURPOSE: verification must not push
+        // anywhere — the school screen advances to its details stage in
+        // place, and only submitting graduation moves the path forward.
+        case .graduation:          return [.birthday, .username, .profile, .schoolVerify]
+        case .waitlist:            return [.birthday, .username, .profile, .schoolVerify, .waitlist]
         // Pushed alone, with none of the real steps beneath it: the preceding
         // steps are meaningless when the server's flow is one this build can't
         // complete, and stacking them would offer a back button into it.
