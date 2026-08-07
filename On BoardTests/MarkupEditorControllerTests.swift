@@ -141,10 +141,15 @@ struct MarkupEditorControllerTests {
         window.isHidden = false
         window.layoutIfNeeded()
 
-        let textView = controller.textView
-        #expect(textView != nil)
-        #expect(textView?.inputAccessoryView != nil)
-        // And its height comes from the bar's own content, not UIKit's 44pt default.
-        #expect((textView?.inputAccessoryView?.intrinsicContentSize.height ?? 0) > 44)
+        #expect(controller.textView != nil)
+        let accessory = controller.textView?.inputAccessoryView
+        #expect(accessory != nil)
+        // `.flexibleHeight` is the opt-in that makes UIKit honour the bar's
+        // own `intrinsicContentSize` instead of forcing its default height —
+        // without it the bar is clipped. Asserting the mechanism rather than a
+        // specific height, since the bar's content is deliberately ~44pt (the
+        // standard toolbar metric) and would collide with any such threshold.
+        #expect(accessory?.autoresizingMask.contains(.flexibleHeight) == true)
+        #expect((accessory?.intrinsicContentSize.height ?? 0) >= 44)
     }
 }

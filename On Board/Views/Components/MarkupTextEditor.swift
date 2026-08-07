@@ -253,19 +253,13 @@ struct MarkupTextEditor: UIViewRepresentable {
     var placeholder = "what's on your mind?"
     var autoFocus = true
 
-    /// Forwarded into the hosted accessory bar by hand: the bar lives in the
-    /// keyboard's view hierarchy, NOT in this view's, so it inherits nothing
-    /// from the SwiftUI environment. Traits (dark mode, Dynamic Type) still
-    /// flow through UIKit; explicitly-injected values like the glass kill
-    /// switch do not, and would silently read their default.
+    /// The accessory bar lives in the KEYBOARD's view hierarchy, not this
+    /// view's, so it inherits nothing from the SwiftUI environment — traits
+    /// (dark mode, Dynamic Type) still arrive through UIKit, but a
+    /// config-driven `EnvironmentValue` would silently read its default. The
+    /// glass kill switch matters on iOS 26+, where the bar IS glass, so it is
+    /// re-injected onto the hosted root by hand (see `ComposerAccessoryRoot`).
     @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
-
-    private func accessoryRoot() -> AnyView {
-        AnyView(
-            ComposerToolbar(controller: controller)
-                .environment(\.glassEffectsEnabled, glassEffectsEnabled)
-        )
-    }
 
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
@@ -306,7 +300,8 @@ struct MarkupTextEditor: UIViewRepresentable {
         // responder, and moving as part of the keyboard rather than chasing
         // it through inset math (this codebase has been bitten by stale
         // keyboard insets more than once).
-        let host = UIHostingController(rootView: accessoryRoot())
+        let root = ComposerAccessoryRoot(controller: controller, glassEnabled: glassEffectsEnabled)
+        let host = UIHostingController(rootView: root)
         context.coordinator.accessoryHost = host
         textView.inputAccessoryView = ComposerAccessoryContainer(host: host)
 
@@ -318,8 +313,9 @@ struct MarkupTextEditor: UIViewRepresentable {
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
-        // Re-inject the environment the accessory can't inherit on its own.
-        context.coordinator.accessoryHost?.rootView = accessoryRoot()
+        // Keep the injected kill switch current — nothing else crosses into
+        // the keyboard's hierarchy on its own.
+        context.coordinator.accessoryHost?.rootView.glassEnabled = glassEffectsEnabled
 
         // External writes only (draft restore, dev prefill) — the common case
         // is our own binding echo, which this guard turns into a no-op.
@@ -349,7 +345,7 @@ struct MarkupTextEditor: UIViewRepresentable {
         var placeholderLabel: UILabel?
         /// Retained here — the container holds the hosting controller's VIEW,
         /// and a released controller stops driving it.
-        var accessoryHost: UIHostingController<AnyView>?
+        var accessoryHost: UIHostingController<ComposerAccessoryRoot>?
 
         init(text: Binding<String>, controller: MarkupEditorController) {
             self.text = text
@@ -411,26 +407,44 @@ struct MarkupTextEditor: UIViewRepresentable {
 
 // MARK: - Keyboard accessory
 
-/// Host for the formatting bar above the keyboard.
+/// Host for the formatting bar above the keyboard. The chrome follows the
+/// KEYBOARD'S OWN SHAPE, which changed between eras:
 ///
-/// Two UIKit rules make this a class rather than a bare `host.view`:
-/// `inputAccessoryView` sizes from `intrinsicContentSize` only when the view
-/// opts in with `.flexibleHeight` (otherwise it gets the system's 44pt and
-/// clips the capsule), and the size must be re-derived rather than frozen so
-/// a Dynamic Type change grows the bar instead of cropping it.
-private final class ComposerAccessoryContainer: UIView {
-    private let host: UIHostingController<AnyView>
+/// * **iOS 18–25** — the keyboard is edge to edge, so the bar is too.
+///   `UIInputView(inputViewStyle: .keyboard)` is the primitive Apple's own
+///   accessory bars are built on: it paints the REAL keyboard background
+///   rather than a material chosen to resemble one, so bar and keys read as
+///   one continuous surface with no seam to tune.
+/// * **iOS 26+** — the keyboard became a FLOATING, inset, rounded panel. A
+///   full-bleed bar there overhangs it on both sides and meets its rounded
+///   top with square corners. So the container goes styleless (`.default`
+///   paints nothing) and `ComposerToolbar` draws a glass capsule inset to
+///   match, floating just above the keys. Verified by screenshot on both —
+///   full bleed looked right on 18 and wrong under Liquid Glass.
+///
+/// The sizing dance is common to both: `inputAccessoryView` takes UIKit's
+/// default 44pt unless the view opts in with `.flexibleHeight`, and the height
+/// must be re-derived rather than frozen so a Dynamic Type change grows the bar
+/// instead of cropping it.
+private final class ComposerAccessoryContainer: UIInputView {
+    private let host: UIHostingController<ComposerAccessoryRoot>
 
-    init(host: UIHostingController<AnyView>) {
+    init(host: UIHostingController<ComposerAccessoryRoot>) {
         self.host = host
-        super.init(frame: .zero)
+        // `.default` is the styleless one — on iOS 26+ the capsule is the
+        // chrome, and a keyboard-styled container behind it would be a second
+        // surface stacked under a floating element.
+        let style: UIInputView.Style = if #available(iOS 26.0, *) { .default } else { .keyboard }
+        super.init(frame: .zero, inputViewStyle: style)
+        allowsSelfSizing = true
         autoresizingMask = .flexibleHeight
-        backgroundColor = .clear
         // Without this the hosting controller pads the bar with the window's
-        // bottom safe-area inset — 34pt of dead space between the capsule and
-        // the keyboard it is supposed to be sitting on. The keyboard already
-        // covers the home indicator; the accessory must not inset for it too.
+        // bottom safe-area inset — 34pt of dead space between the bar and the
+        // keyboard it is supposed to be sitting on. The keyboard already covers
+        // the home indicator; the accessory must not inset for it too.
         host.safeAreaRegions = []
+        // Clear so the container's own material shows through (pre-26). Do NOT
+        // clear the container itself there — that is the material.
         host.view.backgroundColor = .clear
         host.view.translatesAutoresizingMaskIntoConstraints = false
         addSubview(host.view)
@@ -527,6 +541,41 @@ enum MarkupStyler {
 
 // MARK: - Toolbar
 
+/// The bar's background and outer spacing, which follow the keyboard's shape
+/// per era — see `ComposerAccessoryContainer` for why. Pre-26 this is a no-op:
+/// the container itself is the surface, and the content runs full bleed on it.
+private struct ComposerBarChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .background {
+                    GlassBackground(shape: Capsule(style: .continuous),
+                                    fallback: AnyShapeStyle(.regularMaterial))
+                }
+                // Inset to clear the floating keyboard's own margins, and
+                // lifted off its top edge so the capsule reads as hovering
+                // above the keys rather than welded to them.
+                .padding(.horizontal, 14)
+                .padding(.bottom, 10)
+        } else {
+            content
+        }
+    }
+}
+
+/// What the accessory actually hosts. Exists so the hosting controller keeps a
+/// concrete type (no `AnyView`) while still carrying the one environment value
+/// that has to be handed across the boundary into the keyboard's hierarchy.
+struct ComposerAccessoryRoot: View {
+    let controller: MarkupEditorController
+    var glassEnabled: Bool
+
+    var body: some View {
+        ComposerToolbar(controller: controller)
+            .environment(\.glassEffectsEnabled, glassEnabled)
+    }
+}
+
 /// The composer's formatting bar: style menu leading, inline styles center,
 /// keyboard dismiss trailing.
 ///
@@ -535,6 +584,13 @@ enum MarkupStyler {
 /// the keyboard. Don't hand it to a host screen as a `.safeAreaInset` again —
 /// that's what left formatting controls sitting on screen with nothing
 /// focused.
+///
+/// Its background is era-dependent and lives in `chrome` below: nothing at all
+/// pre-26 (the container wears the keyboard's own material, and painting here
+/// would stack a second surface on it), a glass capsule on 26+. Items are
+/// pinned to `.primary` rather than taking the accent tint a system bar would
+/// default to — this app's chrome is monochrome, and blue B/I/U/S reads as
+/// someone else's toolbar.
 ///
 /// TEXT controls only, on purpose: the post's tone lives in the nav bar's
 /// principal slot instead — a color control sitting beside B/I/U/S reads as
@@ -570,7 +626,7 @@ struct ComposerToolbar: View {
                         .font(.system(size: 10, weight: .semibold))
                 }
                 .padding(.leading, 16)
-                .padding(.vertical, 13)
+                .padding(.vertical, 12)
                 .contentShape(.rect)
             }
 
@@ -591,19 +647,18 @@ struct ComposerToolbar: View {
                     .fontWeight(.semibold)
                     .lineLimit(1)
                     .fixedSize()
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 13)
+                    .padding(.trailing, 16)
+                    .padding(.leading, 10)
+                    .padding(.vertical, 12)
                     .contentShape(.rect)
             }
             .accessibilityLabel("Dismiss keyboard")
         }
+        // Both: `foregroundStyle` colors the glyphs, `tint` stops the Menu and
+        // the buttons from reverting to accent on press/highlight.
         .foregroundStyle(.primary)
-        .background {
-            GlassBackground(shape: Capsule(style: .continuous),
-                            fallback: AnyShapeStyle(.regularMaterial))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
+        .tint(.primary)
+        .modifier(ComposerBarChrome())
     }
 
     private func inlineButton(_ icon: String, _ label: String, _ delimiter: String) -> some View {
@@ -613,14 +668,17 @@ struct ComposerToolbar: View {
         } label: {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
-                .frame(width: 38, height: 46)
+                .frame(width: 38, height: 44)
                 .background {
-                    // Subtle applied-state highlight; tapping again removes
-                    // the modifier across the whole run.
+                    // Applied-state highlight; tapping again removes the
+                    // modifier across the whole run. Deliberately stronger
+                    // than it was on the old capsule — the keyboard's material
+                    // is busier than a blurred panel, and the previous 0.14
+                    // wash disappeared into it.
                     if isActive {
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .fill(.primary.opacity(0.14))
-                            .padding(.vertical, 6)
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(.primary.opacity(0.20))
+                            .padding(.vertical, 5)
                     }
                 }
                 .contentShape(.rect)
