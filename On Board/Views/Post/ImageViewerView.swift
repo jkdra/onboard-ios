@@ -1,38 +1,45 @@
 import SwiftUI
+import NukeUI
 import Nuke
 
-// REBUILT ON UIScrollView (2026-08-08, corrected 2026-08-07 after the first
-// attempt regressed). The previous SwiftUI version drove pinch/pan/double-tap
-// entirely through @State (scale, offset) recomputed on every
-// MagnifyGesture/DragGesture delta — every touch-move forced a SwiftUI
-// diff+layout pass through this view's whole chain (matchedGeometryEffect +
-// scaleEffect + offset), competing with PostDetailView's other content
-// (comments, composer, reaction bar) for the SAME transaction. On a 120Hz
-// display the frame budget is 8.33ms; three narrower fixes (ProMotion plist
-// key, pre-mounting, deferred nav chrome) each removed one secondary cost but
-// the interactive gesture loop itself still went through SwiftUI per frame.
+// TWO LAYERS WITH A HANDOFF (2026-08-07). The viewer is split into:
 //
-// Every production photo viewer (NYTPhotoViewer, JTSImageViewController,
-// SimpleImageViewer) is built the same way: UIScrollView for zoom/pan —
-// hardware-accelerated, zero SwiftUI involvement per touch — with a thin
-// custom pan only for swipe-to-dismiss. The outer matchedGeometryEffect morph
-// (card <-> viewer) is unchanged.
+//   - a MORPH layer: a plain SwiftUI fitted image carrying the
+//     matchedGeometryEffect — the exact chain from the original SwiftUI
+//     implementation, whose card<->viewer morph was the one part everyone
+//     agreed looked right. It is visible only while a morph or an
+//     interactive dismissal is in flight.
+//   - an INTERACTION layer: a full-screen UIScrollView + UIImageView
+//     (UIViewRepresentable) that owns pinch/pan/double-tap/swipe-dismiss
+//     with zero SwiftUI involvement per touch — the OS primitive every
+//     production photo viewer (NYTPhotoViewer, JXPhotoBrowser,
+//     Krisiacik/ImageViewer) is built on. Visible only once the open morph
+//     has settled. Both layers aspect-fit the same image into the same
+//     bounds, so the swap between them is pixel-identical and invisible.
 //
-// WHY THE FIRST UIScrollView ATTEMPT (62bfc4a) BROKE ZOOM ENTIRELY — do not
-// reintroduce either half of this loop:
-//   1. Its layout guard compared `imageView.frame.size` against the fitted
-//      size — but UIScrollView zooming APPLIES A TRANSFORM to imageView, and
-//      `frame` reports the transformed size. Any layout pass mid-zoom
-//      therefore "detected a size change" and reset zoomScale to 1.
-//   2. Layout passes were guaranteed mid-zoom, because every zoom delta was
-//      reported through the SwiftUI `scale` binding → PostDetailView's
-//      toolbar (which reads it) re-rendered → the representable re-laid out.
-// Net effect: every pinch delta snapped back to 1x and double-tap's animated
-// zoom was cancelled on its first delegate callback. The fix is both-ended:
-// layout re-fits ONLY when bounds or the image actually change (tracked
-// explicitly, never inferred from the transformed frame), and the scale
-// binding is only written when crossing the 1.0 chrome-visibility threshold
-// (its only consumer), so a pinch never re-renders SwiftUI at all.
+// WHY NOT ONE LAYER? Both single-layer variants shipped and failed:
+//   - All-SwiftUI (through 696819d): every pinch/drag delta re-ran a
+//     SwiftUI diff+layout through the matchedGeometryEffect chain,
+//     competing with PostDetailView's comments/composer for the same
+//     8.33ms 120Hz frame budget — the original on-device stutter.
+//   - matchedGeometryEffect directly on the representable (62bfc4a and the
+//     first corrected rebuild): SwiftUI animates a UIView's frame by
+//     SCALING ITS LAYER, not re-laying it out per frame — so the morph
+//     squeezed the final full-screen letterboxed composition into the card
+//     rect instead of growing the image out of the card. The morph must
+//     live on a native SwiftUI image whose matched rect IS the fitted
+//     image rect.
+//
+// THE 62bfc4a ZOOM-KILLING FEEDBACK LOOP, for whoever touches this next
+// (both halves are still structurally possible — do not reintroduce):
+//   1. Never infer "the image changed size" from imageView.frame in a
+//      zooming scroll view — zoom applies a transform, and frame reports
+//      the TRANSFORMED size, so a frame-comparison layout guard resets
+//      zoomScale to 1 on every mid-zoom layout pass.
+//   2. Never write a SwiftUI binding per zoom delta — PostDetailView's
+//      toolbar reads the bound scale, so each write re-rendered the host,
+//      re-laid-out the representable, and (via 1) snapped the zoom back.
+//      Only the 1.0 chrome-threshold CROSSING is reported.
 
 struct ImageViewerView<ID: Hashable>: View {
     let url: URL?
@@ -42,18 +49,39 @@ struct ImageViewerView<ID: Hashable>: View {
     var aspectRatio: CGFloat? = nil
     var currentScale: Binding<CGFloat>? = nil
 
-    // Background dimming during an interactive swipe-to-dismiss. Left as
-    // plain SwiftUI @State deliberately: it drives exactly one leaf view's
-    // `.opacity`, which is cheap regardless of where the drag math lives.
+    // Morph-layer transform state — meaningful only while the morph layer
+    // is showing (open/close morphs and the tail of a swipe-dismiss).
+    @State private var scale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
     @State private var backgroundOpacity: Double = 1.0
+    @State private var loadedImageSize: CGSize?
+
+    /// True once the open morph has finished and the UIKit layer owns the
+    /// screen. Every write is deliberately plain (never inside
+    /// `withAnimation`) so the layer swap is an instant, invisible flip
+    /// between two pixel-identical frames — animating it would crossfade
+    /// two copies of the image.
+    @State private var settled = false
+    @State private var settleTask: Task<Void, Never>?
     @State private var internalScale: CGFloat = 1.0
 
-    // PRE-MOUNTED, on purpose (2026-08-07, kept through the rebuild). Every
-    // native-feeling viewer animates a layer that already exists; the open
-    // morph must be pure geometry + opacity on committed layers. The image
-    // lives in the hierarchy whenever the post has one (hidden, hit-testing
-    // off); `isPresented` only flips opacity and the matched-geometry
-    // source handoff.
+    private var resolvedAspectRatio: CGFloat? {
+        if let aspect = aspectRatio { return aspect }
+        if let size = loadedImageSize { return size.width / size.height }
+        return nil
+    }
+
+    /// How long after `isPresented` flips true before the UIKit layer takes
+    /// over. Matches PostDetailView's deferred-chrome delay: the 0.35s
+    /// morph spring has visually finished by then.
+    private var settleDelay: Duration { .milliseconds(450) }
+
+    // PRE-MOUNTED, on purpose (2026-08-07). Every native-feeling viewer
+    // animates a layer that already exists; the open morph must be pure
+    // geometry + opacity on committed layers. Both layers live in the
+    // hierarchy whenever the post has an image (hidden, hit-testing off);
+    // `isPresented` only flips opacity and the matched-geometry source
+    // handoff.
     var body: some View {
         ZStack {
             if let url {
@@ -62,30 +90,10 @@ struct ImageViewerView<ID: Hashable>: View {
                     .opacity(isPresented ? backgroundOpacity : 0)
 
                 GeometryReader { proxy in
-                    ZoomableImageView(
-                        url: url,
-                        aspectRatio: aspectRatio,
-                        isPresented: isPresented,
-                        scale: $internalScale,
-                        dragProgress: { progress in
-                            // 0 at rest, 1 at the dismiss threshold — same
-                            // curve the old SwiftUI drag handler used.
-                            backgroundOpacity = max(0, 1 - progress * 0.5)
-                        },
-                        onDismiss: {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                isPresented = false
-                            }
-                        }
-                    )
-                    .frame(width: proxy.size.width, height: proxy.size.height)
-                    // Source only while open — the card's anchor holds the
-                    // other half of the handoff (`isSource: !viewerOpen`),
-                    // so steady state always has exactly one source and the
-                    // open/close morphs interpolate between the two without
-                    // any view being inserted or removed.
-                    .matchedGeometryEffect(id: sourceID, in: namespace, isSource: isPresented)
-                    .opacity(isPresented ? 1 : 0)
+                    ZStack {
+                        morphLayer(url: url, in: proxy.size)
+                        interactionLayer(url: url, in: proxy.size)
+                    }
                 }
             }
         }
@@ -94,15 +102,115 @@ struct ImageViewerView<ID: Hashable>: View {
         // tap and scroll on the post beneath it.
         .allowsHitTesting(isPresented)
         .onChange(of: isPresented) { _, presented in
-            if !presented {
+            if presented {
+                settleTask?.cancel()
+                settleTask = Task {
+                    try? await Task.sleep(for: settleDelay)
+                    guard !Task.isCancelled, isPresented else { return }
+                    settled = true
+                }
+            } else {
+                settleTask?.cancel()
+                settled = false
+                // ANIMATED on purpose. This runs outside the caller's
+                // withAnimation transaction, so plain assignments here would
+                // snap — gliding the transform home alongside the
+                // matched-geometry morph is what makes a swipe-dismissal
+                // read as one continuous motion.
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    scale = 1.0
+                    offset = .zero
                     backgroundOpacity = 1.0
                 }
+                currentScale?.wrappedValue = 1.0
             }
         }
         .onChange(of: internalScale) { _, newScale in
             currentScale?.wrappedValue = newScale
         }
+    }
+
+    /// The matched-geometry morph layer — native SwiftUI, sized to the
+    /// FITTED IMAGE RECT (not the screen). The matched rect must be the
+    /// image itself: matching the full-screen rect makes the morph
+    /// interpolate the letterboxed composition into the card frame.
+    @ViewBuilder
+    private func morphLayer(url: URL, in size: CGSize) -> some View {
+        LazyImage(url: url) { state in
+            if let image = state.image {
+                image
+                    .resizable()
+                    .scaledToFit()
+                    .onAppear {
+                        if let size = state.imageContainer?.image.size {
+                            loadedImageSize = size
+                        }
+                    }
+            } else if state.error != nil {
+                Image(systemName: "photo.badge.exclamationmark")
+                    .font(.largeTitle)
+                    .foregroundStyle(.white.opacity(0.5))
+            } else {
+                ProgressView()
+                    .tint(.white)
+            }
+        }
+        .aspectRatio(resolvedAspectRatio, contentMode: .fit)
+        .frame(maxWidth: size.width, maxHeight: size.height)
+        // While the UIKit layer owns the screen this layer is hidden — via
+        // its own modifier, stripped of animation, so the hide/show is an
+        // instant swap even when the triggering state change rides an
+        // animated transaction (e.g. the close flip). The animated
+        // `isPresented` fade below stays a separate modifier: opacities
+        // multiply, and each animates independently.
+        .opacity(settled && isPresented ? 0 : 1)
+        .transaction { $0.animation = nil }
+        // Source only while open — the card's anchor holds the other half
+        // of the handoff (`isSource: !viewerOpen`), so steady state always
+        // has exactly one source and the open/close morphs interpolate
+        // between the two without any view being inserted or removed.
+        .matchedGeometryEffect(id: sourceID, in: namespace, isSource: isPresented)
+        .position(x: size.width / 2, y: size.height / 2)
+        .scaleEffect(scale)
+        .offset(offset)
+        .opacity(isPresented ? 1 : 0)
+        .allowsHitTesting(false)
+    }
+
+    /// The full-screen UIKit zoom surface. No matchedGeometryEffect — its
+    /// frame never animates, so it is never subject to the representable
+    /// layer-scaling artifact, and its fit layout runs exactly once per
+    /// size/image change.
+    @ViewBuilder
+    private func interactionLayer(url: URL, in size: CGSize) -> some View {
+        ZoomableImageView(
+            url: url,
+            aspectRatio: aspectRatio,
+            isPresented: isPresented,
+            scale: $internalScale,
+            dragProgress: { progress in
+                // 0 at rest, 1 at the dismiss threshold — same curve the
+                // original SwiftUI drag handler used. Drives one leaf
+                // view's opacity; cheap by construction.
+                backgroundOpacity = max(0, 1 - progress * 0.5)
+            },
+            onDismiss: { translation, shrink in
+                // Hand the dragged transform to the morph layer BEFORE the
+                // close flip: it reappears exactly where the UIKit layer's
+                // drag left the image (plain writes, no animation), then
+                // the onChange above glides it home inside the morph.
+                scale = shrink
+                offset = CGSize(width: translation.x * 0.5, height: translation.y)
+                settled = false
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    isPresented = false
+                }
+            }
+        )
+        .frame(width: size.width, height: size.height)
+        .opacity(settled && isPresented ? 1 : 0)
+        .transaction { $0.animation = nil }
+        .allowsHitTesting(isPresented && settled)
     }
 }
 
@@ -114,7 +222,9 @@ private struct ZoomableImageView: UIViewRepresentable {
     let isPresented: Bool
     @Binding var scale: CGFloat
     let dragProgress: (Double) -> Void
-    let onDismiss: () -> Void
+    /// Called when a swipe-dismiss crosses the threshold, with the final
+    /// pan translation and the shrink scale applied at that moment.
+    let onDismiss: (CGPoint, CGFloat) -> Void
 
     func makeUIView(context: Context) -> ZoomableImageContainerView {
         let view = ZoomableImageContainerView()
@@ -140,13 +250,17 @@ private struct ZoomableImageView: UIViewRepresentable {
     final class Coordinator: NSObject {
         let scaleBinding: Binding<CGFloat>
         let dragProgress: (Double) -> Void
-        let onDismiss: () -> Void
+        let onDismiss: (CGPoint, CGFloat) -> Void
         /// Tracks the presented edge so `updateUIView` resets on close
         /// exactly once, not on every unrelated re-render while closed.
         var wasPresented = true
         private var lastReportedZoomedIn = false
 
-        init(scale: Binding<CGFloat>, dragProgress: @escaping (Double) -> Void, onDismiss: @escaping () -> Void) {
+        init(
+            scale: Binding<CGFloat>,
+            dragProgress: @escaping (Double) -> Void,
+            onDismiss: @escaping (CGPoint, CGFloat) -> Void
+        ) {
             self.scaleBinding = scale
             self.dragProgress = dragProgress
             self.onDismiss = onDismiss
@@ -156,8 +270,9 @@ private struct ZoomableImageView: UIViewRepresentable {
         /// so only threshold CROSSINGS are reported. Reporting every zoom
         /// delta would re-render PostDetailView (whose toolbar reads the
         /// bound state) on every touch-move: exactly the per-frame SwiftUI
-        /// involvement this rebuild exists to remove, and (via the re-layout
-        /// it triggers) the loop that broke zoom outright in 62bfc4a.
+        /// involvement this architecture exists to remove, and (via the
+        /// re-layout it triggers) the loop that broke zoom outright in
+        /// 62bfc4a.
         func reportScale(_ value: CGFloat) {
             let zoomedIn = value > 1.001
             guard zoomedIn != lastReportedZoomedIn else { return }
@@ -185,8 +300,8 @@ private final class ZoomableImageContainerView: UIView, UIScrollViewDelegate, UI
 
     /// Last container size the image was fitted for. Layout re-fits ONLY
     /// when this or the image changes — never by comparing against
-    /// `imageView.frame`, which reflects the zoom transform and made the
-    /// original guard reset zoom on every mid-gesture layout pass.
+    /// `imageView.frame`, which reflects the zoom transform and made
+    /// 62bfc4a's guard reset zoom on every mid-gesture layout pass.
     private var lastFitSize: CGSize = .zero
     private var imageNeedsFit = false
 
@@ -353,20 +468,17 @@ private final class ZoomableImageContainerView: UIView, UIScrollViewDelegate, UI
                 return
             }
             let progress = min(1, translation.y / dismissThreshold)
-            let shrink = max(0.8, 1 - translation.y / (dismissThreshold * 4))
             scrollView.transform = CGAffineTransform(translationX: translation.x * 0.5, y: translation.y)
-                .scaledBy(x: shrink, y: shrink)
+                .scaledBy(x: shrink(for: translation.y), y: shrink(for: translation.y))
             coordinator?.dragProgress(progress)
         case .ended, .cancelled:
             let predicted = gesture.predictedTranslation(in: self, translation: translation)
             if translation.y > dismissThreshold || predicted.y > dismissThreshold {
-                // Do NOT snap the transform to identity here — the image
-                // must glide home from its dragged position ALONGSIDE the
-                // matched-geometry morph or the release visibly jumps
-                // (62bfc4a snapped, and it read as a glitch).
-                // `resetForClose()` (via updateUIView on the close edge)
-                // animates it home with the same spring as the morph.
-                coordinator?.onDismiss()
+                // The morph layer takes over the visible motion from the
+                // exact dragged transform (passed here); this view is
+                // hidden by the same state flip, so its own instant reset
+                // in resetForClose() is invisible.
+                coordinator?.onDismiss(translation, shrink(for: translation.y))
             } else {
                 UIView.animate(
                     withDuration: 0.3,
@@ -384,22 +496,20 @@ private final class ZoomableImageContainerView: UIView, UIScrollViewDelegate, UI
         }
     }
 
-    /// Called once when `isPresented` flips to false. Glides any in-flight
-    /// dismiss transform home with the same spring as the close morph (the
-    /// two compose into one continuous motion), and zeroes zoom so the next
-    /// open starts clean. Idempotent.
+    /// The same shrink curve the original SwiftUI drag handler applied —
+    /// shared between the live drag and the dismiss handoff so the morph
+    /// layer picks up exactly the transform the finger left.
+    private func shrink(for dragY: CGFloat) -> CGFloat {
+        max(0.8, 1 - dragY / (dismissThreshold * 4))
+    }
+
+    /// Called once when `isPresented` flips to false. This view is hidden
+    /// from the first close frame (the morph layer owns the visible
+    /// motion), so a plain instant reset is correct — the NEXT open must
+    /// start clean. Idempotent.
     func resetForClose() {
         scrollView.setZoomScale(1, animated: false)
-        if scrollView.transform != .identity {
-            UIView.animate(
-                withDuration: 0.35,
-                delay: 0,
-                usingSpringWithDamping: 0.8,
-                initialSpringVelocity: 0
-            ) {
-                self.scrollView.transform = .identity
-            }
-        }
+        scrollView.transform = .identity
         coordinator?.reportScale(1)
     }
 
