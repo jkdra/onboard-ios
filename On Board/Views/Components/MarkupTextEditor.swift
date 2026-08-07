@@ -453,12 +453,11 @@ enum MarkupStyler {
 /// tone control lives HERE and not in the toolbar's bottomBar: a bottomBar
 /// sits underneath the keyboard on iOS 18, making the old placement
 /// unreachable during the entire time anyone is actually typing.
+/// TEXT controls only, on purpose: the post's tone lives in the nav bar's
+/// principal slot instead — a color control sitting beside B/I/U/S reads as
+/// text color no matter what shape it takes (learned the hard way).
 struct ComposerToolbar: View {
     let controller: MarkupEditorController
-    @Binding var toneSelection: PostTone?
-    /// "Any Color!" is the composer's deferred-random option; edit mode
-    /// requires a concrete tone and hides it.
-    var includeRandomTone = true
 
     private var blockLabel: String {
         switch controller.currentBlock {
@@ -470,12 +469,6 @@ struct ComposerToolbar: View {
 
     var body: some View {
         HStack(spacing: 2) {
-            toneMenu
-
-            Divider()
-                .frame(height: 22)
-                .padding(.horizontal, 2)
-
             Menu {
                 Button("Title") { controller.applyBlock(.title) }
                 Button("Subtitle") { controller.applyBlock(.subtitle) }
@@ -493,7 +486,7 @@ struct ComposerToolbar: View {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
-                .padding(.leading, 10)
+                .padding(.leading, 16)
                 .padding(.vertical, 13)
                 .contentShape(.rect)
             }
@@ -528,44 +521,6 @@ struct ComposerToolbar: View {
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 6)
-    }
-
-    /// Compact tone control. A rounded-RECTANGLE swatch on purpose — it is a
-    /// miniature of the post CARD, because a color dot beside B/I/U/S reads
-    /// as "text color" in every editor toolbar ever shipped. The divider
-    /// after it fences the post-level control off from the text-level ones.
-    private var toneMenu: some View {
-        Menu {
-            Picker("Post Color", selection: $toneSelection) {
-                if includeRandomTone {
-                    Text("Any Color!").tag(PostTone?.none)
-                }
-                ForEach(PostTone.allCases) { tone in
-                    Text(tone.displayName).tag(Optional(tone))
-                }
-            }
-        } label: {
-            Group {
-                if let tone = toneSelection {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(tone.color)
-                } else {
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(
-                            AngularGradient(colors: [.red, .yellow, .green, .teal, .blue, .purple, .red],
-                                            center: .center)
-                        )
-                }
-            }
-            .frame(width: 17, height: 21)
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .strokeBorder(.primary.opacity(0.18), lineWidth: 1))
-            .padding(.leading, 14)
-            .padding(.trailing, 6)
-            .padding(.vertical, 12)
-            .contentShape(.rect)
-        }
-        .accessibilityLabel("Post color: \(toneSelection?.displayName ?? "Any Color")")
     }
 
     private func inlineButton(_ icon: String, _ label: String, _ delimiter: String) -> some View {

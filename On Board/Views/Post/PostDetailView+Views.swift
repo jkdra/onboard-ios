@@ -23,7 +23,14 @@ extension PostDetailView {
             )
         }
 
-        if isReadOnly {
+        if editMode {
+            // Same principal-slot reasoning as NewPostView: tone is a
+            // POST property, so it lives in post-level chrome — not beside
+            // the text buttons, and not under the keyboard in a bottomBar.
+            ToolbarItem(placement: .principal) {
+                TonePicker(selection: $draftTone, showBackground: false)
+            }
+        } else if isReadOnly {
             ToolbarItem(placement: .principal) {
                 Label("Archived Post", systemImage: "archivebox")
                     .fontStyle(.caption)

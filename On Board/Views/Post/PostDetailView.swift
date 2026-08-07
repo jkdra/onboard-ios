@@ -181,14 +181,7 @@ struct PostDetailView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if editMode {
-                    ComposerToolbar(
-                        controller: editEditorController,
-                        toneSelection: Binding(
-                            get: { draftTone },
-                            set: { if let tone = $0 { draftTone = tone } }
-                        ),
-                        includeRandomTone: false
-                    )
+                    ComposerToolbar(controller: editEditorController)
                 }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {

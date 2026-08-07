@@ -120,7 +120,7 @@ struct NewPostView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                ComposerToolbar(controller: editorController, toneSelection: $selectedTone)
+                ComposerToolbar(controller: editorController)
             }
             .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
@@ -151,9 +151,14 @@ struct NewPostView: View {
                 }
                 .animation(.smooth(duration: 0.3), value: previewTone)
             }
-            .navigationTitle("New Post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // The tone pill takes the title's slot: post-level chrome for
+                // a post-level property, always above the keyboard — and
+                // "New Post" was carrying zero information anyway.
+                ToolbarItem(placement: .principal) {
+                    TonePicker(selection: $selectedTone, showBackground: false)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     // Resigning the keyboard before the sheet's own dismiss
                     // transition starts keeps the two animations from racing —
