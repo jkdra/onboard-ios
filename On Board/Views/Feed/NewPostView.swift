@@ -25,6 +25,8 @@ struct NewPostView: View {
     /// dismiss, come back. See PostDraftStore's header for the slot's rules
     /// (one slot, this week, expires with the final-hour lockout).
     private let draftStore = PostDraftStore()
+    /// Bridge between the formatting toolbar and the bridged text view.
+    @State private var editorController = MarkupEditorController()
     /// What the draft slot held when this composer opened — dismissing with
     /// content identical to it needs no dialog (nothing would be lost).
     @State private var restoredDraft = ""
@@ -42,9 +44,6 @@ struct NewPostView: View {
     // Image attachment
     @State private var photo = PhotoAttachmentController(type: .postPhoto)
     @State private var isSubmitting = false
-
-    @FocusState private var focus: Field?
-    private enum Field { case content }
 
     private var canSubmit: Bool {
         !content.trimmed.isEmpty
@@ -95,15 +94,15 @@ struct NewPostView: View {
                     // ONE field — the old required Title + required body pair
                     // bisected a ~60-character median thought and taxed every
                     // post with summarise-it-first. Structure is opt-in via
-                    // markup now (spec: 2026-08-06-post-rich-text.md); the
-                    // rich toolbar composer replaces this plain field next.
-                    TextField("what's on your mind?", text: $content, axis: .vertical)
-                        .textFieldStyle(.boardBody)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(6...14)
-                        .keyboardType(.twitter)
-                        .focused($focus, equals: .content)
-                        .fontStyle(.body)
+                    // markup, live-rendered as you type: markers dim, the
+                    // text between them formats for real, driven by the SAME
+                    // parse the feed renders. See MarkupTextEditor.
+                    MarkupTextEditor(text: $content, controller: editorController)
+                        .padding(14)
+                        .background {
+                            GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                                            fallback: AnyShapeStyle(.thinMaterial))
+                        }
 
                     // The countdown lives on the feed; the STAKES live here.
                     // Impermanence is the app's answer to posting anxiety, and
@@ -120,6 +119,9 @@ struct NewPostView: View {
                 .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                ComposerToolbar(controller: editorController)
+            }
             .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
             .background {
@@ -174,11 +176,19 @@ struct NewPostView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { submit() } label: {
-                        if isSubmitting {
-                            ProgressView()
-                        } else {
-                            Label("Post", systemImage: "paperplane.fill").fontWeight(.semibold)
+                        Group {
+                            if isSubmitting {
+                                ProgressView()
+                            } else {
+                                Label("Post", systemImage: "paperplane.fill").fontWeight(.semibold)
+                            }
                         }
+                        // Untinted, borderedProminent fills with .label —
+                        // which in dark mode is a WHITE capsule whose default
+                        // white content vanishes into it. Pin the content to
+                        // the inverse; tones keep white content (they're
+                        // vivid enough either mode).
+                        .foregroundStyle(previewTone == nil ? Color(uiColor: .systemBackground) : .white)
                     }
                     .tint(previewTone?.color ?? Color(uiColor: .label))
                     .buttonStyle(.borderedProminent)
@@ -191,6 +201,13 @@ struct NewPostView: View {
             }
             .keyboardDoneToolbar()
             .onAppear {
+                // DEV: `-dev.composeText "<markup>"` pre-fills the editor so
+                // headless walkthroughs can screenshot the live preview
+                // (synthesized typing is as broken as synthesized taps).
+                if content.isEmpty,
+                   let seeded = UserDefaults.standard.string(forKey: "dev.composeText") {
+                    content = seeded
+                }
                 let allowsPosting = BoardSchedule.phase(
                     weekEnd: store.activeBoardWeek?.endsAt,
                     thresholds: store.boardThresholds
@@ -201,7 +218,6 @@ struct NewPostView: View {
                     content = draft
                     restoredDraft = draft
                 }
-                focus = .content
                 updateClearingState()
             }
             .task {

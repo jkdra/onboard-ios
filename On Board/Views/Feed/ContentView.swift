@@ -123,6 +123,13 @@ struct ContentView: View {
         // settles (isLoading flips false) — whichever happens first.
         .onAppear { openPendingPostIfReady() }
         .onAppear {
+            // DEV: `-dev.openComposer` opens the compose sheet on launch —
+            // headless composer screenshots, same rationale as openPostIndex.
+            if ProcessInfo.processInfo.arguments.contains("-dev.openComposer") {
+                showNewPost = true
+            }
+        }
+        .onAppear {
             guard let index = Self.devOpenPostIndex,
                   store.posts.indices.contains(index),
                   navigationPath.isEmpty else { return }
