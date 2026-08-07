@@ -47,6 +47,15 @@ struct PostDetailView: View {
     @State var isLoadingComments = false
     @State var showImageViewer = false
     @State var imageViewerScale: CGFloat = 1.0
+    /// Nav-bar chrome for the viewer (X in, ••• out, back hidden), DEFERRED
+    /// past the open morph. Toolbar mutations are UIKit layout work, and when
+    /// they ran inside the opening transaction they were the enter-morph's
+    /// stutter — the swipe-close path was smooth precisely because its scale
+    /// gate removed the X *before* the morph, leaving pure geometry. Photos
+    /// does the same thing: zoom first, chrome after. On close this flips
+    /// false immediately (outside the animation), reproducing the proven
+    /// smooth path in both directions.
+    @State var viewerChromeVisible = false
 
     // Moderation
     @State var reportTarget: ReportTarget?
@@ -338,8 +347,27 @@ struct PostDetailView: View {
                 Text("This also removes any replies to it.")
             }
             .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(editMode || showImageViewer)
+            .navigationBarBackButtonHidden(editMode || viewerChromeVisible)
+            // Deliberately `showImageViewer`, NOT the deferred chrome flag:
+            // this must flip the instant the viewer opens, or the 450ms chrome
+            // window would leave the zoom-pop edge swipe live mid-morph — an
+            // ancestor transform during the interactive pop is exactly the
+            // zoom-transition landmine documented in CLAUDE.md. It's a
+            // presentation flag, not toolbar layout, so it's cheap in-transaction.
             .interactiveDismissDisabled(editMode || showImageViewer)
+            .onChange(of: showImageViewer) { _, open in
+                if open {
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(450))
+                        guard showImageViewer else { return }
+                        withAnimation(.easeIn(duration: 0.15)) { viewerChromeVisible = true }
+                    }
+                } else {
+                    // Instant and unanimated on purpose — mirrors the
+                    // swipe-close path, which was the smooth one.
+                    viewerChromeVisible = false
+                }
+            }
             // Keep the single-finger interactive pop (governed above), but drop the
             // zoom transition's two-finger pinch-to-dismiss — it reads as accidental.
             .disableZoomPinchToDismiss()

@@ -46,7 +46,7 @@ extension PostDetailView {
             }
         }
 
-        if showImageViewer, imageViewerScale <= 1.0 {
+        if viewerChromeVisible, imageViewerScale <= 1.0 {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
                     withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
@@ -60,7 +60,7 @@ extension PostDetailView {
             }
         }
 
-        if !editMode, !isCommentEditing, !showImageViewer {
+        if !editMode, !isCommentEditing, !viewerChromeVisible {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if canEdit && !isReadOnly {
