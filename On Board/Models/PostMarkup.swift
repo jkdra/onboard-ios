@@ -88,6 +88,59 @@ struct PostMarkup: Equatable, Sendable {
     }
 }
 
+// MARK: - Memoized render-path parse
+
+extension PostMarkup {
+
+    private final class CacheBox {
+        let markup: PostMarkup
+        init(_ markup: PostMarkup) { self.markup = markup }
+    }
+
+    /// A board's worth of posts is a few dozen; the limit exists for long
+    /// archive-browsing sessions, not normal weeks.
+    private static let renderCache: NSCache<NSString, CacheBox> = {
+        let cache = NSCache<NSString, CacheBox>()
+        cache.countLimit = 512
+        return cache
+    }()
+
+    #if DEBUG
+    /// Test hooks — the parity test asserts a repeat call actually hits.
+    static var debugCacheHits = 0
+    static var debugCacheMisses = 0
+    #endif
+
+    /// Memoized `parse` for RENDER paths (feed cards, detail view, derived
+    /// `Post.tags`/`previewLine`). Post content is immutable per edit, and the
+    /// grid re-evaluates cell bodies constantly during scroll and entrance
+    /// animations — before this, one masonry cell cost four full parses per
+    /// body evaluation (cardText + three `post.tags` reads).
+    ///
+    /// THE COMPOSER MUST KEEP CALLING `parse` DIRECTLY. `spans` carry
+    /// `String.Index` values, which are only valid on the exact string
+    /// instance that was parsed — a cached parse of an equal-but-different
+    /// string (e.g. a UITextView's NSString-bridged text vs. the binding's
+    /// native String) can hand the composer foreign indices, which is
+    /// undefined behaviour on lookup. Render paths only consume `blocks`,
+    /// which hold no indices, so sharing across equal strings is safe there.
+    static func cached(_ source: String) -> PostMarkup {
+        let key = source as NSString
+        if let hit = renderCache.object(forKey: key) {
+            #if DEBUG
+            debugCacheHits += 1
+            #endif
+            return hit.markup
+        }
+        #if DEBUG
+        debugCacheMisses += 1
+        #endif
+        let parsed = parse(source)
+        renderCache.setObject(CacheBox(parsed), forKey: key)
+        return parsed
+    }
+}
+
 // MARK: - Parsing
 
 extension PostMarkup {

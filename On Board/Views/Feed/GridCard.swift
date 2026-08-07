@@ -208,13 +208,16 @@ struct GridCard: View {
             // truncates across the entire post — a per-block VStack can't cap
             // its total lines, and the card's height is fixed. 7 matches the
             // old title(3) + description(4) budget.
-            PostMarkupText.cardText(PostMarkup.parse(post.content))
+            PostMarkupText.cardText(PostMarkup.cached(post.content))
                 .lineLimit(7)
                 .truncationMode(.tail)
                 .lineSpacing(2.5)
 
-            if !post.tags.isEmpty {
-                tagsRow
+            // Read once: ViewThatFits below probes up to four candidate
+            // layouts, and each `post.tags` access re-derives from the parse.
+            let tags = post.tags
+            if !tags.isEmpty {
+                tagsRow(tags)
             }
             Spacer(minLength: 0)
             ViewThatFits(in: .horizontal) {
@@ -239,23 +242,23 @@ struct GridCard: View {
     // first, then progressively fewer with a "+N" badge standing in for the rest —
     // it always lands on the last candidate (a single tag + overflow badge) if
     // nothing wider fits, so there's never a case with no valid layout.
-    private var tagsRow: some View {
+    private func tagsRow(_ tags: [String]) -> some View {
         // ViewThatFits picks the first candidate that fits; it can't enumerate a
         // dynamic ForEach as separate candidates, so these are spelled out. Showing
         // 4 down to 1 covers every real post (samples top out around 3 tags) — if a
         // post ever had more, several early candidates would just collapse to the
         // same "N tags + overflow" width and get skipped over harmlessly.
         ViewThatFits(in: .horizontal) {
-            tagsRow(showing: 4)
-            tagsRow(showing: 3)
-            tagsRow(showing: 2)
-            tagsRow(showing: 1)
+            tagsRow(tags, showing: 4)
+            tagsRow(tags, showing: 3)
+            tagsRow(tags, showing: 2)
+            tagsRow(tags, showing: 1)
         }
     }
 
-    private func tagsRow(showing count: Int) -> some View {
-        let shown = post.tags.prefix(count)
-        let overflow = post.tags.count - count
+    private func tagsRow(_ tags: [String], showing count: Int) -> some View {
+        let shown = tags.prefix(count)
+        let overflow = tags.count - count
         return HStack(spacing: 6) {
             ForEach(Array(shown), id: \.self) { tagChip("#\($0)") }
             if overflow > 0 {

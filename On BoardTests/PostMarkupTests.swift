@@ -8,6 +8,7 @@
 //  the same post would render differently on different platforms.
 //
 
+import Foundation
 import Testing
 @testable import On_Board
 
@@ -292,5 +293,32 @@ struct PostMarkupTests {
         #expect(markup.blocks.count == 1)
         #expect(markup.blocks[0].kind == .body)
         #expect(markup.plainText.isEmpty)
+    }
+
+    // MARK: - Render-path memoization
+
+    /// `cached` must be indistinguishable from `parse` in result — the cache
+    /// exists because one masonry cell was costing four parses per body
+    /// evaluation, not to change behaviour.
+    @Test func cachedParseMatchesDirectParse() {
+        let fixtures = [
+            "# Title\nbody with **bold** and #tag",
+            "plain line",
+            "* bullet\n- bullet\n~~gone~~ __under__ ***both***",
+            "",
+        ]
+        for source in fixtures {
+            #expect(PostMarkup.cached(source) == PostMarkup.parse(source))
+        }
+    }
+
+    /// And it must actually BE a cache — a parity test alone would pass with
+    /// the memoization silently deleted.
+    @Test func repeatCachedCallHits() {
+        let source = "# hit test \(UUID().uuidString)\nwith a #tag"
+        _ = PostMarkup.cached(source)
+        let hitsBefore = PostMarkup.debugCacheHits
+        _ = PostMarkup.cached(source)
+        #expect(PostMarkup.debugCacheHits == hitsBefore + 1)
     }
 }

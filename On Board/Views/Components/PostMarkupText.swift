@@ -174,7 +174,7 @@ struct PostMarkupView: View {
     let markup: PostMarkup
 
     init(content: String) {
-        self.markup = PostMarkup.parse(content)
+        self.markup = PostMarkup.cached(content)
     }
 
     var body: some View {

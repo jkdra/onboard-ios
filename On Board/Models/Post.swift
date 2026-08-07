@@ -73,11 +73,11 @@ struct Post: Identifiable, Hashable, Codable {
     /// (see the 2026-08-06 spec); the server's tags table is now a
     /// denormalized index the client feeds at write time.
     var tags: [String] {
-        PostMarkup.parse(content).tags
+        PostMarkup.cached(content).tags
     }
 
     var previewLine: String {
-        PostMarkup.parse(content).plainText
+        PostMarkup.cached(content).plainText
             .split(separator: "\n", omittingEmptySubsequences: true)
             .first.map(String.init) ?? ""
     }
