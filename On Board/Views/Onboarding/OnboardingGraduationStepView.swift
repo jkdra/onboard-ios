@@ -8,11 +8,18 @@
 //  we grab it now while the account is a verified student. Month + year only —
 //  a grace period makes the exact day pointless. Editable later in Settings.
 //
+//  Also hosts the profanity preference (2026-08-07): the old standalone
+//  `.contentPreferences` step was a full push for one toggle whose default
+//  nearly everyone keeps. Two light single-choice screens merged into one
+//  "last details" stop — onboarding went from 7 pushes to 6, and the profile
+//  step now flows straight into school verification.
+//
 
 import SwiftUI
 
 struct OnboardingGraduationStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @AppStorage("profanityEnabled") private var profanityEnabled = false
 
     @State private var month = 5   // May
     @State private var year = Calendar.current.component(.year, from: Date()) + 1
@@ -37,7 +44,7 @@ struct OnboardingGraduationStepView: View {
 
     var body: some View {
         ScrollView {
-            OnboardingProgressBar(step: 6, totalSteps: 7)
+            OnboardingProgressBar(step: 5, totalSteps: 6)
                 .safeAreaPadding(.horizontal)
 
             VStack(alignment: .leading, spacing: 24) {
@@ -64,6 +71,27 @@ struct OnboardingGraduationStepView: View {
                 }
                 .disabled(onboarding.isSubmitting)
 
+                Divider()
+
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Some weekly prompts and official messaging may have a... more raw version. Enable this if you want to see it.")
+                        .fontStyle(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Toggle(isOn: $profanityEnabled) {
+                        Text("Allow profanity")
+                            .fontStyle(.body)
+                    }
+                    .tint(.primary)
+
+                    Label(
+                        "This only affects prompts and messages from us — it doesn't change what other people post, comment, or share.",
+                        systemImage: "info.circle.fill"
+                    )
+                    .fontStyle(.footnote)
+                    .foregroundStyle(.secondary)
+                }
+
                 Button {
                     guard let date = selectedDate else { return }
                     Task { await onboarding.submitGraduation(date) }
@@ -76,7 +104,7 @@ struct OnboardingGraduationStepView: View {
             .safeAreaPadding(.horizontal)
         }
         .disabled(onboarding.isSubmitting)
-        .navigationTitle("Graduation")
+        .navigationTitle("Last details")
     }
 }
 

@@ -16,7 +16,7 @@ struct OnboardingWaitlistStepView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            OnboardingProgressBar(step: 7, totalSteps: 7)
+            OnboardingProgressBar(step: 6, totalSteps: 6)
 
             Spacer()
 

@@ -37,9 +37,6 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-mock.auth.session", hexLiteral(session),
-            // The content-preferences (profanity) step is gated by this local
-            // flag, not server status.
-            "-hasCompletedProfanityStep", "YES",
             // The welcome fireworks are a continuous animation; leaving them off
             // keeps the app idle so XCUITest's taps/assertions don't stall.
             "-disableCelebrationFX", "YES"

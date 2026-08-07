@@ -33,7 +33,7 @@ struct OnboardingUsernameStepView: View {
 
     var body: some View {
         ScrollView {
-            OnboardingProgressBar(step: 2, totalSteps: 7)
+            OnboardingProgressBar(step: 2, totalSteps: 6)
                 .safeAreaPadding(.horizontal)
             VStack(alignment: .leading, spacing: 20) {
 

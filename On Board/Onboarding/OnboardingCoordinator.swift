@@ -19,10 +19,6 @@ struct OnboardingCoordinator: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(AuthStore.self) private var auth
 
-    /// Client-only completion flag for `.contentPreferences` — see that case's
-    /// doc comment on `OnboardingStep` for why this can't live on `OnboardingStatus`.
-    @AppStorage("hasCompletedProfanityStep") private var hasCompletedProfanityStep = false
-
     @State private var path: [OnboardingStep] = []
     @State private var alertError: PresentableAlertError?
     /// Bumped on every sign-out so SignInView gets a fresh identity — all its
@@ -45,15 +41,10 @@ struct OnboardingCoordinator: View {
         // the client-inserted steps and rank() arithmetic are meaningless once
         // the server is running a flow we don't know about.
         if backendStep == .unrecognized { return .unrecognized }
-        // .contentPreferences has no backing DB state, so it can't come back from
-        // effectiveOnboardingStep — insert it locally once profile is behind the
-        // user and it hasn't been shown yet.
-        if !hasCompletedProfanityStep, Self.rank(backendStep) > Self.rank(.profile) {
-            return .contentPreferences
-        }
-        // .graduation is also client-inserted: shown right after school
+        // .graduation is client-inserted: shown right after school
         // verification while `expected_graduation` is still null. Existing users
-        // were backfilled to a value, so they never see it.
+        // were backfilled to a value, so they never see it. (It also hosts the
+        // profanity preference — see OnboardingStep's doc for the merge.)
         if status.verifiedSchoolEmail != nil, status.expectedGraduation == nil {
             return .graduation
         }
@@ -81,8 +72,6 @@ struct OnboardingCoordinator: View {
                             OnboardingUsernameStepView()
                         case .profile:
                             OnboardingProfileStepView()
-                        case .contentPreferences:
-                            OnboardingContentPreferencesStepView()
                         case .schoolVerify:
                             OnboardingSchoolEmailStepView()
                         case .graduation:
@@ -204,10 +193,9 @@ struct OnboardingCoordinator: View {
         case .birthday:            return [.birthday]
         case .username:            return [.birthday, .username]
         case .profile:             return [.birthday, .username, .profile]
-        case .contentPreferences:  return [.birthday, .username, .profile, .contentPreferences]
-        case .schoolVerify:        return [.birthday, .username, .profile, .contentPreferences, .schoolVerify]
-        case .graduation:          return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation]
-        case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
+        case .schoolVerify:        return [.birthday, .username, .profile, .schoolVerify]
+        case .graduation:          return [.birthday, .username, .profile, .schoolVerify, .graduation]
+        case .waitlist:            return [.birthday, .username, .profile, .schoolVerify, .graduation, .waitlist]
         // Pushed alone, with none of the real steps beneath it: the preceding
         // steps are meaningless when the server's flow is one this build can't
         // complete, and stacking them would offer a back button into it.
