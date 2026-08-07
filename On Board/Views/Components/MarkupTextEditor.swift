@@ -317,11 +317,15 @@ enum MarkupStyler {
 
 // MARK: - Toolbar
 
-/// The composer's formatting bar: style menu leading, inline styles center,
-/// keyboard dismiss trailing. Lives in the sheet's bottom safe-area inset so
-/// it rides above the keyboard.
+/// The composer's formatting bar: tone swatch + style menu leading, inline
+/// styles center, keyboard dismiss trailing. Lives in the sheet's bottom
+/// safe-area inset so it rides above the keyboard — which is also why the
+/// tone control lives HERE and not in the toolbar's bottomBar: a bottomBar
+/// sits underneath the keyboard on iOS 18, making the old placement
+/// unreachable during the entire time anyone is actually typing.
 struct ComposerToolbar: View {
     let controller: MarkupEditorController
+    @Binding var toneSelection: PostTone?
 
     private var blockLabel: String {
         switch controller.currentBlock {
@@ -332,7 +336,9 @@ struct ComposerToolbar: View {
     }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
+            toneMenu
+
             Menu {
                 Button("Title") { controller.applyBlock(.title) }
                 Button("Subtitle") { controller.applyBlock(.subtitle) }
@@ -344,8 +350,8 @@ struct ComposerToolbar: View {
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 13)
                 .contentShape(.rect)
             }
 
@@ -364,7 +370,7 @@ struct ComposerToolbar: View {
                 Image(systemName: "keyboard.chevron.compact.down")
                     .font(.system(size: 15, weight: .semibold))
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
+                    .padding(.vertical, 13)
                     .contentShape(.rect)
             }
             .accessibilityLabel("Dismiss keyboard")
@@ -378,11 +384,42 @@ struct ComposerToolbar: View {
         .padding(.bottom, 6)
     }
 
+    /// Compact tone control: just the swatch (rainbow when deferred-random).
+    /// Same Menu/Picker structure as TonePicker, sized for a toolbar.
+    private var toneMenu: some View {
+        Menu {
+            Picker("Post Color", selection: $toneSelection) {
+                Text("Any Color!").tag(PostTone?.none)
+                ForEach(PostTone.allCases) { tone in
+                    Text(tone.displayName).tag(Optional(tone))
+                }
+            }
+        } label: {
+            Group {
+                if let tone = toneSelection {
+                    Circle().fill(tone.color)
+                } else {
+                    Circle().fill(
+                        AngularGradient(colors: [.red, .yellow, .green, .teal, .blue, .purple, .red],
+                                        center: .center)
+                    )
+                }
+            }
+            .frame(width: 20, height: 20)
+            .overlay(Circle().strokeBorder(.primary.opacity(0.15), lineWidth: 1))
+            .padding(.leading, 14)
+            .padding(.trailing, 6)
+            .padding(.vertical, 12)
+            .contentShape(.rect)
+        }
+        .accessibilityLabel("Post color: \(toneSelection?.displayName ?? "Any Color")")
+    }
+
     private func inlineButton(_ icon: String, _ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .semibold))
-                .frame(width: 40, height: 36)
+                .frame(width: 40, height: 46)
                 .contentShape(.rect)
         }
         .accessibilityLabel(label)

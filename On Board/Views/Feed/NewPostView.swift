@@ -120,7 +120,7 @@ struct NewPostView: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                ComposerToolbar(controller: editorController)
+                ComposerToolbar(controller: editorController, toneSelection: $selectedTone)
             }
             .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
@@ -194,9 +194,6 @@ struct NewPostView: View {
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
-                }
-                ToolbarItem(placement: .bottomBar) {
-                    TonePicker(selection: $selectedTone, showBackground: false)
                 }
             }
             .keyboardDoneToolbar()
