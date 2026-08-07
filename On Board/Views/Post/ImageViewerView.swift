@@ -29,13 +29,23 @@ struct ImageViewerView<ID: Hashable>: View {
         return nil
     }
 
+    // PRE-MOUNTED, on purpose (2026-08-07). This view used to mount its
+    // LazyImage inside `if isPresented` — so the tap that opened the viewer
+    // also paid for view construction, the Nuke cache lookup, layout, and a
+    // full-res texture upload, all INSIDE the opening animation's transaction.
+    // That's the stutter no animation tuning (or the ProMotion plist key)
+    // could fix. Every native-feeling viewer — Photos' ZoomAnimator, Hero's
+    // snapshot transitions — animates a layer that already exists; the morph
+    // itself must be pure geometry + opacity on committed layers. So the
+    // image now lives in the hierarchy whenever the post has one (hidden,
+    // hit-testing off), and `isPresented` only flips opacity and the
+    // matched-geometry source handoff.
     var body: some View {
         ZStack {
-            if isPresented, let url = url {
+            if let url = url {
                 Color.black
                     .ignoresSafeArea()
-                    .opacity(backgroundOpacity)
-                    .transition(.opacity)
+                    .opacity(isPresented ? backgroundOpacity : 0)
 
                 GeometryReader { proxy in
                     LazyImage(url: url) { state in
@@ -59,11 +69,16 @@ struct ImageViewerView<ID: Hashable>: View {
                     }
                     .aspectRatio(resolvedAspectRatio, contentMode: .fit)
                     .frame(maxWidth: proxy.size.width, maxHeight: proxy.size.height)
-                    .matchedGeometryEffect(id: sourceID, in: namespace)
-                    .transition(.identity)
+                    // Source only while open — the card's anchor holds the
+                    // other half of the handoff (`isSource: !viewerOpen`), so
+                    // steady state always has exactly one source and the
+                    // open/close morphs interpolate between the two without
+                    // any view being inserted or removed.
+                    .matchedGeometryEffect(id: sourceID, in: namespace, isSource: isPresented)
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
                     .scaleEffect(scale)
                     .offset(offset)
+                    .opacity(isPresented ? 1 : 0)
                     .gesture(
                         SimultaneousGesture(
                             MagnifyGesture()
@@ -173,6 +188,10 @@ struct ImageViewerView<ID: Hashable>: View {
                 }
             }
         }
+        // CRITICAL with the pre-mounted structure: the hidden layers must be
+        // transparent to touches or an invisible full-screen view eats every
+        // tap and scroll on the post beneath it.
+        .allowsHitTesting(isPresented)
         .onChange(of: isPresented) { _, presented in
             if !presented {
                 // ANIMATED on purpose. This handler runs outside the caller's
