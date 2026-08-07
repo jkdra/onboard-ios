@@ -193,7 +193,12 @@ extension PostDetailView {
                         .stroke(tone.color.opacity(0.25), lineWidth: 0.9)
                 }
                 .background {
-                    Color.clear.matchedGeometryEffect(id: "postImage", in: postNamespace)
+                    // `isSource` hands off while the viewer is up: two live
+                    // sources for one id is undefined, and it's exactly what
+                    // makes the close morph start from a stale frame.
+                    Color.clear.matchedGeometryEffect(
+                        id: "postImage", in: postNamespace, isSource: !showImageViewer
+                    )
                 }
                 .opacity(showImageViewer ? 0 : 1)
                 .doubleTapHeart(

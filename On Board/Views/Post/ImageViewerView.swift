@@ -175,9 +175,18 @@ struct ImageViewerView<ID: Hashable>: View {
         }
         .onChange(of: isPresented) { _, presented in
             if !presented {
-                scale = 1.0
-                offset = .zero
-                backgroundOpacity = 1.0
+                // ANIMATED on purpose. This handler runs outside the caller's
+                // withAnimation transaction, so plain assignments here snap —
+                // a swipe-dismiss (image pulled down, shrunken, background
+                // half-dimmed) flashed back to centered full-size for one
+                // frame before the hero morph began. Gliding the transform
+                // home alongside the matched-geometry morph is what makes the
+                // dismissal read as one continuous motion.
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    scale = 1.0
+                    offset = .zero
+                    backgroundOpacity = 1.0
+                }
                 magnifyStartState = nil
                 panStartState = nil
                 currentScale?.wrappedValue = 1.0

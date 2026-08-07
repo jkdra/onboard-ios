@@ -195,6 +195,19 @@ struct PostDetailView: View {
                    let reaction = Reaction(rawValue: raw) {
                     store.setReaction(postId: livePost.id, reaction: reaction)
                 }
+                // DEV: `-dev.imageViewerDemo` opens then closes the image
+                // viewer on a timer, using the SAME animations as the real
+                // tap/close call sites — the only headless way to put the
+                // hero morph on video for frame-by-frame review.
+                if ProcessInfo.processInfo.arguments.contains("-dev.imageViewerDemo"),
+                   livePost.imageUrl != nil {
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = true }
+                        try? await Task.sleep(for: .seconds(2))
+                        withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = false }
+                    }
+                }
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Hidden while editing a post OR a comment — both put the keyboard

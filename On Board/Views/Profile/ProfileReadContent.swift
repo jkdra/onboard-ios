@@ -109,7 +109,12 @@ struct ProfileReadContent: View {
         Button(action: onAvatarTap) {
             AvatarView(profile: profile, size: .large)
                 .background {
-                    Color.clear.matchedGeometryEffect(id: ProfileGeometryID.avatarImage, in: namespace)
+                    // Same handoff as the post image: exactly one live source
+                    // per id at steady state, or the viewer's close morph can
+                    // resolve against a stale frame.
+                    Color.clear.matchedGeometryEffect(
+                        id: ProfileGeometryID.avatarImage, in: namespace, isSource: !isAvatarViewerOpen
+                    )
                 }
                 .opacity(isAvatarViewerOpen ? 0 : 1)
         }
