@@ -10,15 +10,19 @@ enum OnboardingStep: String, Codable, Sendable, CaseIterable, Hashable {
     case username
     case profile
     case schoolVerify = "school_verify"
-    /// Client-only step — never persisted server-side (no backing DB enum value).
-    /// Inserted after school verification when `expected_graduation` is still
-    /// null; the persisted field itself is the completion signal. Since
-    /// 2026-08-07 this screen also hosts the profanity preference — the old
-    /// standalone `.contentPreferences` step was a full push for one toggle
-    /// whose default nearly everyone keeps, so it merged in here (the toggle
-    /// itself stays plain, un-scoped `@AppStorage("profanityEnabled")` —
-    /// per-device, not per-account, the documented design).
+    /// Client-only HOLD state — never persisted server-side (no backing DB
+    /// enum value), and never pushed: its target path equals `.schoolVerify`'s,
+    /// keeping the user on the school screen's graduation stage while
+    /// `expected_graduation` is still null. The persisted field is the
+    /// completion signal.
     case graduation
+    /// Client-only step — never persisted server-side. The profanity
+    /// preference, as its own pushed screen after graduation (Jawad's call,
+    /// 2026-08-08: one decision per screen). Completion is the local
+    /// `hasCompletedProfanityStep` flag; the preference itself stays plain,
+    /// un-scoped `@AppStorage("profanityEnabled")` — per-device, not
+    /// per-account, the documented design.
+    case contentPreferences = "content_preferences"
     case waitlist
     case complete
 
@@ -39,7 +43,7 @@ enum OnboardingStep: String, Codable, Sendable, CaseIterable, Hashable {
     /// would shift both.
     static var allCases: [OnboardingStep] {
         [.birthday, .username, .profile,
-         .schoolVerify, .graduation, .waitlist, .complete]
+         .schoolVerify, .graduation, .contentPreferences, .waitlist, .complete]
     }
 
     nonisolated init(from decoder: any Decoder) throws {

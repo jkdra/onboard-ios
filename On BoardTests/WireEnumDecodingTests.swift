@@ -152,7 +152,7 @@ struct OnboardingStepDecodingTests {
     /// that list would silently shift both.
     @Test func unrecognizedIsExcludedFromAllCases() {
         #expect(!OnboardingStep.allCases.contains(.unrecognized))
-        #expect(OnboardingStep.allCases.count == 7)
+        #expect(OnboardingStep.allCases.count == 8)
     }
 
     @Test func knownStepsStillRoundTrip() throws {

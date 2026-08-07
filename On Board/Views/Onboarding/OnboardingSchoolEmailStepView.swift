@@ -4,16 +4,16 @@
 //
 //  The school gate, as ONE screen with three stages (2026-08-07):
 //
-//    email → code → details
+//    email → code → graduation
 //
 //  Stage `email` collects the .edu address; stage `code` REPLACES the field
 //  with OTP entry (a disabled email field under a code box was dead weight —
 //  the address becomes a caption, and "Use a different email" is the way
-//  back); stage `details` is the old graduation step folded in, plus the
-//  profanity preference. The user verifies and finishes up without ever
-//  leaving the screen — the coordinator holds `.graduation` at the SAME
-//  navigation path as `.schoolVerify`, so stage changes are in-place slides,
-//  not pushes. Onboarding is 5 pushes total.
+//  back); stage `graduation` collects the expected graduation date. The user
+//  verifies and dates without ever leaving the screen — the coordinator holds
+//  `.graduation` at the SAME navigation path as `.schoolVerify`, so stage
+//  changes are in-place slides, not pushes. The profanity preference follows
+//  as its OWN pushed step (one decision per screen — Jawad, 2026-08-08).
 //
 
 import SwiftUI
@@ -21,7 +21,6 @@ import SwiftUI
 struct OnboardingSchoolEmailStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(RemoteConfigStore.self) private var remoteConfig
-    @AppStorage("profanityEnabled") private var profanityEnabled = false
 
     @State private var email = ""
     @State private var otpCode = ""
@@ -32,7 +31,7 @@ struct OnboardingSchoolEmailStepView: View {
     @State private var resendCooldown = OTPCooldown()
     @State private var showNiceTryAlert = false
 
-    // Details-stage state (the old graduation step's).
+    // Graduation-stage state (the old standalone step, folded in).
     @State private var gradMonth = 5   // May
     @State private var gradYear = Calendar.current.component(.year, from: Date()) + 1
     private let monthNames: [String] = Calendar.current.monthSymbols
@@ -46,14 +45,14 @@ struct OnboardingSchoolEmailStepView: View {
     }
 
     private enum Stage: Equatable {
-        case email, code, details
+        case email, code, graduation
     }
 
     /// Derived, not stored: server status is the source of truth, so a killed
     /// app reopens exactly where the user left off (pending email → code
-    /// entry; verified but no graduation → details).
+    /// entry; verified but no graduation → graduation stage).
     private var stage: Stage {
-        if onboarding.status?.verifiedSchoolEmail != nil { return .details }
+        if onboarding.status?.verifiedSchoolEmail != nil { return .graduation }
         if codeSent { return .code }
         return .email
     }
@@ -81,13 +80,13 @@ struct OnboardingSchoolEmailStepView: View {
 
     var body: some View {
         ScrollView {
-            OnboardingProgressBar(step: 4, totalSteps: 5)
+            OnboardingProgressBar(step: 4, totalSteps: 6)
                 .safeAreaPadding(.horizontal)
             Group {
                 switch stage {
                 case .email:   emailStage
                 case .code:    codeStage
-                case .details: detailsStage
+                case .graduation: graduationStage
                 }
             }
             .safeAreaPadding(.horizontal)
@@ -101,7 +100,7 @@ struct OnboardingSchoolEmailStepView: View {
         .scrollDismissesKeyboard(.interactively)
         .disabled(onboarding.isSubmitting)
         .keyboardDoneToolbar()
-        .navigationTitle(stage == .details ? "Last details" : "Verify your school")
+        .navigationTitle(stage == .graduation ? "Graduation" : "Verify your school")
         .navigationBarTitleDisplayMode(.large)
         .onAppear {
             if email.isEmpty {
@@ -217,7 +216,7 @@ struct OnboardingSchoolEmailStepView: View {
 
     // MARK: - Stage 3: details (the old graduation step, folded in)
 
-    private var detailsStage: some View {
+    private var graduationStage: some View {
         VStack(alignment: .leading, spacing: 24) {
             if let verified = onboarding.status?.verifiedSchoolEmail {
                 Label("\(verified) verified", systemImage: "checkmark.seal.fill")
@@ -247,27 +246,6 @@ struct OnboardingSchoolEmailStepView: View {
                 .frame(maxWidth: .infinity)
             }
             .disabled(onboarding.isSubmitting)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Some weekly prompts and official messaging may have a... more raw version. Enable this if you want to see it.")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Toggle(isOn: $profanityEnabled) {
-                    Text("Allow profanity")
-                        .fontStyle(.body)
-                }
-                .tint(.primary)
-
-                Label(
-                    "This only affects prompts and messages from us — it doesn't change what other people post, comment, or share.",
-                    systemImage: "info.circle.fill"
-                )
-                .fontStyle(.footnote)
-                .foregroundStyle(.secondary)
-            }
 
             Button {
                 guard let date = selectedGraduation else { return }

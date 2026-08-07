@@ -1323,7 +1323,7 @@ struct OnboardingCoordinatorTargetPathTests {
     @Test func waitlistStepProducesFullPath() {
         #expect(
             OnboardingCoordinator.targetPath(for: .waitlist, isSignedIn: true)
-                == [.birthday, .username, .profile, .schoolVerify, .waitlist]
+                == [.birthday, .username, .profile, .schoolVerify, .contentPreferences, .waitlist]
         )
     }
 
