@@ -92,6 +92,7 @@ struct RootView: View {
         .environment(\.photoAttachmentsEnabled, remoteConfig.isEnabled(.postPhotoAttachments, for: auth.session?.userId))
         // Falls back to the compiled set when unset, so the bar is never empty.
         .environment(\.enabledReactions, remoteConfig.config.enabledReactions ?? Reaction.defaultOrder)
+        .environment(\.reactionOverflowEnabled, remoteConfig.isEnabled(.reactionOverflow, for: auth.session?.userId))
         .environment(\.commentMaxLength, remoteConfig.config.commentMaxLength)
         .environment(\.profileFieldLimits, (displayName: remoteConfig.config.displayNameMaxLength,
                                             bio: remoteConfig.config.bioMaxLength))

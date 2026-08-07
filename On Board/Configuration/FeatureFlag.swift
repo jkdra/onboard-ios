@@ -33,11 +33,19 @@ enum FeatureFlag: String, CaseIterable, Sendable {
     /// plausible performance surface; muting is cheap.
     case hostVoice
 
+    /// Reaction bar overflow: only the first two reactions are always pills,
+    /// the rest surface once they have counts, and a "+" holds whatever is
+    /// still hidden. New surface, so it ships inert — `false` is the four-pill
+    /// bar every user has today.
+    case reactionOverflow
+
     /// Behavior when the server says nothing — must equal what the app does today.
     var compiledDefault: Bool {
         switch self {
         case .zoomTransition, .glassEffects, .postPhotoAttachments, .hostVoice:
             true
+        case .reactionOverflow:
+            false
         }
     }
 
@@ -117,6 +125,15 @@ private struct EnabledReactionsKey: EnvironmentKey {
     static let defaultValue = Reaction.defaultOrder
 }
 
+private struct ReactionOverflowEnabledKey: EnvironmentKey {
+    /// `false`, unlike its neighbours here: those gate surfaces that already
+    /// shipped, so their default has to be "what the app does today". This one
+    /// gates a change that has never shipped, and the same rule points the
+    /// other way — previews and out-of-environment views must keep showing the
+    /// flat four-pill bar.
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
     /// Gates the iOS 26 `glassEffect` styling. Set once at the app root from
     /// `FeatureFlag.glassEffects`; read by each `#available(iOS 26.0, *)` site.
@@ -150,6 +167,18 @@ extension EnvironmentValues {
     var enabledReactions: [Reaction] {
         get { self[EnabledReactionsKey.self] }
         set { self[EnabledReactionsKey.self] = newValue }
+    }
+
+    /// Collapses the reaction bar to its first two reactions plus a "+", with
+    /// the rest surfacing as real pills once they have counts.
+    ///
+    /// Composes with `enabledReactions` rather than duplicating it: the split
+    /// is positional (first two stay, the tail overflows), so withdrawing a
+    /// reaction server-side still works and reordering the array is what
+    /// decides which two are permanent.
+    var reactionOverflowEnabled: Bool {
+        get { self[ReactionOverflowEnabledKey.self] }
+        set { self[ReactionOverflowEnabledKey.self] = newValue }
     }
 
     /// Max comment length. A display + validation hint only — `comments.body`

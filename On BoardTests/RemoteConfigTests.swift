@@ -146,11 +146,28 @@ struct FeatureFlagTests {
         }
     }
 
-    /// Every flag here wraps a surface that already ships enabled, so shipping
-    /// this build must not silently turn any of them off.
-    @Test func everyExistingSurfaceDefaultsOn() {
+    /// Flags that were added retroactively over surfaces which ALREADY ship
+    /// enabled. Adding one here is a claim that the app does this today.
+    private let retroactive: Set<FeatureFlag> = [
+        .zoomTransition, .glassEffects, .postPhotoAttachments, .hostVoice,
+    ]
+
+    /// Both halves of the convention, in one place.
+    ///
+    /// This deliberately isn't "every flag defaults on" any more. That held
+    /// only while every flag happened to be retroactive, and it would have
+    /// blocked the first genuinely new feature from shipping inert — the thing
+    /// flags exist for. Listing the retroactive ones explicitly means a new
+    /// flag fails this test unless its author decides which kind it is.
+    @Test func compiledDefaultsMatchWhatTheAppAlreadyDoes() {
         for flag in FeatureFlag.allCases {
-            #expect(flag.compiledDefault)
+            if retroactive.contains(flag) {
+                #expect(flag.compiledDefault,
+                        "\(flag.rawValue) gates a shipped surface; defaulting it off turns that surface off for everyone")
+            } else {
+                #expect(!flag.compiledDefault,
+                        "\(flag.rawValue) gates a new surface, so it must ship inert — or be listed as retroactive")
+            }
         }
     }
 
