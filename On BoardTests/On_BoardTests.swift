@@ -277,7 +277,7 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     }
     func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
     func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
-        Post(authorId: authorID, boardWeekId: weekID, content: content, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio, tags: tags)
+        Post(authorId: authorID, boardWeekId: weekID, content: content, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio)
     }
     func updatePost(id: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
     func deletePost(id: UUID) async throws {}
@@ -321,7 +321,6 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
     func unfollowUser(id: UUID) async throws {}
     func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
     func isFollowing(userID: UUID) async throws -> Bool { false }
-    func searchTags(query: String, boardID: UUID) async throws -> [On_Board.Tag] { [] }
 }
 
 struct BoardStoreTests {
@@ -1523,7 +1522,6 @@ struct BoardSwitchRaceTests {
         // refresh() fetches followed IDs after every snapshot — must not trap.
         func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }
     func isFollowing(userID: UUID) async throws -> Bool { false }
-        func searchTags(query: String, boardID: UUID) async throws -> [On_Board.Tag] { fatalError("unused") }
     }
 
     @Test func switchingBoardsMidLoadLoadsTheNewBoard() async {

@@ -21,8 +21,6 @@ struct PostDetailView: View {
     @State var editMode = false
     @State var draftContent = ""
     @State var draftTone: PostTone
-    @State var draftTags: [String] = []
-    @State var showingTagSelection = false
     // Guards Save against a double-tap firing two concurrent updatePost
     // calls for the same post — the slower response would silently win.
     @State var isSavingEdits = false
@@ -56,7 +54,6 @@ struct PostDetailView: View {
         self.post = post
         _draftTone = State(initialValue: post.tone)
         _draftContent = State(initialValue: post.content)
-        _draftTags = State(initialValue: post.tags)
     }
 
     // MARK: - Derived
@@ -275,9 +272,6 @@ struct PostDetailView: View {
                     // Reporting the post itself hides it — leave the empty screen.
                     if case .post = target { dismiss() }
                 }
-            }
-            .sheet(isPresented: $showingTagSelection) {
-                TagSelectionView(selectedTags: $draftTags)
             }
             .confirmationDialog(
                 "Block \(blockCandidate?.handle ?? "")?",

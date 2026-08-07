@@ -61,8 +61,7 @@ extension PostDetailView {
                 content: draftContent.trimmed,
                 tone: draftTone,
                 imageUrl: effectiveImageUrl,
-                imageAspectRatio: effectiveAspectRatio,
-                tags: draftTags
+                imageAspectRatio: effectiveAspectRatio
             )
             guard succeeded else { return }
             withAnimation(.smooth(duration: 0.4)) { editMode = false }
@@ -77,7 +76,6 @@ extension PostDetailView {
     private func resetEditDraft() {
         draftContent = livePost.content
         draftTone = livePost.tone
-        draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl
         draftImageAspectRatio = livePost.imageAspectRatio
         editPhoto.reset()

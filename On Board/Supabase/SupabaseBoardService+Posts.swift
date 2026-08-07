@@ -49,9 +49,7 @@ extension SupabaseBoardService {
 
         return BoardWeekPosts(
             posts: postRows.map { row in
-                var post = row.toPost()
-                post.tags = tagsByPost[row.id] ?? []
-                return post
+                row.toPost(extraTags: tagsByPost[row.id] ?? [])
             },
             // uniquingKeysWith, not uniqueKeysWithValues: the latter *traps* on a
             // duplicate key. Today the reactions PK (post_id, user_id) makes
@@ -130,9 +128,9 @@ extension SupabaseBoardService {
         let enriched = try await enrichedTask
         await tagsAttached
 
-        var post = enriched.toPost()
-        post.tags = tags
-        return post
+        // Tags need no re-attachment: new-format content carries its
+        // hashtags inline, so toPost derives them.
+        return enriched.toPost()
     }
 
     private func fetchPostByIdWithRetry(id: UUID) async throws -> RemotePostRow {
@@ -190,9 +188,7 @@ extension SupabaseBoardService {
         let enriched = try await enrichedTask
         await tagsAttached
 
-        var post = enriched.toPost()
-        post.tags = tags
-        return post
+        return enriched.toPost()
     }
 
     func deletePost(id: UUID) async throws {
@@ -203,20 +199,4 @@ extension SupabaseBoardService {
             .execute()
     }
     
-    func searchTags(query: String, boardID: UUID) async throws -> [Tag] {
-        // An empty query returns the board's most-used tags (search_tags with an
-        // empty prefix orders by post_count) — this powers the picker's
-        // "Popular Tags" state so users discover and reuse existing tags rather
-        // than typing blind and creating duplicates.
-        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        struct SearchParams: Encodable {
-            let prefix: String
-            let p_board_id: UUID
-            let p_limit: Int
-        }
-        return try await client
-            .rpc("search_tags", params: SearchParams(prefix: cleanQuery, p_board_id: boardID, p_limit: 10))
-            .execute()
-            .value
-    }
 }

@@ -42,6 +42,21 @@ So `#finals` is text, `I got a #1 ranking` is text, `   # indented` is text, and
 `# Finals week` is a Title. This is what keeps hashtag muscle memory from
 colliding with headings, and it is why `* ` (bullet) never fights `*italic*`.
 
+**Inline hashtags are tags** (decided 2026-08-06, after the picker era):
+`#word` — where the token contains at least one letter, uses `[a-z0-9-]`, and
+is not glued to a preceding word character — parses as a tag run. `Post.tags`
+is DERIVED from content (lowercased, unique in order of appearance, silently
+capped at 3 — never error on a 4th; extras render highlighted but uncounted).
+Content is the single source of truth; the server's tags table is a
+denormalized index the client feeds at write time. Do NOT parse markup in a
+Postgres trigger — that's parser parity in SQL, the exact drift this spec
+exists to prevent. The letter rule keeps `#1` literal; the glue rule keeps
+`C#minor` literal; the space rule keeps `# heading` and `#tag` permanently
+disjoint. Known conscious trade-off: the old picker's search-with-post-counts
+was a tag-convergence nudge — free-typed tags can fragment (`econ201` vs
+`econ-201`). Accepted at current scale; the future fix is composer
+autocomplete, which is additive.
+
 Inline markers work anywhere, and **stack**: `***x***` is bold + italic. To
 avoid formatting ordinary punctuation (`5 * 3 * 2`), an inline run only opens
 when the delimiter is immediately followed by a non-space, and only closes when
@@ -145,11 +160,20 @@ by SwiftUI Text, which is why bullets are layout, not attributes).
 `inheritedByAddedText = false` and `invalidationConditions = [.textChanged]`
 (WWDC25 session 280). Parser and attribute recipes carry over unchanged.
 
-## Schema
+## Schema — two-phase migration (drafted, NOT applied)
 
-`title` and `description` collapse to one column. Migration is cheap because
-boards clear weekly — 21 live rows plus the archive, concatenated
-`title || E'\n\n' || description`.
+Phase 1 (safe while 1.1.x clients still write two columns): add nullable
+`content`, backfill `'# ' || title`, body, then a trailing hashtag line built
+from the post's existing tags. Old columns stay writable; the serving
+view/RPC exposes `coalesce(content, <join>)` so both client generations read
+one shape.
+
+Phase 2 (after `min_supported_version` retires 1.1.x — the version gate is the
+retirement tool, and with the current user base that's a week, not a year):
+drop `title`/`description`, make `content` NOT NULL.
+
+Draft SQL lives in `supabase/migrations/` (gitignored working copy) — apply
+via MCP with explicit go-ahead only.
 
 The single length limit should be a remote-config key, not a compiled constant
 (the old title cap was compiled at 50, and someone already hit it).

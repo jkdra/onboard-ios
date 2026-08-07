@@ -111,7 +111,6 @@ protocol BoardService: Sendable {
     func fetchFollowedUserIDs() async throws -> Set<UUID>
     func isFollowing(userID: UUID) async throws -> Bool
     
-    func searchTags(query: String, boardID: UUID) async throws -> [Tag]
 }
 
 enum BoardServiceFactory {

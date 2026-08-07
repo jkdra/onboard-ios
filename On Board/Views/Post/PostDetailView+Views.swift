@@ -164,21 +164,10 @@ extension PostDetailView {
             PostMarkupView(content: livePost.content)
                 .matchedGeometryEffect(id: "postContent", in: postNamespace, properties: .position, anchor: .topLeading)
                 
-            if !livePost.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(livePost.tags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            }
+            // Tag chips are gone from detail on purpose: tags are inline
+            // hashtags in the content now, highlighted right where they were
+            // typed. (Cards keep their chips row — a truncated card can cut
+            // off a trailing hashtag line, so chips guarantee visibility.)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .doubleTapHeart(
@@ -350,42 +339,8 @@ extension PostDetailView {
             .keyboardType(.twitter)
             .matchedFieldText(id: "postContent", in: postNamespace, variant: .body)
 
-        editTagsSection
-
         editImageSection
             .transition(.opacity)
-    }
-
-    @ViewBuilder
-    var editTagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Tags (\(draftTags.count)/3)", systemImage: "number")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(draftTags.isEmpty ? "Add Tags" : "Edit") {
-                    showingTagSelection = true
-                }
-                .fontStyle(.subheadline)
-            }
-            
-            if !draftTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(draftTags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-        .padding(.vertical, 8)
     }
 
     @ViewBuilder

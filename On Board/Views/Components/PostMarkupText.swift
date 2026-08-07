@@ -121,13 +121,19 @@ enum PostMarkupText {
                 var segment = Text(verbatim: run.text)
                     .font(cardFont(for: block.kind, traits: run.traits))
                     .applying(run.traits)
-                switch block.kind {
-                case .title:
-                    segment = segment.fontWeight(.heavy).foregroundColor(.primary)
-                case .subtitle:
+                if run.traits.contains(.tag) {
+                    // Semantic token, not body copy: pops to primary weight so
+                    // a trailing hashtag line reads as the post's tags.
                     segment = segment.fontWeight(.semibold).foregroundColor(.primary)
-                case .body, .bullet:
-                    segment = segment.foregroundColor(.secondary)
+                } else {
+                    switch block.kind {
+                    case .title:
+                        segment = segment.fontWeight(.heavy).foregroundColor(.primary)
+                    case .subtitle:
+                        segment = segment.fontWeight(.semibold).foregroundColor(.primary)
+                    case .body, .bullet:
+                        segment = segment.foregroundColor(.secondary)
+                    }
                 }
                 result = result + segment
             }
@@ -179,9 +185,13 @@ struct PostMarkupView: View {
     private func inlineText(_ block: PostMarkup.Block) -> Text {
         var result = Text(verbatim: "")
         for run in block.runs {
-            result = result + Text(verbatim: run.text)
+            var segment = Text(verbatim: run.text)
                 .font(detailFont(for: block.kind, traits: run.traits))
                 .applying(run.traits)
+            if run.traits.contains(.tag) {
+                segment = segment.fontWeight(.semibold)
+            }
+            result = result + segment
         }
         switch block.kind {
         case .title: return result.fontWeight(.bold)
@@ -217,6 +227,8 @@ struct PostMarkupView: View {
             * my eternal gratitude
             * a ~~firm handshake~~ high five
             it has *exactly* 47 stickers on it
+
+            #lost-and-found #dc
             """)
             Divider()
             PostMarkupText.cardText(PostMarkup.parse("""

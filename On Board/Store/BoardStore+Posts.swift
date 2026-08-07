@@ -10,8 +10,7 @@ extension BoardStore {
         content: String,
         tone: PostTone,
         imageUrl: String? = nil,
-        imageAspectRatio: Double? = nil,
-        tags: [String] = []
+        imageAspectRatio: Double? = nil
     ) async -> Bool {
         guard canInteractWithBoard, let user = currentUser else { return false }
         // Backstop for the posting freeze (the UI disables the entry, this blocks any
@@ -37,7 +36,9 @@ extension BoardStore {
                 tone: tone,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
-                tags: tags
+                // Derived here, not passed in: content is the source of truth,
+                // the server's tags table is a denormalized index of it.
+                tags: PostMarkup.parse(content).tags
             )
             insertPost(post)
             return true
@@ -52,8 +53,7 @@ extension BoardStore {
         content: String,
         tone: PostTone,
         imageUrl: String?,
-        imageAspectRatio: Double?,
-        tags: [String]
+        imageAspectRatio: Double?
     ) async -> Bool {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
@@ -74,8 +74,7 @@ extension BoardStore {
                 comments: comments(for: id),
                 createdAt: existing.createdAt,
                 imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio,
-                tags: tags
+                imageAspectRatio: imageAspectRatio
             )
             replacePost(at: index, with: updated)
             return true
@@ -88,7 +87,7 @@ extension BoardStore {
                 tone: tone,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
-                tags: tags
+                tags: PostMarkup.parse(content).tags
             )
             // `posts` can be rewritten by a concurrent refresh/realtime change while
             // the network call is in flight, so the index captured above is stale.

@@ -167,6 +167,48 @@ struct PostMarkupTests {
         #expect(rebuilt == source)
     }
 
+    // MARK: - Inline hashtags as tags
+
+    @Test func hashtagBecomesTagRun() {
+        let markup = PostMarkup.parse("free pizza in mc #free-food")
+        let tagRun = markup.blocks[0].runs.first { $0.traits.contains(.tag) }
+        #expect(tagRun?.text == "#free-food")
+        #expect(markup.tags == ["free-food"])
+    }
+
+    @Test func tagsAreLowercasedUniqueAndCappedAtThree() {
+        let markup = PostMarkup.parse("#One #two #ONE #three #four")
+        #expect(markup.tags == ["one", "two", "three"])
+    }
+
+    /// The letter requirement: rankings and prices stay literal.
+    @Test func numberOnlyHashIsNotATag() {
+        let markup = PostMarkup.parse("I got a #1 ranking")
+        #expect(markup.tags.isEmpty)
+        #expect(markup.blocks[0].plainText == "I got a #1 ranking")
+    }
+
+    /// Matching every major platform: a hash glued to a word is literal.
+    @Test func hashGluedToWordIsNotATag() {
+        let markup = PostMarkup.parse("the C#minor chord")
+        #expect(markup.tags.isEmpty)
+    }
+
+    /// The space rule keeps headings and tags permanently disjoint.
+    @Test func headingIsNotATagAndTagIsNotAHeading() {
+        let markup = PostMarkup.parse("# study group\n#studygroup")
+        #expect(markup.blocks[0].kind == .title)
+        #expect(markup.blocks[0].plainText == "study group")
+        #expect(markup.tags == ["studygroup"])
+    }
+
+    @Test func tagInsideStyledRunKeepsBothTraits() {
+        let markup = PostMarkup.parse("**bold #tag**")
+        let run = markup.blocks[0].runs.first { $0.traits.contains(.tag) }
+        #expect(run?.traits.contains(.bold) == true)
+        #expect(markup.tags == ["tag"])
+    }
+
     @Test func emptySourceProducesOneEmptyBody() {
         let markup = PostMarkup.parse("")
         #expect(markup.blocks.count == 1)

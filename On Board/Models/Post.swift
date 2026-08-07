@@ -61,14 +61,21 @@ struct Post: Identifiable, Hashable, Codable {
     /// the feed without waiting for the image to download.
     let imageAspectRatio: Double?
     
-    /// User-defined tags for organization and discovery.
-    var tags: [String]
+
 
     var hasImage: Bool { imageUrl != nil }
 
     /// First non-empty line of the rendered (marker-free) text — what shows in
     /// share sheets, report contexts, and anywhere else that wants "the post"
     /// as a single plain line.
+    /// Derived from the content's inline hashtags — content is the single
+    /// source of truth for tags. The separate tags array died with the picker
+    /// (see the 2026-08-06 spec); the server's tags table is now a
+    /// denormalized index the client feeds at write time.
+    var tags: [String] {
+        PostMarkup.parse(content).tags
+    }
+
     var previewLine: String {
         PostMarkup.parse(content).plainText
             .split(separator: "\n", omittingEmptySubsequences: true)
@@ -87,8 +94,7 @@ struct Post: Identifiable, Hashable, Codable {
         comments: [Comment] = [],
         createdAt: Date = .now,
         imageUrl: String? = nil,
-        imageAspectRatio: Double? = nil,
-        tags: [String] = []
+        imageAspectRatio: Double? = nil
     ) {
         self.id = id
         self.authorId = authorId
@@ -102,7 +108,6 @@ struct Post: Identifiable, Hashable, Codable {
         self.createdAt = createdAt
         self.imageUrl = imageUrl
         self.imageAspectRatio = imageAspectRatio
-        self.tags = tags
     }
 
     func assigning(boardWeekId: UUID?, isReadOnly: Bool) -> Post {
@@ -118,8 +123,7 @@ struct Post: Identifiable, Hashable, Codable {
             comments: comments,
             createdAt: createdAt,
             imageUrl: imageUrl,
-            imageAspectRatio: imageAspectRatio,
-            tags: tags
+            imageAspectRatio: imageAspectRatio
         )
     }
 

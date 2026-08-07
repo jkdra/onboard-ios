@@ -26,6 +26,10 @@ struct InlineTraits: OptionSet, Hashable, Sendable {
     static let italic        = InlineTraits(rawValue: 1 << 1)
     static let underline     = InlineTraits(rawValue: 1 << 2)
     static let strikethrough = InlineTraits(rawValue: 1 << 3)
+    /// An inline hashtag (`#word`). Not a *style* the user applied but a
+    /// semantic token the renderer highlights — carried here so tag runs flow
+    /// through the same run/span pipeline as everything else.
+    static let tag           = InlineTraits(rawValue: 1 << 4)
 }
 
 enum PostBlockKind: Equatable, Sendable {
@@ -62,6 +66,25 @@ struct PostMarkup: Equatable, Sendable {
     /// What the post reads as with every marker removed.
     var plainText: String {
         blocks.map(\.plainText).joined(separator: "\n")
+    }
+
+    /// The post's tags, derived from its inline hashtags: lowercased, unique
+    /// in order of appearance, capped at 3. The cap is silent by design —
+    /// erroring on a fourth hashtag would punish Instagram habits; extra tags
+    /// simply render as styled text without counting.
+    var tags: [String] {
+        var seen = Set<String>()
+        var result: [String] = []
+        for block in blocks {
+            for run in block.runs where run.traits.contains(.tag) {
+                let name = String(run.text.dropFirst()).lowercased()
+                if !name.isEmpty, seen.insert(name).inserted {
+                    result.append(name)
+                    if result.count == 3 { return result }
+                }
+            }
+        }
+        return result
     }
 }
 
@@ -159,6 +182,29 @@ extension PostMarkup {
         }
 
         while i < end {
+            // Inline hashtag: `#` + [a-z0-9-] containing at least one letter,
+            // and not glued to the preceding word ("word#tag" stays literal,
+            // matching every major platform). The letter requirement keeps
+            // "#1" (rankings, prices) literal. Checked before the style
+            // delimiters so a tag can never half-match emphasis.
+            if chars[i] == "#", i == start || !(chars[i - 1].isLetter || chars[i - 1].isNumber) {
+                var j = i + 1
+                var hasLetter = false
+                while j < end, chars[j].isLetter || chars[j].isNumber || chars[j] == "-" {
+                    if chars[j].isLetter { hasLetter = true }
+                    j += 1
+                }
+                if hasLetter {
+                    flushLiteral(upTo: i)
+                    runs.append(Run(text: String(chars[i..<j]), traits: inherited.union(.tag)))
+                    spans.append(Span(range: positions[i]..<positions[j],
+                                      isMarker: false, blockKind: blockKind,
+                                      traits: inherited.union(.tag)))
+                    i = j
+                    literalStart = i
+                    continue
+                }
+            }
             guard let match = openerAt(chars, i, end) else { i += 1; continue }
             guard let close = closerFor(chars, match.token, after: i + match.token.count, end: end)
             else { i += 1; continue }

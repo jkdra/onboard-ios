@@ -21,7 +21,6 @@ struct NewPostView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var content = ""
-    @State private var tags: [String] = []
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
@@ -35,7 +34,6 @@ struct NewPostView: View {
     // Image attachment
     @State private var photo = PhotoAttachmentController(type: .postPhoto)
     @State private var isSubmitting = false
-    @State private var showingTagSelection = false
 
     @FocusState private var focus: Field?
     private enum Field { case content }
@@ -101,8 +99,6 @@ struct NewPostView: View {
                         
                     Divider()
                     
-                    tagsRow
-
                     // Image attachment row
                     imageAttachmentRow
                 }
@@ -200,9 +196,6 @@ struct NewPostView: View {
             .onChange(of: photo.selectedPhotoItem) { _, item in
                 Task { await photo.loadPickedPhoto(item) }
             }
-            .sheet(isPresented: $showingTagSelection) {
-                TagSelectionView(selectedTags: $tags)
-            }
             .fullScreenCover(item: $photo.uncroppedImage) { image in
                 PostImageCropView(image: image) { cropped in
                     photo.uncroppedImage = nil
@@ -223,37 +216,7 @@ struct NewPostView: View {
         }
     }
 
-    // MARK: - Image attachment & Tags
-    
-    private var tagsRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Tags (\(tags.count)/3)", systemImage: "number")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(tags.isEmpty ? "Add Tags" : "Edit") {
-                    showingTagSelection = true
-                }
-                .fontStyle(.subheadline)
-            }
-            
-            if !tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // MARK: - Image attachment
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -291,8 +254,7 @@ struct NewPostView: View {
                 content: content.trimmed,
                 tone: resolvedTone,
                 imageUrl: photo.uploadedURL,
-                imageAspectRatio: photo.uploadedAspectRatio,
-                tags: tags
+                imageAspectRatio: photo.uploadedAspectRatio
             )
             isSubmitting = false
             guard succeeded else { return }
