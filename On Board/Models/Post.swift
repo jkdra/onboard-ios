@@ -32,8 +32,11 @@ struct Post: Identifiable, Hashable, Codable {
     /// comment, edit, or new posts on that week).
     let isReadOnly: Bool
 
-    var title: String
-    var description: String
+    /// The post's full text in board markup (see PostMarkup.swift and the
+    /// cross-client spec). One field on purpose — the old required title +
+    /// required body split bisected what was, at the median, a ~60-character
+    /// thought, and made every post pay a summarise-it-first tax.
+    var content: String
 
     /// Denormalized display name copy for fast rendering without a
     /// `profiles` join. Should mirror the linked profile's display name.
@@ -63,13 +66,21 @@ struct Post: Identifiable, Hashable, Codable {
 
     var hasImage: Bool { imageUrl != nil }
 
+    /// First non-empty line of the rendered (marker-free) text — what shows in
+    /// share sheets, report contexts, and anywhere else that wants "the post"
+    /// as a single plain line.
+    var previewLine: String {
+        PostMarkup.parse(content).plainText
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .first.map(String.init) ?? ""
+    }
+
     init(
         id: UUID = UUID(),
         authorId: UUID? = nil,
         boardWeekId: UUID? = nil,
         isReadOnly: Bool = false,
-        title: String,
-        description: String,
+        content: String,
         author: String,
         tone: PostTone = .random(),
         reactionCounts: [Reaction: Int] = [:],
@@ -83,8 +94,7 @@ struct Post: Identifiable, Hashable, Codable {
         self.authorId = authorId
         self.boardWeekId = boardWeekId
         self.isReadOnly = isReadOnly
-        self.title = title
-        self.description = description
+        self.content = content
         self.author = author
         self.tone = tone
         self.reactionCounts = reactionCounts
@@ -101,8 +111,7 @@ struct Post: Identifiable, Hashable, Codable {
             authorId: authorId,
             boardWeekId: boardWeekId,
             isReadOnly: isReadOnly,
-            title: title,
-            description: description,
+            content: content,
             author: author,
             tone: tone,
             reactionCounts: reactionCounts,

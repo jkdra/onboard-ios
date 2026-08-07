@@ -55,8 +55,7 @@ protocol BoardService: Sendable {
     func createPost(
         weekID: UUID,
         authorID: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?,
@@ -64,8 +63,7 @@ protocol BoardService: Sendable {
     ) async throws -> Post
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?,

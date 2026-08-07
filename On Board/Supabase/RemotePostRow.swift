@@ -55,14 +55,26 @@ struct RemotePostRow: Decodable, Sendable {
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 
+    /// Joins the legacy two-column wire shape into single-field markup
+    /// content. A pre-migration post's title becomes a real `# ` heading, so
+    /// old posts render exactly as they used to — heading over body — through
+    /// the one new pipeline. Runs until the schema migration collapses the
+    /// columns server-side.
+    private var joinedContent: String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedTitle.isEmpty { return trimmedBody }
+        if trimmedBody.isEmpty { return "# \(trimmedTitle)" }
+        return "# \(trimmedTitle)\n\(trimmedBody)"
+    }
+
     func toPost(comments: [Comment] = []) -> Post {
         Post(
             id: id,
             authorId: authorId,
             boardWeekId: boardWeekId,
             isReadOnly: isReadOnly,
-            title: title,
-            description: description,
+            content: joinedContent,
             author: author,
             tone: tone,
             reactionCounts: reactionCounts,

@@ -19,8 +19,7 @@ struct PostDetailView: View {
 
     // Post editing
     @State var editMode = false
-    @State var draftTitle = ""
-    @State var draftDescription = ""
+    @State var draftContent = ""
     @State var draftTone: PostTone
     @State var draftTags: [String] = []
     @State var showingTagSelection = false
@@ -56,8 +55,7 @@ struct PostDetailView: View {
     init(post: Post) {
         self.post = post
         _draftTone = State(initialValue: post.tone)
-        _draftTitle = State(initialValue: post.title)
-        _draftDescription = State(initialValue: post.description)
+        _draftContent = State(initialValue: post.content)
         _draftTags = State(initialValue: post.tags)
     }
 
@@ -364,8 +362,7 @@ struct PostDetailView: View {
     NavigationStack {
         PostDetailView(
             post: .init(
-                title: "Test Post With A Title That Wraps Across Multiple Lines",
-                description: "Hello",
+                content: "# Test Post With A Title That Wraps Across Multiple Lines\nHello **bold** and ~~gone~~",
                 author: "author1",
                 tone: .red,
                 reactionCounts: [.like: 1367, .dislike: 126, .laugh: 2_200_000],

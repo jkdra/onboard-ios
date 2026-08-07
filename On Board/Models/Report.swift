@@ -77,7 +77,7 @@ enum ReportTarget: Identifiable {
     /// Short description shown at the top of the report sheet.
     var summary: String {
         switch self {
-        case .post(let post): "Post: “\(post.title)”"
+        case .post(let post): "Post: “\(post.previewLine)”"
         case .comment(let comment, _): "Comment by \(comment.author)"
         case .profile(let profile): "Profile: \(profile.handle)"
         }

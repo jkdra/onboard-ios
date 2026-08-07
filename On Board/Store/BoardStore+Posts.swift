@@ -7,8 +7,7 @@ import Foundation
 
 extension BoardStore {
     func addPost(
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String? = nil,
         imageAspectRatio: Double? = nil,
@@ -34,8 +33,7 @@ extension BoardStore {
             let post = try await boardService.createPost(
                 weekID: weekID,
                 authorID: user.id,
-                title: title,
-                description: description,
+                content: content,
                 tone: tone,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
@@ -51,8 +49,7 @@ extension BoardStore {
 
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?,
@@ -70,8 +67,7 @@ extension BoardStore {
                 authorId: existing.authorId,
                 boardWeekId: existing.boardWeekId,
                 isReadOnly: existing.isReadOnly,
-                title: title,
-                description: description,
+                content: content,
                 author: existing.author,
                 tone: tone,
                 reactionCounts: existing.reactionCounts,
@@ -88,8 +84,7 @@ extension BoardStore {
         do {
             let updated = try await boardService.updatePost(
                 id: id,
-                title: title,
-                description: description,
+                content: content,
                 tone: tone,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,

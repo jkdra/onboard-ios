@@ -98,18 +98,52 @@ own line (splitting before and after as needed). Returning to Body strips the
 marker and deliberately does **not** try to rejoin the lines it split — undo
 symmetry is not worth the edge cases.
 
-## Open decision: iOS 18 vs 26
+## DECIDED (research pass, 2026-08-06): one bridged `UITextView` on every OS version
 
-`TextEditor` only accepts `Binding<AttributedString>` on iOS 26+. On 18–25 it is
-`Binding<String>`, which supports the toolbar (selection ranges are available
-from iOS 18) but **cannot** style ranges of editable text — so no dimmed-marker
-preview, and Enter-to-continue-a-bullet fights the undo stack.
+The version split (iOS 26 `TextEditor(AttributedString)` + degraded 18–25) was
+researched and rejected: maintaining two editors with divergent
+selection/undo/IME behaviour is the worst option, iOS 26's rich TextEditor
+still has an open selected-text-replacement bug (Apple forums 812759) and no
+UndoManager access, and ~10–15% of users (Apple adoption stats, June 2026)
+would get the degraded path anyway. One `UIViewRepresentable` UITextView gives
+everyone the live preview with decade-old, well-documented failure modes.
 
-Two options: version-gate the live preview (18–25 sees literal markers, which is
-what Discord looked like for years), or bridge `UITextView` for one consistent
-experience at meaningfully more work. Bullets are the feature that should decide
-this — they are the only part needing editor *behaviour* rather than text
-transformation.
+**Composer implementation rules (each one is a real shipped bug somewhere):**
+
+- Plain `UITextView`, TextKit 2 by default — **never touch `.layoutManager`**
+  (any access permanently drops that instance to TextKit 1). No NSTextStorage
+  subclass.
+- Characters are the ONLY state; attributes are a pure derived function of
+  them. Restyle in `textViewDidChange` by running the parser over the full
+  text and applying attributes in one `textStorage.beginEditing()/endEditing()`
+  transaction. **Never assign `textView.attributedText`** to restyle — that
+  resets selection, kills IME composition, and scrolls.
+- Skip restyling while `markedTextRange != nil` (CJK composition/dictation);
+  restyle after commit.
+- Reset `typingAttributes` to the base style in
+  `textViewDidChangeSelection`, or typing after a bold run extends it.
+- Attribute-only changes need no undo registration (undo restores characters,
+  didChange re-derives). Any programmatic *character* edit (toolbar inserting
+  markers) must route through `replace(_:withText:)` so UIKit registers it.
+- Whole-text re-parse per keystroke is microseconds at post length; don't
+  build incremental range patching.
+
+**Renderer note from the same research:** `Text` concatenation and
+`Text(AttributedString)` lay out identically; the difference is that an
+AttributedString can be built once and cached per post while concatenation
+rebuilds O(runs) Text values every body evaluation. At current board sizes
+concatenation is fine; if profiling ever flags the grid, the refactor is
+mechanical (same runs → one cached AttributedString, explicit
+`Font.custom(_:size:relativeTo:)` per run since size can't compose with the
+environment font, SwiftUI-scope attributes only — `paragraphStyle` is ignored
+by SwiftUI Text, which is why bullets are layout, not attributes).
+
+**When Apple fixes the TextEditor bugs:** the migration is
+`.onChange(of: text)` guarded on character-equality →
+`text.transform(updating: &selection)` batched via RangeSet → dimming via
+`AttributedTextValueConstraint`, custom keys with
+`inheritedByAddedText = false` and `invalidationConditions = [.textChanged]`
+(WWDC25 session 280). Parser and attribute recipes carry over unchanged.
 
 ## Schema
 

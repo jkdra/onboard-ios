@@ -203,23 +203,15 @@ struct GridCard: View {
 
     private var postCardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(post.title)
-                .fontStyle(.title3)
-                .fontWeight(.heavy)
-                .foregroundStyle(.primary)
-                // Matches the composer's own cap (NewPostView's title field is
-                // `lineLimit(1...3)`) — without this, an unusually long title can
-                // overflow the card's fixed `cardHeight` in the masonry grid.
-                .lineLimit(3)
+            // One concatenated Text for the whole post: mixed run styling
+            // (headings, bold, strikethrough…) with a single line budget that
+            // truncates across the entire post — a per-block VStack can't cap
+            // its total lines, and the card's height is fixed. 7 matches the
+            // old title(3) + description(4) budget.
+            PostMarkupText.cardText(PostMarkup.parse(post.content))
+                .lineLimit(7)
                 .truncationMode(.tail)
-            Text(post.description)
-                .font(.custom("ZalandoSansSemiExpanded-Regular", size: 14, relativeTo: .callout))
-                .fontWeight(.regular)
-                .opacity(0.8)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
-                .truncationMode(.tail)
-                
+
             if !post.tags.isEmpty {
                 tagsRow
             }

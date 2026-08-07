@@ -58,8 +58,7 @@ extension PostDetailView {
             let effectiveAspectRatio = editPhoto.uploadedAspectRatio ?? draftImageAspectRatio
             let succeeded = await store.updatePost(
                 id: livePost.id,
-                title: draftTitle.trimmed,
-                description: draftDescription.trimmed,
+                content: draftContent.trimmed,
                 tone: draftTone,
                 imageUrl: effectiveImageUrl,
                 imageAspectRatio: effectiveAspectRatio,
@@ -76,8 +75,7 @@ extension PostDetailView {
     }
 
     private func resetEditDraft() {
-        draftTitle = livePost.title
-        draftDescription = livePost.description
+        draftContent = livePost.content
         draftTone = livePost.tone
         draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl

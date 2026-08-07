@@ -70,8 +70,7 @@ extension SupabaseBoardService {
     func createPost(
         weekID: UUID,
         authorID: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?,
@@ -80,6 +79,10 @@ extension SupabaseBoardService {
         struct Insert: Encodable {
             let boardWeekId: UUID
             let authorId: UUID
+            // Pre-migration wire shape: the posts table still carries NOT
+            // NULL title/description columns. title is written empty and
+            // description carries the full markup content — the moderation
+            // drain reads description, so the judge sees the whole post.
             let title: String
             let description: String
             let tone: PostTone
@@ -102,8 +105,8 @@ extension SupabaseBoardService {
                 Insert(
                     boardWeekId: weekID,
                     authorId: authorID,
-                    title: title,
-                    description: description,
+                    title: "",
+                    description: content,
                     tone: tone,
                     imageUrl: imageUrl,
                     imageAspectRatio: imageAspectRatio
@@ -155,8 +158,7 @@ extension SupabaseBoardService {
 
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
         imageUrl: String?,
         imageAspectRatio: Double?,
@@ -172,7 +174,7 @@ extension SupabaseBoardService {
 
         try await client
             .from("posts")
-            .update(Update(title: title, description: description, tone: tone,
+            .update(Update(title: "", description: content, tone: tone,
                            imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
             .eq("id", value: id.uuidString)
             .execute()

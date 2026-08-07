@@ -66,6 +66,14 @@ struct ContentView: View {
     private static let hidesDevBlock =
         ProcessInfo.processInfo.arguments.contains("-dev.hideDevBlock")
 
+    /// DEV/mock-only: `-dev.openPostIndex <n>` pushes the nth feed post's
+    /// detail on appear. Exists because synthesized taps are broken under the
+    /// current Xcode's XCUITest (see ReactionBarInsetUITests) and headless
+    /// walkthroughs still need to reach PostDetailView.
+    private static let devOpenPostIndex: Int? =
+        ProcessInfo.processInfo.arguments.contains("-dev.openPostIndex")
+            ? UserDefaults.standard.integer(forKey: "dev.openPostIndex") : nil
+
     private var clearingSoon: Bool {
         BoardSchedule.isClearingSoon(weekEnd: store.activeBoardWeek?.endsAt,
                                      thresholds: remoteConfig.config.boardThresholds)
@@ -114,6 +122,12 @@ struct ContentView: View {
         // on a tap while the app is alive, and after the cold-launch fetch
         // settles (isLoading flips false) — whichever happens first.
         .onAppear { openPendingPostIfReady() }
+        .onAppear {
+            guard let index = Self.devOpenPostIndex,
+                  store.posts.indices.contains(index),
+                  navigationPath.isEmpty else { return }
+            navigationPath.append(.post(store.posts[index].id))
+        }
         .onAppear { openPendingProfileIfReady() }
         .onChange(of: NotificationService.shared.pendingPostID) { _, _ in
             openPendingPostIfReady()

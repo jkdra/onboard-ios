@@ -276,10 +276,10 @@ private final class MockBoardService: BoardService, @unchecked Sendable {
         return CommentThread(comments: [], userVotes: [:])
     }
     func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
-    func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
-        Post(authorId: authorID, boardWeekId: weekID, title: title, description: description, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio, tags: tags)
+    func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
+        Post(authorId: authorID, boardWeekId: weekID, content: content, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio, tags: tags)
     }
-    func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
+    func updatePost(id: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
     func deletePost(id: UUID) async throws {}
     func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment {
         On_Board.Comment(authorId: authorID, author: authorHandle, body: body)
@@ -340,8 +340,7 @@ struct BoardStoreTests {
         let archivedPost = Post(
             boardWeekId: archivedWeek.id,
             isReadOnly: true,
-            title: "old",
-            description: "week",
+            content: "old week",
             author: "maya.c"
         )
         let store = BoardStore(
@@ -373,10 +372,10 @@ struct BoardStoreTests {
             activeBoardWeek: activeWeek,
             boardService: MockBoardService()
         )
-        let succeeded = await store.addPost(title: "hello", description: "world", tone: .blue)
+        let succeeded = await store.addPost(content: "hello world", tone: .blue)
         #expect(succeeded)
         #expect(store.posts.count == 1)
-        #expect(store.posts[0].title == "hello")
+        #expect(store.posts[0].content == "hello world")
         #expect(store.posts[0].author == "maya.c")
         #expect(store.posts[0].authorId == SampleProfileID.maya)
     }
@@ -387,7 +386,7 @@ struct BoardStoreTests {
             endsAt: .now.addingTimeInterval(86_400 * 7),
             status: .active
         )
-        let post = Post(title: "t", description: "d", author: "a", tone: .blue)
+        let post = Post(content: "t d", author: "a", tone: .blue)
         let store = BoardStore(
             posts: [post],
             profiles: [],
@@ -503,8 +502,7 @@ extension BoardStoreTests {
         let post = Post(
             authorId: profile.id,
             boardWeekId: week.id,
-            title: "cached",
-            description: "d",
+            content: "cached d",
             author: profile.handle
         )
         let writer = BoardStore(
@@ -588,8 +586,7 @@ extension BoardStoreTests {
         let post = Post(
             authorId: profile.id,
             boardWeekId: week.id,
-            title: "cached",
-            description: "d",
+            content: "cached d",
             author: profile.handle
         )
         let writer = BoardStore(
@@ -654,7 +651,7 @@ extension BoardStoreTests {
 
     @Test @MainActor func loadCommentsRevalidationFailsSilentlyWhenAlreadyWarm() async {
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c", comments: [.authored(by: "maya.c", body: "hi")])
+        let post = Post(boardWeekId: activeWeek.id, content: "t d", author: "maya.c", comments: [.authored(by: "maya.c", body: "hi")])
         let service = MockBoardService()
         let store = BoardStore(
             posts: [post],
@@ -675,7 +672,7 @@ extension BoardStoreTests {
 
     @Test @MainActor func loadCommentsColdFailureSurfacesLoadError() async {
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let post = Post(boardWeekId: activeWeek.id, content: "t d", author: "maya.c")
         let service = MockBoardService()
         service.commentsShouldFail = true
         let store = BoardStore(
@@ -697,7 +694,7 @@ extension BoardStoreTests {
     @Test @MainActor func blockUserRemovesContentAndPersistsTheBlock() async throws {
         let blockedAuthor = SampleProfileID.leo
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, title: "t", description: "d", author: "leokp")
+        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, content: "t d", author: "leokp")
         let store = BoardStore(
             posts: [blockedPost],
             profiles: Profile.samples,
@@ -715,7 +712,7 @@ extension BoardStoreTests {
     @Test @MainActor func blockUserRollsBackContentAndBlockedSetOnFailure() async throws {
         let blockedAuthor = SampleProfileID.leo
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, title: "t", description: "d", author: "leokp")
+        let blockedPost = Post(authorId: blockedAuthor, boardWeekId: activeWeek.id, content: "t d", author: "leokp")
         let service = MockBoardService()
         service.blockUserError = BoardServiceError.notConfigured
         let store = BoardStore(
@@ -755,7 +752,7 @@ extension BoardStoreTests {
 
     @Test @MainActor func reportingAPostRemovesItLocally() async throws {
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let post = Post(boardWeekId: activeWeek.id, content: "t d", author: "maya.c")
         let store = BoardStore(
             posts: [post],
             profiles: [],
@@ -771,7 +768,7 @@ extension BoardStoreTests {
 
     @Test @MainActor func reportingAPostPropagatesFailureWithoutRemovingIt() async throws {
         let activeWeek = BoardWeek(startsAt: .now, endsAt: .now.addingTimeInterval(86_400 * 7), status: .active)
-        let post = Post(boardWeekId: activeWeek.id, title: "t", description: "d", author: "maya.c")
+        let post = Post(boardWeekId: activeWeek.id, content: "t d", author: "maya.c")
         let service = MockBoardService()
         service.reportContentError = BoardServiceError.notConfigured
         let store = BoardStore(
@@ -1503,8 +1500,8 @@ struct BoardSwitchRaceTests {
             return commentsToReturn
         }
         func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws { fatalError("unused") }
-        func createPost(weekID: UUID, authorID: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
-        func updatePost(id: UUID, title: String, description: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
+        func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
+        func updatePost(id: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
         func deletePost(id: UUID) async throws { fatalError("unused") }
         func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment { fatalError("unused") }
         func updateComment(id: UUID, body: String) async throws { }
@@ -1564,8 +1561,7 @@ struct BoardSwitchRaceTests {
         let post = Post(
             authorId: authorID,
             boardWeekId: week.id,
-            title: "t",
-            description: "d",
+            content: "t d",
             author: "maya",
             comments: [originalComment]
         )
@@ -1706,8 +1702,7 @@ struct CacheEnvelopeCodingTests {
         let post = Post(
             authorId: profile.id,
             boardWeekId: week.id,
-            title: "cached post",
-            description: "d",
+            content: "cached post d",
             author: profile.handle
         )
         let envelope = CacheEnvelope(

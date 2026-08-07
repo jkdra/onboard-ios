@@ -20,7 +20,6 @@ struct NewPostView: View {
     @AppStorage("profanityEnabled") private var profanityEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var title = ""
     @State private var content = ""
     @State private var tags: [String] = []
     @State private var selectedTone: PostTone? = nil
@@ -39,10 +38,10 @@ struct NewPostView: View {
     @State private var showingTagSelection = false
 
     @FocusState private var focus: Field?
-    private enum Field { case title, content }
+    private enum Field { case content }
 
     private var canSubmit: Bool {
-        !title.trimmed.isEmpty && !content.trimmed.isEmpty
+        !content.trimmed.isEmpty
             && !photo.isUploading && !isSubmitting && !isWithinFinalHour
     }
 
@@ -87,22 +86,15 @@ struct NewPostView: View {
                         WeeklyPromptBanner(prompt: weeklyPrompt)
                     }
 
-                    // Glass fields — the same "you can touch this" chrome and
-                    // context-matched typography as the post/profile editors,
-                    // so composing a post and editing one speak one language.
-                    TextField("Title", text: $title, axis: .vertical)
-                        .textFieldStyle(.boardTitle)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .fontStyle(.largeTitle)
-                        .lineLimit(1...3)
-                        .keyboardType(.default)
-                        .textInputAutocapitalization(.sentences)
-                        .focused($focus, equals: .title)
-
+                    // ONE field — the old required Title + required body pair
+                    // bisected a ~60-character median thought and taxed every
+                    // post with summarise-it-first. Structure is opt-in via
+                    // markup now (spec: 2026-08-06-post-rich-text.md); the
+                    // rich toolbar composer replaces this plain field next.
                     TextField("what's on your mind?", text: $content, axis: .vertical)
                         .textFieldStyle(.boardBody)
                         .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(4...12)
+                        .lineLimit(6...14)
                         .keyboardType(.twitter)
                         .focused($focus, equals: .content)
                         .fontStyle(.body)
@@ -181,7 +173,7 @@ struct NewPostView: View {
             }
             .keyboardDoneToolbar()
             .onAppear {
-                focus = .title
+                focus = .content
                 updateClearingState()
             }
             .task {
@@ -296,8 +288,7 @@ struct NewPostView: View {
         isSubmitting = true
         Task {
             let succeeded = await store.addPost(
-                title: title.trimmed,
-                description: content.trimmed,
+                content: content.trimmed,
                 tone: resolvedTone,
                 imageUrl: photo.uploadedURL,
                 imageAspectRatio: photo.uploadedAspectRatio,

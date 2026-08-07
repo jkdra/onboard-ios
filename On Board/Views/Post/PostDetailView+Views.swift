@@ -69,7 +69,7 @@ extension PostDetailView {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                    ShareLink(item: shareURL, subject: Text(livePost.title)) {
+                    ShareLink(item: shareURL, subject: Text(livePost.previewLine)) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
                     if !isOwnPost {
@@ -158,18 +158,11 @@ extension PostDetailView {
     @ViewBuilder
     private var restOfPostContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(livePost.title)
-                .fontStyle(.largeTitle)
-                // matchedGeometryEffect with properties: .position (no .size) can still
-                // leave Text trusting a stale cached frame from the transition, wrapping
-                // it to one line until the next layout pass. fixedSize forces it to always
-                // measure its own natural multiline height instead.
-                .fixedSize(horizontal: false, vertical: true)
-                .matchedGeometryEffect(id: "postTitle", in: postNamespace, properties: .position, anchor: .leading)
-            Text(livePost.description)
-                .fontStyle(.body)
-                .fixedSize(horizontal: false, vertical: true)
-                .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
+            // Rendered markup (titles, bold, bullets…) — PostMarkupView already
+            // applies fixedSize per block (see the old note about
+            // matchedGeometryEffect leaving Text with a stale cached frame).
+            PostMarkupView(content: livePost.content)
+                .matchedGeometryEffect(id: "postContent", in: postNamespace, properties: .position, anchor: .topLeading)
                 
             if !livePost.tags.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
@@ -344,14 +337,10 @@ extension PostDetailView {
     var postEditContent: some View {
         // Panels occupy real space, so the outer VStack's 16pt spacing is the
         // true visible rhythm — no inner stack needed.
-        TextField("Title", text: $draftTitle, axis: .vertical)
-            .textFieldStyle(.boardTitle)
-            .fixedSize(horizontal: false, vertical: true)
-            .fontStyle(.largeTitle)
-            .keyboardType(.default)
-            .textInputAutocapitalization(.sentences)
-            .matchedFieldText(id: "postTitle", in: postNamespace, variant: .title)
-        TextField("Description", text: $draftDescription, axis: .vertical)
+        // Single-field edit, plain markup for now — the rich composer
+        // (toolbar + dimmed-marker live preview) replaces this per the
+        // 2026-08-06 spec's composer section.
+        TextField("What's on your mind?", text: $draftContent, axis: .vertical)
             .textFieldStyle(.boardBody)
             // Multi-line fields re-measure a beat after appearing; without
             // this they settle unanimated mid-morph. Mirrors read mode's
@@ -359,7 +348,7 @@ extension PostDetailView {
             .fixedSize(horizontal: false, vertical: true)
             .fontStyle(.body)
             .keyboardType(.twitter)
-            .matchedFieldText(id: "postDescription", in: postNamespace, variant: .body)
+            .matchedFieldText(id: "postContent", in: postNamespace, variant: .body)
 
         editTagsSection
 
