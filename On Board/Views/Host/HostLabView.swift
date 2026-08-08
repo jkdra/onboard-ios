@@ -17,10 +17,10 @@ struct HostLabView: View {
     @State private var article: HostArticle? = nil
 
     @State private var poseDegrees: Double = -8
-    @State private var weight: Double = 0.075
-    @State private var axisDX: Double = 0.045
-    @State private var axisDY: Double = 0.085
-    @State private var halo: Double = 0.05
+    @State private var weight: Double = 0.093
+    @State private var axisDX: Double = 0.065
+    @State private var axisDY: Double = 0.083
+    @State private var halo: Double = 0.02
 
     @State private var anatomy = HostAnatomy()
     @State private var animation: LabAnimation = .none

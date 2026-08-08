@@ -66,12 +66,13 @@ enum HostArticle: String, CaseIterable {
 /// (x right, y down from the body's top-leading corner; scale is width
 /// relative to body width). One place to tune; the lab exposes sliders.
 struct HostAnatomy {
-    var eyeCenter = CGPoint(x: 0.28, y: 0.25)
-    var eyeScale: CGFloat = 0.22
-    var sweatCenter = CGPoint(x: 0.02, y: 0.14)
-    var sweatScale: CGFloat = 0.24
-    var angerCenter = CGPoint(x: 0.84, y: 0.16)
-    var angerScale: CGFloat = 0.26
+    // Defaults tuned by Jawad in the lab, 2026-08-07.
+    var eyeCenter = CGPoint(x: 0.260, y: 0.215)
+    var eyeScale: CGFloat = 0.315
+    var sweatCenter = CGPoint(x: -0.083, y: 0.142)
+    var sweatScale: CGFloat = 0.444
+    var angerCenter = CGPoint(x: 0.000, y: 0.006)
+    var angerScale: CGFloat = 0.332
 
     func center(for article: HostArticle) -> CGPoint {
         switch article {
@@ -96,12 +97,13 @@ struct HostFigure: View {
     /// Pose rotation. The brand's default stance is −8° (leaning left).
     var pose: Angle = .degrees(-8)
     /// Uniform contour thickness, as a fraction of body width.
-    var weight: CGFloat = 0.08
+    /// Defaults tuned by Jawad in the lab, 2026-08-07.
+    var weight: CGFloat = 0.093
     /// World-space (screen) axis extension, as fractions of body width.
     /// Default leans down-right like the drawn asset.
-    var axis: CGVector = CGVector(dx: 0.045, dy: 0.085)
+    var axis: CGVector = CGVector(dx: 0.065, dy: 0.083)
     /// Knockout halo around articles, as a fraction of body width.
-    var halo: CGFloat = 0.05
+    var halo: CGFloat = 0.02
 
     var anatomy = HostAnatomy()
     var lineColor: Color = .black
@@ -133,11 +135,18 @@ struct HostFigure: View {
             let bodyPath = art.path(in: box)
 
             ZStack {
-                // Axis extension (behind), then contour — same color, so
-                // their union reads as one asymmetric outline.
-                silhouette(bodyPath, stroke: strokeWidth)
-                    .offset(x: axisInLocal.dx * w, y: axisInLocal.dy * w)
-                silhouette(bodyPath, stroke: strokeWidth)
+                // SWEPT axis extension — the Illustrator-Blend equivalent.
+                // Two stamped copies (contour + one offset) leave concave
+                // creases wherever their edges cross; sweeping N
+                // interpolated copies along the axis fills the crease into
+                // a smooth envelope. All copies paint the same color, so
+                // overdraw IS the union — no path booleans, cheap enough
+                // to run per animation frame.
+                ForEach(0..<Self.sweepSteps, id: \.self) { step in
+                    let t = CGFloat(step) / CGFloat(Self.sweepSteps - 1)
+                    silhouette(bodyPath, stroke: strokeWidth)
+                        .offset(x: axisInLocal.dx * w * t, y: axisInLocal.dy * w * t)
+                }
 
                 bodyPath.fill(bodyColor)
 
@@ -160,12 +169,25 @@ struct HostFigure: View {
         .aspectRatio(body_.art.width / body_.art.height, contentMode: .fit)
     }
 
-    /// The body silhouette dilated by `stroke/2`: filled + stroked.
+    /// How many interpolated copies the shadow sweep paints (t = 0 is the
+    /// contour itself). 24 puts adjacent copies well under a point apart at
+    /// display sizes — 8 left visible scalloping on diagonal edges under
+    /// zoom. Fills of the same path are cheap; this is not a hot cost.
+    private static var sweepSteps: Int { 24 }
+
+    /// Miter joins, not round: the contour's corners must read POINTED,
+    /// matching the drawn asset (round joins visibly soften the mouth
+    /// wedge and the body corners).
+    private static func contourStyle(width: CGFloat) -> StrokeStyle {
+        StrokeStyle(lineWidth: width, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
+    }
+
+    /// The body silhouette dilated by `stroke/2`: stroked + filled,
+    /// painted as overdraw (same color) rather than a path boolean.
+    @ViewBuilder
     private func silhouette(_ path: Path, stroke: CGFloat) -> some View {
-        path
-            .strokedPath(StrokeStyle(lineWidth: stroke, lineCap: .round, lineJoin: .round))
-            .union(path)
-            .fill(lineColor)
+        path.strokedPath(Self.contourStyle(width: stroke)).fill(lineColor)
+        path.fill(lineColor)
     }
 
     @ViewBuilder
@@ -193,10 +215,10 @@ struct HostFigure: View {
         )
         let path = art.path(in: frame)
         if strokeWidth > 0 {
-            path
-                .strokedPath(StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
-                .union(path)
-                .fill(color)
+            ZStack {
+                path.strokedPath(Self.contourStyle(width: strokeWidth)).fill(color)
+                path.fill(color)
+            }
         } else {
             path.fill(color)
         }
