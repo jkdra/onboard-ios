@@ -51,7 +51,12 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if remoteConfig.config.updateRequirement() == .required {
+            if ProcessInfo.processInfo.arguments.contains("-dev.hostLab") {
+                // DEV: Host rig tuning lab, headless-reachable without auth.
+                // Checked before every other branch so no store state can
+                // hide it. See HostLabView's header.
+                HostLabView()
+            } else if remoteConfig.config.updateRequirement() == .required {
                 // A root branch, not a presentation — same mechanism as the
                 // offline gate below, and for the same reason: this must never
                 // silently fail to appear. Checked first: an out-of-date build
