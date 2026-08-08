@@ -82,7 +82,7 @@
       <CommandLineArguments>
          <CommandLineArgument
             argument = "-dev.hostLab YES"
-            isEnabled = "YES">
+            isEnabled = "NO">
          </CommandLineArgument>
       </CommandLineArguments>
    </LaunchAction>
