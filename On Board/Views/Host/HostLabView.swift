@@ -25,6 +25,7 @@ struct HostLabView: View {
     @State private var anatomy = HostAnatomy()
     @State private var animation: LabAnimation = .none
     @State private var darkStage = false
+    @State private var exportResult: String?
 
     enum LabAnimation: String, CaseIterable {
         case none = "Still"
@@ -91,6 +92,7 @@ struct HostLabView: View {
             if let impliedEye = preset.impliedEye { eye = impliedEye }
         }
         if defaults.bool(forKey: "dev.hostLab.dark") { darkStage = true }
+        if defaults.bool(forKey: "dev.hostLab.export") { exportResult = exportIcons() }
     }
 
     private var stage: some View {
@@ -168,6 +170,20 @@ struct HostLabView: View {
                     labSlider("Anger size", $anatomy.angerScale, 0.1...0.5)
                 }
 
+                Button {
+                    exportResult = exportIcons()
+                } label: {
+                    Label("Export icon set (1024²)", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.bordered)
+                .padding(.top, 4)
+                if let exportResult {
+                    Text(exportResult)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
                 // Current values, screenshot-readable — this is how tuned
                 // numbers make it back into HostAnatomy/HostFigure defaults.
                 Text(currentValues)
@@ -191,6 +207,53 @@ struct HostLabView: View {
 
     private func labSlider(_ label: String, _ value: Binding<CGFloat>, _ range: ClosedRange<Double>) -> some View {
         labSlider(label, Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = CGFloat($0) }), range)
+    }
+
+    /// Renders the CURRENT lab configuration as an app-icon set in
+    /// Documents/HostIcons: light (opaque white — App Store icons reject
+    /// alpha), dark (transparent background, inverted glyph, per Apple's
+    /// iOS 18 dark-icon spec), and tinted (grayscale glyph on transparent).
+    /// Returns a status line for the panel. Pull the files off the sim with
+    /// `simctl get_app_container ... data`, or via Files on device.
+    private func exportIcons() -> String {
+        // 1024-square canvas; body sized so the swept shadow clears the
+        // edges at any tuned axis.
+        func figure(line: Color, body bodyFill: Color) -> some View {
+            HostFigure(
+                body_: bodyState,
+                eye: eye,
+                article: article,
+                pose: .degrees(poseDegrees),
+                weight: weight,
+                axis: CGVector(dx: axisDX, dy: axisDY),
+                halo: halo,
+                anatomy: anatomy,
+                lineColor: line,
+                bodyColor: bodyFill
+            )
+            .frame(width: 620)
+        }
+        let variants: [(String, AnyView)] = [
+            ("icon-light", AnyView(ZStack { Color.white; figure(line: .black, body: .white) }.frame(width: 1024, height: 1024))),
+            ("icon-dark", AnyView(ZStack { Color.clear; figure(line: .white, body: .black) }.frame(width: 1024, height: 1024))),
+            ("icon-tinted", AnyView(ZStack { Color.clear; figure(line: .black, body: .white) }.frame(width: 1024, height: 1024).grayscale(1))),
+        ]
+
+        let dir = URL.documentsDirectory.appending(path: "HostIcons")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            for (name, view) in variants {
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 1
+                guard let data = renderer.uiImage?.pngData() else {
+                    return "export failed: \(name) did not render"
+                }
+                try data.write(to: dir.appending(path: "\(name).png"))
+            }
+            return "exported 3 → \(dir.path)"
+        } catch {
+            return "export failed: \(error.localizedDescription)"
+        }
     }
 
     private var currentValues: String {

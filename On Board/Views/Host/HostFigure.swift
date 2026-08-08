@@ -24,7 +24,7 @@ import SwiftUI
 // the sticker-on-sticker separation from the source art, erasing to
 // TRANSPARENCY so it works over any background.
 
-enum HostBodyState: String, CaseIterable {
+nonisolated enum HostBodyState: String, CaseIterable {
     case idle, speech
 
     var art: HostPathData {
@@ -35,7 +35,7 @@ enum HostBodyState: String, CaseIterable {
     }
 }
 
-enum HostEye: String, CaseIterable {
+nonisolated enum HostEye: String, CaseIterable {
     case neutral, happy, sad, angry, love, dead, bugged
 
     var art: HostPathData {
@@ -51,7 +51,7 @@ enum HostEye: String, CaseIterable {
     }
 }
 
-enum HostArticle: String, CaseIterable {
+nonisolated enum HostArticle: String, CaseIterable {
     case sweat, anger
 
     var art: HostPathData {
@@ -119,51 +119,69 @@ struct HostFigure: View {
         )
     }
 
+    // RENDERING (rebuilt for cost, 2026-08-07). One `Canvas`, ~4 fills per
+    // frame, zero per-frame stroke computation:
+    //   - The dilated silhouette (body stroked + filled — the expensive
+    //     stroke-geometry tessellation) is pose-INDEPENDENT, so it's
+    //     memoized per (body, size, weight) in HostSilhouetteMemo. The
+    //     previous Shape-tree version recomputed `strokedPath` 24× per
+    //     animation frame.
+    //   - The sweep appends 24 translated copies of the memoized path into
+    //     ONE Path filled ONCE (nonzero winding unions the overlap), so the
+    //     GPU shades each shadow pixel once instead of blending ~48 layers.
+    //   - The article knockout uses GraphicsContext's native
+    //     `.destinationOut` inside the canvas's own transparent layer — no
+    //     compositingGroup over a view tree.
+    //   - `rotationEffect` stays OUTSIDE the canvas: the pose spin is a
+    //     pure Core Animation transform (render-server work); the canvas
+    //     content only changes because the world-fixed axis counter-rotates.
     var body: some View {
         GeometryReader { proxy in
             let art = body_.art
             let scale = min(proxy.size.width / art.width, proxy.size.height / art.height)
             let bodySize = CGSize(width: art.width * scale, height: art.height * scale)
-            let box = CGRect(
-                x: (proxy.size.width - bodySize.width) / 2,
-                y: (proxy.size.height - bodySize.height) / 2,
-                width: bodySize.width,
-                height: bodySize.height
-            )
-            let w = box.width
-            let strokeWidth = weight * w * 2
-            let bodyPath = art.path(in: box)
+            // The canvas is oversized: contour and shadow overflow the body
+            // box, and Canvas clips to its bounds (Shape views didn't).
+            let pad = bodySize.width * 0.35
+            let axisLocal = axisInLocal
 
-            ZStack {
-                // SWEPT axis extension — the Illustrator-Blend equivalent.
-                // Two stamped copies (contour + one offset) leave concave
-                // creases wherever their edges cross; sweeping N
-                // interpolated copies along the axis fills the crease into
-                // a smooth envelope. All copies paint the same color, so
-                // overdraw IS the union — no path booleans, cheap enough
-                // to run per animation frame.
-                ForEach(0..<Self.sweepSteps, id: \.self) { step in
+            Canvas { context, _ in
+                let box = CGRect(x: pad, y: pad, width: bodySize.width, height: bodySize.height)
+                let w = box.width
+                let dilated = HostSilhouetteMemo.dilated(
+                    for: body_, size: bodySize, weight: weight
+                ).offsetBy(dx: pad, dy: pad)
+
+                // 24 translated fills of the SAME cached path — deliberately
+                // NOT appended into one path: the stroked outline is a ring
+                // whose inner contour winds opposite its outer, so merged
+                // copies cancel each other's winding where they overlap and
+                // punch sliver holes in the shadow. Same-color overdraw of
+                // separate fills has no winding interaction.
+                for step in 0..<Self.sweepSteps {
                     let t = CGFloat(step) / CGFloat(Self.sweepSteps - 1)
-                    silhouette(bodyPath, stroke: strokeWidth)
-                        .offset(x: axisInLocal.dx * w * t, y: axisInLocal.dy * w * t)
+                    var copy = context
+                    copy.translateBy(x: axisLocal.dx * w * t, y: axisLocal.dy * w * t)
+                    copy.fill(dilated, with: .color(lineColor))
                 }
-
-                bodyPath.fill(bodyColor)
-
-                component(eye.art, center: anatomy.eyeCenter, scale: anatomy.eyeScale, in: box)
-                    .foregroundStyle(lineColor)
+                context.fill(art.path(in: box), with: .color(bodyColor))
+                context.fill(
+                    componentPath(eye.art, center: anatomy.eyeCenter, scale: anatomy.eyeScale, in: box),
+                    with: .color(lineColor)
+                )
 
                 if let article {
-                    let haloWidth = halo * w * 2
-                    // Halo knocks out EVERYTHING beneath within the
-                    // figure's compositing group — contour, shadow, body —
-                    // erasing to transparency.
-                    articleView(article, in: box, strokeWidth: haloWidth, color: .black)
-                        .blendMode(.destinationOut)
-                    articleView(article, in: box, strokeWidth: 0, color: lineColor)
+                    let path = articlePath(article, in: box)
+                    let haloStyle = Self.contourStyle(width: halo * w * 2)
+                    context.blendMode = .destinationOut
+                    context.fill(path.strokedPath(haloStyle), with: .color(.black))
+                    context.fill(path, with: .color(.black))
+                    context.blendMode = .normal
+                    context.fill(path, with: .color(lineColor))
                 }
             }
-            .compositingGroup()
+            .frame(width: bodySize.width + pad * 2, height: bodySize.height + pad * 2)
+            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
             .rotationEffect(pose)
         }
         .aspectRatio(body_.art.width / body_.art.height, contentMode: .fit)
@@ -172,56 +190,68 @@ struct HostFigure: View {
     /// How many interpolated copies the shadow sweep paints (t = 0 is the
     /// contour itself). 24 puts adjacent copies well under a point apart at
     /// display sizes — 8 left visible scalloping on diagonal edges under
-    /// zoom. Fills of the same path are cheap; this is not a hot cost.
+    /// zoom. They land in one fill of one path; this is not a hot cost.
     private static var sweepSteps: Int { 24 }
 
     /// Miter joins, not round: the contour's corners must read POINTED,
     /// matching the drawn asset (round joins visibly soften the mouth
     /// wedge and the body corners).
-    private static func contourStyle(width: CGFloat) -> StrokeStyle {
+    nonisolated static func contourStyle(width: CGFloat) -> StrokeStyle {
         StrokeStyle(lineWidth: width, lineCap: .butt, lineJoin: .miter, miterLimit: 10)
     }
 
-    /// The body silhouette dilated by `stroke/2`: stroked + filled,
-    /// painted as overdraw (same color) rather than a path boolean.
-    @ViewBuilder
-    private func silhouette(_ path: Path, stroke: CGFloat) -> some View {
-        path.strokedPath(Self.contourStyle(width: stroke)).fill(lineColor)
-        path.fill(lineColor)
-    }
-
-    @ViewBuilder
-    private func component(_ art: HostPathData, center: CGPoint, scale: CGFloat, in box: CGRect) -> some View {
+    private func componentPath(_ art: HostPathData, center: CGPoint, scale: CGFloat, in box: CGRect) -> Path {
         let width = scale * box.width
         let height = width * art.height / art.width
-        HostGlyph(art: art)
-            .frame(width: width, height: height)
-            .position(
-                x: box.minX + center.x * box.width,
-                y: box.minY + center.y * box.height
-            )
-    }
-
-    @ViewBuilder
-    private func articleView(_ article: HostArticle, in box: CGRect, strokeWidth: CGFloat, color: Color) -> some View {
-        let art = article.art
-        let width = anatomy.scale(for: article) * box.width
-        let height = width * art.height / art.width
-        let frame = CGRect(
-            x: box.minX + anatomy.center(for: article).x * box.width - width / 2,
-            y: box.minY + anatomy.center(for: article).y * box.height - height / 2,
+        return art.path(in: CGRect(
+            x: box.minX + center.x * box.width - width / 2,
+            y: box.minY + center.y * box.height - height / 2,
             width: width,
             height: height
+        ))
+    }
+
+    private func articlePath(_ article: HostArticle, in box: CGRect) -> Path {
+        componentPath(
+            article.art,
+            center: anatomy.center(for: article),
+            scale: anatomy.scale(for: article),
+            in: box
         )
-        let path = art.path(in: frame)
-        if strokeWidth > 0 {
-            ZStack {
-                path.strokedPath(Self.contourStyle(width: strokeWidth)).fill(color)
-                path.fill(color)
-            }
-        } else {
-            path.fill(color)
-        }
+    }
+}
+
+/// Memo for the dilated body silhouette (stroke tessellation is the only
+/// expensive geometry in the figure, and it's pose-independent). Keyed on
+/// body state + quantized size + weight; entries are few (one per distinct
+/// figure size on screen) and small.
+nonisolated enum HostSilhouetteMemo {
+    private struct Key: Hashable {
+        let body: HostBodyState
+        let w: Int   // size quantized to 1/4 pt
+        let h: Int
+        let weight: Int  // quantized to 0.0001
+    }
+
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var store: [Key: Path] = [:]
+
+    static func dilated(for body: HostBodyState, size: CGSize, weight: CGFloat) -> Path {
+        let key = Key(
+            body: body,
+            w: Int(size.width * 4), h: Int(size.height * 4),
+            weight: Int(weight * 10_000)
+        )
+        lock.lock()
+        defer { lock.unlock() }
+        if let cached = store[key] { return cached }
+        let path = body.art.path(in: CGRect(origin: .zero, size: size))
+        var dilated = path.strokedPath(
+            HostFigure.contourStyle(width: weight * size.width * 2)
+        )
+        dilated.addPath(path)
+        store[key] = dilated
+        return dilated
     }
 }
 
