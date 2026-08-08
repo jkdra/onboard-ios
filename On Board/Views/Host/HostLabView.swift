@@ -15,12 +15,14 @@ struct HostLabView: View {
     @State private var bodyState: HostBodyState = .idle
     @State private var eye: HostEye = .neutral
     @State private var article: HostArticle? = nil
+    @State private var facing: HostFacing = .right
+    @State private var bodyFill: HostBodyFill = .filled
 
     @State private var poseDegrees: Double = -8
-    @State private var weight: Double = 0.093
-    @State private var axisDX: Double = 0.065
-    @State private var axisDY: Double = 0.083
-    @State private var halo: Double = 0.02
+    @State private var weight: Double = 0.090
+    @State private var axisDX: Double = 0.090
+    @State private var axisDY: Double = 0.100
+    @State private var halo: Double = 0.040
 
     @State private var anatomy = HostAnatomy()
     @State private var animation: LabAnimation = .none
@@ -91,15 +93,29 @@ struct HostLabView: View {
             if let impliedArticle = preset.impliedArticle { article = impliedArticle }
             if let impliedEye = preset.impliedEye { eye = impliedEye }
         }
+        if let raw = defaults.string(forKey: "dev.hostLab.facing"),
+           let state = HostFacing(rawValue: raw) { facing = state }
+        if let raw = defaults.string(forKey: "dev.hostLab.fill"),
+           let state = HostBodyFill(rawValue: raw) { bodyFill = state }
         if defaults.bool(forKey: "dev.hostLab.dark") { darkStage = true }
         if defaults.bool(forKey: "dev.hostLab.export") { exportResult = exportIcons() }
     }
 
     private var stage: some View {
         ZStack {
-            // Explicit stage colors — an adaptive color here turns the
-            // light stage black in dark mode and hides the black contour.
-            (darkStage ? Color.black : Color.white)
+            // GRADIENT stages, explicit (never adaptive — an adaptive color
+            // turns the light stage black in dark mode and hides the
+            // contour). A gradient rather than a flat fill specifically so
+            // an erased body is unmistakable: a knocked-out interior shows
+            // the gradient continuing THROUGH him, which a flat backdrop
+            // can't reveal.
+            LinearGradient(
+                colors: darkStage
+                    ? [.black, Color(white: 0.22)]
+                    : [.white, Color(white: 0.86)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
             TimelineView(.animation(minimumInterval: nil, paused: animation == .none)) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 HostFigure(
@@ -107,12 +123,14 @@ struct HostLabView: View {
                     eye: eye,
                     article: article,
                     pose: .degrees(poseDegrees + animation.poseOffset(at: t)),
+                    facing: facing,
                     weight: weight,
                     axis: CGVector(dx: axisDX, dy: axisDY),
                     halo: halo,
                     anatomy: anatomy,
                     lineColor: darkStage ? .white : .black,
-                    bodyColor: darkStage ? .black : .white
+                    bodyColor: darkStage ? .black : .white,
+                    bodyFill: bodyFill
                 )
                 .frame(width: 230)
             }
@@ -126,6 +144,16 @@ struct HostLabView: View {
             VStack(alignment: .leading, spacing: 14) {
                 Picker("Body", selection: $bodyState) {
                     ForEach(HostBodyState.allCases, id: \.self) { Text($0.rawValue.capitalized) }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Facing", selection: $facing) {
+                    ForEach(HostFacing.allCases, id: \.self) { Text("Faces \($0.rawValue)") }
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Body", selection: $bodyFill) {
+                    ForEach(HostBodyFill.allCases, id: \.self) { Text($0.rawValue.capitalized) }
                 }
                 .pickerStyle(.segmented)
 
@@ -224,6 +252,7 @@ struct HostLabView: View {
                 eye: eye,
                 article: article,
                 pose: .degrees(poseDegrees),
+                facing: facing,
                 weight: weight,
                 axis: CGVector(dx: axisDX, dy: axisDY),
                 halo: halo,
@@ -258,8 +287,8 @@ struct HostLabView: View {
 
     private var currentValues: String {
         String(
-            format: "pose %.1f  weight %.3f  axis (%.3f, %.3f)  halo %.3f\neye (%.3f, %.3f) ×%.3f  sweat (%.3f, %.3f) ×%.3f  anger (%.3f, %.3f) ×%.3f",
-            poseDegrees, weight, axisDX, axisDY, halo,
+            format: "pose %.1f  faces %@  weight %.3f  axis (%.3f, %.3f)  halo %.3f\neye (%.3f, %.3f) ×%.3f  sweat (%.3f, %.3f) ×%.3f  anger (%.3f, %.3f) ×%.3f",
+            poseDegrees, facing.rawValue, weight, axisDX, axisDY, halo,
             anatomy.eyeCenter.x, anatomy.eyeCenter.y, anatomy.eyeScale,
             anatomy.sweatCenter.x, anatomy.sweatCenter.y, anatomy.sweatScale,
             anatomy.angerCenter.x, anatomy.angerCenter.y, anatomy.angerScale

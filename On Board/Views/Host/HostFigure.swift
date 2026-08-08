@@ -51,6 +51,27 @@ nonisolated enum HostEye: String, CaseIterable {
     }
 }
 
+nonisolated enum HostBodyFill: String, CaseIterable {
+    /// Body painted with `bodyColor` (the drawn asset's look).
+    case filled
+    /// Body ERASED — punched through the shadow to transparency, so
+    /// whatever is behind the Host shows through his interior and only the
+    /// outline-shadow ring remains. Works because the figure draws into the
+    /// Canvas's own layer, so `.destinationOut` clears rather than paints.
+    case transparent
+
+    var erasesBody: Bool { self == .transparent }
+}
+
+nonisolated enum HostFacing: String, CaseIterable {
+    /// As drawn: the mouth notch opens to the right.
+    case right
+    /// Mirrored horizontally.
+    case left
+
+    var isMirrored: Bool { self == .left }
+}
+
 nonisolated enum HostArticle: String, CaseIterable {
     case sweat, anger
 
@@ -66,13 +87,14 @@ nonisolated enum HostArticle: String, CaseIterable {
 /// (x right, y down from the body's top-leading corner; scale is width
 /// relative to body width). One place to tune; the lab exposes sliders.
 struct HostAnatomy {
-    // Defaults tuned by Jawad in the lab, 2026-08-07.
+    // Defaults tuned by Jawad in the lab, 2026-08-08 (eye deliberately
+    // kept at the 08-07 values).
     var eyeCenter = CGPoint(x: 0.260, y: 0.215)
     var eyeScale: CGFloat = 0.315
-    var sweatCenter = CGPoint(x: -0.083, y: 0.142)
+    var sweatCenter = CGPoint(x: -0.089, y: 0.142)
     var sweatScale: CGFloat = 0.444
-    var angerCenter = CGPoint(x: 0.000, y: 0.006)
-    var angerScale: CGFloat = 0.332
+    var angerCenter = CGPoint(x: 0.000, y: -0.055)
+    var angerScale: CGFloat = 0.363
 
     func center(for article: HostArticle) -> CGPoint {
         switch article {
@@ -96,23 +118,38 @@ struct HostFigure: View {
 
     /// Pose rotation. The brand's default stance is −8° (leaning left).
     var pose: Angle = .degrees(-8)
+    /// Which way he faces. Mirroring flips only the FIGURE (body, eye,
+    /// article) — the shadow axis stays world-space, so the light keeps
+    /// coming from the same direction instead of flipping with him, which
+    /// is what keeps a mirrored Host looking lit by the same room. His
+    /// mirrored pose also leans the other way, so the lean is negated too.
+    var facing: HostFacing = .right
     /// Uniform contour thickness, as a fraction of body width.
-    /// Defaults tuned by Jawad in the lab, 2026-08-07.
-    var weight: CGFloat = 0.093
+    /// Defaults tuned by Jawad in the lab, 2026-08-08.
+    var weight: CGFloat = 0.090
     /// World-space (screen) axis extension, as fractions of body width.
     /// Default leans down-right like the drawn asset.
-    var axis: CGVector = CGVector(dx: 0.065, dy: 0.083)
+    var axis: CGVector = CGVector(dx: 0.090, dy: 0.100)
     /// Knockout halo around articles, as a fraction of body width.
-    var halo: CGFloat = 0.02
+    var halo: CGFloat = 0.040
 
     var anatomy = HostAnatomy()
     var lineColor: Color = .black
     var bodyColor: Color = .white
+    /// Whether the interior is painted or knocked out. See HostBodyFill.
+    var bodyFill: HostBodyFill = .filled
+
+    /// The applied lean. A mirrored Host leans the other way, so his stance
+    /// reads as the same character turned around rather than a different
+    /// tilt.
+    private var effectivePose: Angle {
+        facing.isMirrored ? .degrees(-pose.degrees) : pose
+    }
 
     /// The world-space axis expressed in body-local coordinates, so the
     /// extension stays screen-down while the body rotates.
     private var axisInLocal: CGVector {
-        let t = -pose.radians
+        let t = -effectivePose.radians
         return CGVector(
             dx: axis.dx * cos(t) - axis.dy * sin(t),
             dy: axis.dx * sin(t) + axis.dy * cos(t)
@@ -145,12 +182,21 @@ struct HostFigure: View {
             let pad = bodySize.width * 0.35
             let axisLocal = axisInLocal
 
+            let canvasWidth = bodySize.width + pad * 2
+
             Canvas { context, _ in
                 let box = CGRect(x: pad, y: pad, width: bodySize.width, height: bodySize.height)
                 let w = box.width
-                let dilated = HostSilhouetteMemo.dilated(
-                    for: body_, size: bodySize, weight: weight
-                ).offsetBy(dx: pad, dy: pad)
+                // Mirroring flips the FIGURE's paths only; the sweep offsets
+                // below stay in world space, so the light keeps coming from
+                // the same side instead of flipping with him.
+                let flip: (Path) -> Path = facing.isMirrored
+                    ? { $0.applying(CGAffineTransform(scaleX: -1, y: 1).translatedBy(x: -canvasWidth, y: 0)) }
+                    : { $0 }
+                let dilated = flip(
+                    HostSilhouetteMemo.dilated(for: body_, size: bodySize, weight: weight)
+                        .offsetBy(dx: pad, dy: pad)
+                )
 
                 // 24 translated fills of the SAME cached path — deliberately
                 // NOT appended into one path: the stroked outline is a ring
@@ -164,14 +210,24 @@ struct HostFigure: View {
                     copy.translateBy(x: axisLocal.dx * w * t, y: axisLocal.dy * w * t)
                     copy.fill(dilated, with: .color(lineColor))
                 }
-                context.fill(art.path(in: box), with: .color(bodyColor))
+                let bodyPath = flip(art.path(in: box))
+                if bodyFill.erasesBody {
+                    // Punch the interior out of the shadow, leaving the ring.
+                    context.blendMode = .destinationOut
+                    context.fill(bodyPath, with: .color(.black))
+                    context.blendMode = .normal
+                } else {
+                    context.fill(bodyPath, with: .color(bodyColor))
+                }
+                // Drawn AFTER the knockout either way, so the eye survives an
+                // erased body (it reads as floating in the opening).
                 context.fill(
-                    componentPath(eye.art, center: anatomy.eyeCenter, scale: anatomy.eyeScale, in: box),
+                    flip(componentPath(eye.art, center: anatomy.eyeCenter, scale: anatomy.eyeScale, in: box)),
                     with: .color(lineColor)
                 )
 
                 if let article {
-                    let path = articlePath(article, in: box)
+                    let path = flip(articlePath(article, in: box))
                     let haloStyle = Self.contourStyle(width: halo * w * 2)
                     context.blendMode = .destinationOut
                     context.fill(path.strokedPath(haloStyle), with: .color(.black))
@@ -180,9 +236,9 @@ struct HostFigure: View {
                     context.fill(path, with: .color(lineColor))
                 }
             }
-            .frame(width: bodySize.width + pad * 2, height: bodySize.height + pad * 2)
+            .frame(width: canvasWidth, height: bodySize.height + pad * 2)
             .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
-            .rotationEffect(pose)
+            .rotationEffect(effectivePose)
         }
         .aspectRatio(body_.art.width / body_.art.height, contentMode: .fit)
     }
