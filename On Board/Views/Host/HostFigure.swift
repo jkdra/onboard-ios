@@ -93,8 +93,8 @@ struct HostFigure: View {
     var eye: HostEye = .neutral
     var article: HostArticle? = nil
 
-    /// Pose rotation. The brand's default stance is 8°.
-    var pose: Angle = .degrees(8)
+    /// Pose rotation. The brand's default stance is −8° (leaning left).
+    var pose: Angle = .degrees(-8)
     /// Uniform contour thickness, as a fraction of body width.
     var weight: CGFloat = 0.08
     /// World-space (screen) axis extension, as fractions of body width.

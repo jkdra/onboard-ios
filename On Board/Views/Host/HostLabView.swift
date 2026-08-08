@@ -16,7 +16,7 @@ struct HostLabView: View {
     @State private var eye: HostEye = .neutral
     @State private var article: HostArticle? = nil
 
-    @State private var poseDegrees: Double = 8
+    @State private var poseDegrees: Double = -8
     @State private var weight: Double = 0.075
     @State private var axisDX: Double = 0.045
     @State private var axisDY: Double = 0.085
