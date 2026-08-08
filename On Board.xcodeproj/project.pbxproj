@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 954766D82FE858F900447B56 /* GoogleSignIn */; };
-		954766DB2FE858F900447B56 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 954766DA2FE858F900447B56 /* GoogleSignInSwift */; };
 		95DC401A2FD36BD700F6E770 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC40192FD36BD700F6E770 /* Auth */; };
 		95DC40202FD36BD700F6E770 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC401F2FD36BD700F6E770 /* Supabase */; };
 		95DC40232FD36BD700F6E770 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC40222FD36BD700F6E770 /* NukeUI */; };
@@ -80,7 +79,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				954766DB2FE858F900447B56 /* GoogleSignInSwift in Frameworks */,
 				95DC40202FD36BD700F6E770 /* Supabase in Frameworks */,
 				954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */,
 				95DC401A2FD36BD700F6E770 /* Auth in Frameworks */,
@@ -161,7 +159,6 @@
 				95DC401F2FD36BD700F6E770 /* Supabase */,
 				95DC40222FD36BD700F6E770 /* NukeUI */,
 				954766D82FE858F900447B56 /* GoogleSignIn */,
-				954766DA2FE858F900447B56 /* GoogleSignInSwift */,
 			);
 			productName = "On Board";
 			productReference = 95DC3FE72FD3688800F6E770 /* On Board.app */;
@@ -689,11 +686,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
-		};
-		954766DA2FE858F900447B56 /* GoogleSignInSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignInSwift;
 		};
 		95DC40192FD36BD700F6E770 /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;

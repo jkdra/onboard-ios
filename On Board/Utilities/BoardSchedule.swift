@@ -77,36 +77,6 @@ enum BoardSchedule {
         return calendar.date(from: components) ?? calendar.startOfDay(for: date)
     }
 
-    /// The seven calendar days for a board week (Monday first).
-    static func daysInWeek(starting weekStart: Date, calendar: Calendar = .current) -> [Date] {
-        let calendar = mondayCalendar(calendar)
-        let start = calendar.startOfDay(for: weekStart)
-        return (0..<7).compactMap { calendar.date(byAdding: .day, value: $0, to: start) }
-    }
-
-    /// Every Monday between two dates, inclusive.
-    static func weekStarts(
-        from start: Date,
-        through end: Date,
-        calendar: Calendar = .current
-    ) -> [Date] {
-        let calendar = mondayCalendar(calendar)
-        var weeks: [Date] = []
-        var cursor = startOfWeek(containing: start, calendar: calendar)
-        let final = startOfWeek(containing: end, calendar: calendar)
-
-        while cursor <= final {
-            weeks.append(cursor)
-            guard let next = calendar.date(byAdding: .day, value: 7, to: cursor) else { break }
-            cursor = next
-        }
-        return weeks
-    }
-
-    static func isSameDay(_ lhs: Date, _ rhs: Date, calendar: Calendar = .current) -> Bool {
-        calendar.isDate(lhs, inSameDayAs: rhs)
-    }
-
     /// Seconds until a known week boundary (server `ends_at` when available).
     static func secondsUntilWeekEnd(_ end: Date, from now: Date = .now) -> TimeInterval {
         max(0, end.timeIntervalSince(now))

@@ -2,40 +2,19 @@
 //  SupabaseAuthService.swift
 //  On Board
 //
+//  Core session lifecycle + phone/email OTP. Split by topic (mirroring
+//  SupabaseBoardService): SupabaseAuthService+Password.swift,
+//  SupabaseAuthService+Social.swift, SupabaseAuthService+Linking.swift.
+//
 
-import AuthenticationServices
 import Foundation
 import Supabase
 import UIKit
 
-// Apple re-sends the full name when a user revokes and re-authorizes the app.
-// Only adopt it while the profile has no chosen display name — never overwrite.
-enum AppleNameAdoption {
-    nonisolated static func shouldAdopt(currentDisplayName: String?) -> Bool {
-        (currentDisplayName ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-}
-
-// Provides a real foreground window as the ASWebAuthenticationSession anchor.
-// The SDK's default creates UIWindow() with no scene, which silently fails on iOS 16+.
-private final class ForegroundWindowProvider: NSObject, ASWebAuthenticationPresentationContextProviding, @unchecked Sendable {
-    static let shared = ForegroundWindowProvider()
-
-    // Explicitly nonisolated so the static `shared` initializer can use it
-    // without requiring a @MainActor context.
-    nonisolated override init() { super.init() }
-
-    @MainActor
-    func presentationAnchor(for _: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        UIApplication.shared.connectedScenes
-            .first(where: { $0.activationState == .foregroundActive })
-            .flatMap { $0 as? UIWindowScene }?
-            .keyWindow ?? ASPresentationAnchor()
-    }
-}
-
 final class SupabaseAuthService: AuthService, @unchecked Sendable {
-    private let configuration: AppConfiguration
+    // Not private: the +Social/+Linking extensions read googleClientID /
+    // isGoogleOAuthAvailable from it.
+    let configuration: AppConfiguration
     private let client: SupabaseClient?
 
     init(configuration: AppConfiguration) {
@@ -119,245 +98,6 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         ).execute().value
     }
 
-    func signUpWithPassword(email: String, password: String) async throws -> AuthSession? {
-        let client = try requireClient()
-        do {
-            let response = try await client.auth.signUp(email: email, password: password)
-            if let session = response.session {
-                let identities = try await client.auth.userIdentities()
-                return Self.mapSession(session, identities: identities)
-            } else {
-                return nil
-            }
-        } catch {
-            throw Self.mapPasswordError(error)
-        }
-    }
-
-    func signInWithPassword(email: String, password: String) async throws -> AuthSession {
-        let client = try requireClient()
-        do {
-            try await client.auth.signIn(email: email, password: password)
-        } catch {
-            throw Self.mapPasswordError(error)
-        }
-        return try await requireRefreshedSession()
-    }
-
-    func setPassword(_ password: String) async throws -> AuthSession {
-        let client = try requireClient()
-        do {
-            // has_password rides along in user metadata because Supabase never
-            // exposes whether an account has a password — the session needs it
-            // to decide between "Set Password" and "Change Password".
-            _ = try await client.auth.update(
-                user: UserAttributes(
-                    password: password,
-                    data: ["has_password": .bool(true)]
-                )
-            )
-        } catch {
-            throw Self.mapPasswordError(error)
-        }
-        return try await requireRefreshedSession()
-    }
-
-    /// Maps GoTrue's password-related API errors to friendly copy.
-    private static func mapPasswordError(_ error: Error) -> Error {
-        if NetworkErrorClassifier.isConnectivityFailure(error) {
-            return AuthError.networkUnavailable
-        }
-        let message = error.localizedDescription.lowercased()
-        if message.contains("invalid login credentials") {
-            return AuthError.invalidCredentials
-        }
-        if message.contains("password") && (message.contains("should be at least") || message.contains("weak")) {
-            return AuthError.weakPassword
-        }
-        if message.contains("different from the old password") {
-            return AuthError.unknown("Your new password must be different from your current one.")
-        }
-        return error
-    }
-
-    func signInWithApple(idToken: String, nonce: String?, fullName: String?) async throws -> AuthSession {
-        let client = try requireClient()
-
-        _ = try await client.auth.signInWithIdToken(
-            credentials: OpenIDConnectCredentials(
-                provider: .apple,
-                idToken: idToken,
-                nonce: nonce
-            )
-        )
-
-        if let fullName {
-            _ = try? await client.auth.update(
-                user: UserAttributes(data: ["full_name": .string(fullName)])
-            )
-            if let userID = client.auth.currentSession?.user.id {
-                nonisolated struct NameRow: Decodable {
-                    let displayName: String?
-                    enum CodingKeys: String, CodingKey { case displayName = "display_name" }
-                }
-                do {
-                    let row: NameRow = try await client
-                        .from("profiles")
-                        .select("display_name")
-                        .eq("id", value: userID.uuidString)
-                        .single()
-                        .execute()
-                        .value
-                    if AppleNameAdoption.shouldAdopt(currentDisplayName: row.displayName) {
-                        _ = try? await client
-                            .from("profiles")
-                            .update(["display_name": fullName])
-                            .eq("id", value: userID.uuidString)
-                            .execute()
-                    }
-                } catch {
-                    // Unknown current name (fetch failed) — never risk overwriting a
-                    // chosen display name. The user can set it from their profile.
-                }
-            }
-        }
-
-        return try await requireRefreshedSession()
-    }
-
-    func signInWithGoogle() async throws -> AuthSession {
-        let client = try requireClient()
-
-        let session: Session
-
-        if let clientID = configuration.googleClientID {
-            // Native Google Sign-In: GID SDK presents the account picker, returns an ID token,
-            // which we exchange with Supabase directly without opening a browser.
-            let credential = try await GoogleSignInService.signIn(clientID: clientID)
-            session = try await client.auth.signInWithIdToken(
-                credentials: OpenIDConnectCredentials(
-                    provider: .google,
-                    idToken: credential.idToken,
-                    nonce: credential.nonce
-                )
-            )
-        } else {
-            // Fallback: Supabase web OAuth (opens ASWebAuthenticationSession).
-            guard configuration.isGoogleOAuthAvailable else {
-                throw AuthError.providerUnavailable(.google)
-            }
-            let provider = ForegroundWindowProvider.shared
-            session = try await client.auth.signInWithOAuth(provider: .google) { webSession in
-                webSession.presentationContextProvider = provider
-                webSession.prefersEphemeralWebBrowserSession = false
-            }
-        }
-
-        let identities = try await client.auth.userIdentities()
-        return Self.mapSession(session, identities: identities)
-    }
-
-    func linkApple(idToken: String, nonce: String?) async throws -> AuthSession {
-        let client = try requireClient()
-        _ = try await client.auth.linkIdentityWithIdToken(
-            credentials: OpenIDConnectCredentials(
-                provider: .apple,
-                idToken: idToken,
-                nonce: nonce
-            )
-        )
-        return try await requireRefreshedSession()
-    }
-
-    func linkGoogle() async throws -> AuthSession {
-        let client = try requireClient()
-
-        if let clientID = configuration.googleClientID {
-            let credential = try await GoogleSignInService.signIn(clientID: clientID)
-            _ = try await client.auth.linkIdentityWithIdToken(
-                credentials: OpenIDConnectCredentials(
-                    provider: .google,
-                    idToken: credential.idToken,
-                    nonce: credential.nonce
-                )
-            )
-        } else {
-            guard configuration.isGoogleOAuthAvailable else {
-                throw AuthError.providerUnavailable(.google)
-            }
-            // `signInWithOAuth` (used by signInWithGoogle's fallback below) starts a
-            // fresh sign-in — using it here would swap the session to a different/new
-            // account instead of linking. `linkIdentity` is the correct call for
-            // attaching an OAuth identity to the currently signed-in user; it opens the
-            // browser and completes via the onOpenURL → auth.handle(_:) deep-link path.
-            try await client.auth.linkIdentity(provider: .google)
-        }
-
-        return try await requireRefreshedSession()
-    }
-
-    func sendLinkPhoneOTP(phone: String) async throws {
-        let client = try requireClient()
-        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
-            throw AuthError.invalidPhoneNumber
-        }
-        try await client.auth.update(user: UserAttributes(phone: e164))
-    }
-
-    func verifyLinkPhoneOTP(phone: String, token: String) async throws -> AuthSession {
-        let client = try requireClient()
-        guard let e164 = PhoneNumberNormalizer.e164(from: phone) else {
-            throw AuthError.invalidPhoneNumber
-        }
-        try await client.auth.verifyOTP(phone: e164, token: token, type: .phoneChange)
-        return try await requireRefreshedSession()
-    }
-
-    func sendLinkEmailOTP(email: String) async throws {
-        let client = try requireClient()
-        try await client.auth.update(user: UserAttributes(email: email))
-    }
-
-    func verifyLinkEmailOTP(email: String, token: String) async throws -> AuthSession {
-        let client = try requireClient()
-        try await client.auth.verifyOTP(email: email, token: token, type: .emailChange)
-        return try await requireRefreshedSession()
-    }
-
-    func unlinkIdentity(id: String) async throws -> AuthSession {
-        let client = try requireClient()
-        let identities = try await client.auth.userIdentities()
-        guard let identity = identities.first(where: { $0.id == id }) else {
-            throw AuthError.unknown("That sign-in method is no longer linked.")
-        }
-
-        if identity.provider == "google" {
-            await MainActor.run {
-                GoogleSignInService.disconnect()
-            }
-        }
-
-        try await client.auth.unlinkIdentity(identity)
-        _ = try await client.auth.refreshSession()
-        return try await requireRefreshedSession()
-    }
-
-    func revokeApple(authorizationCode: String) async throws {
-        let client = try requireClient()
-        struct RevokeRequest: Encodable {
-            let authorizationCode: String
-        }
-        
-        do {
-            _ = try await client.functions.invoke(
-                "revoke-apple",
-                options: FunctionInvokeOptions(body: RevokeRequest(authorizationCode: authorizationCode))
-            )
-        } catch {
-            throw AuthError.unknown("Failed to revoke Apple Sign In: \(error.localizedDescription)")
-        }
-    }
-
     func refreshAuthSession() async throws -> AuthSession? {
         let client = try requireClient()
         guard let session = client.auth.currentSession, !session.isExpired else {
@@ -391,11 +131,11 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
                 "We couldn't delete your account right now. Try again later or contact support."
             )
         }
-        
+
         await MainActor.run {
             GoogleSignInService.disconnect()
         }
-        
+
         try await client.auth.signOut()
     }
 
@@ -421,7 +161,8 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         }
     }
 
-    private func requireClient() throws -> SupabaseClient {
+    // Not private: shared by the +Password/+Social/+Linking extensions.
+    func requireClient() throws -> SupabaseClient {
         guard let client else { throw AuthError.notConfigured }
         return client
     }
@@ -435,7 +176,8 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
             .execute()
     }
 
-    private func requireRefreshedSession() async throws -> AuthSession {
+    // Not private: shared by the +Password/+Social/+Linking extensions.
+    func requireRefreshedSession() async throws -> AuthSession {
         guard let session = try await refreshAuthSession() else {
             throw AuthError.sessionRestoreFailed
         }
@@ -447,7 +189,8 @@ final class SupabaseAuthService: AuthService, @unchecked Sendable {
         return Self.mapSession(session, identities: identities)
     }
 
-    private static func mapSession(_ session: Session, identities: [UserIdentity]) -> AuthSession {
+    // Not private: the +Password/+Social extensions map fresh sessions with it.
+    static func mapSession(_ session: Session, identities: [UserIdentity]) -> AuthSession {
         let user = session.user
         let linkedIdentities = identities.compactMap { identity -> LinkedIdentity? in
             let email = identity.identityData?["email"]?.stringValue

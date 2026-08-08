@@ -11,7 +11,6 @@
 
 import SwiftUI
 import PhotosUI
-import Supabase
 
 enum ProfilePresentation {
     case sheet
@@ -271,7 +270,7 @@ struct ProfileView: View {
     }
 
     private var shareSubject: String {
-        displayedProfile.displayName.isEmpty ? displayedProfile.handle : displayedProfile.displayName
+        displayedProfile.displayNameOrHandle
     }
 
     // MARK: - Edit lifecycle

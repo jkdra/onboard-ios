@@ -132,12 +132,12 @@ struct ProfileReadContent: View {
             // display-name field simply fades in above it, which reads as "you can
             // add one" rather than a glitchy content swap.
             if profile.displayName.isEmpty {
-                Text(profile.handle)
+                Text(profile.displayNameOrHandle)
                     .fontStyle(.title)
                     .fontWeight(.heavy)
                     .matchedGeometryEffect(id: ProfileGeometryID.username, in: namespace, anchor: .leading)
             } else {
-                Text(profile.displayName)
+                Text(profile.displayNameOrHandle)
                     .fontStyle(.title)
                     .fontWeight(.heavy)
                     .matchedGeometryEffect(id: ProfileGeometryID.displayName, in: namespace, anchor: .leading)

@@ -9,7 +9,6 @@
 
 import SwiftUI
 import PhotosUI
-import Supabase
 
 struct NewPostView: View {
     @Environment(RemoteConfigStore.self) private var remoteConfig

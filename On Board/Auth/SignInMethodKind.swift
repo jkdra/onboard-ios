@@ -5,31 +5,7 @@
 
 import Foundation
 
-enum SignInMethodKind: Equatable, Sendable {
-    case phone
-    case email
-    case apple
-    case google
-}
-
 extension AuthSession {
-    var signInMethodKinds: [SignInMethodKind] {
-        var methods: [SignInMethodKind] = []
-        if hasPhoneIdentity { methods.append(.phone) }
-        if hasEmailIdentity { methods.append(.email) }
-        for identity in linkedIdentities {
-            switch identity.provider {
-            case .apple where !methods.contains(.apple):
-                methods.append(.apple)
-            case .google where !methods.contains(.google):
-                methods.append(.google)
-            default:
-                break
-            }
-        }
-        return methods
-    }
-
     func remainingSignInMethodCount(excludingIdentityId: String? = nil) -> Int {
         var count = 0
         if hasPhoneIdentity { count += 1 }

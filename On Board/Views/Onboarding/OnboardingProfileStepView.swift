@@ -5,7 +5,6 @@
 
 import SwiftUI
 import PhotosUI
-import Supabase
 
 struct OnboardingProfileStepView: View {
     @Environment(\.profileFieldLimits) private var profileFieldLimits
