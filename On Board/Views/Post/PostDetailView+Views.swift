@@ -329,35 +329,77 @@ extension PostDetailView {
     /// slots as the read-mode text, so entering edit mode morphs in place.
     @ViewBuilder
     var postEditContent: some View {
-        // Panels occupy real space, so the outer VStack's 16pt spacing is the
-        // true visible rhythm — no inner stack needed.
-        // The same rich composer as NewPostView: markers dim in place, and the
-        // formatting bar comes with it as the field's own keyboard accessory —
-        // nothing for this screen to place or gate.
-        // Chrome padding single-sourced on the variant's inset — a literal
-        // here desynchronizes matchedFieldText's negation and the text
-        // visibly shifts during the morph (the matched-field-text-shift-in
-        // regression). properties/anchor mirror the read-side
-        // PostMarkupView's matchedGeometryEffect exactly.
-        MarkupTextEditor(text: $draftContent, controller: editEditorController)
-            .padding(.horizontal, BoardTextFieldStyle.Variant.body.inset.h)
-            .padding(.vertical, BoardTextFieldStyle.Variant.body.inset.v)
-            .background {
-                GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
-                                fallback: AnyShapeStyle(.thinMaterial))
-            }
-            .matchedFieldText(id: "postContent", in: postNamespace, variant: .body,
-                              properties: .position, anchor: .topLeading)
-            // Mirrors postContent's fast fade — see the comment at the mode
-            // switch in PostDetailView.body.
-            .transition(.opacity.animation(.easeOut(duration: 0.18)))
+        // A real View struct, not an inline builder chain: the edit stack
+        // (picker + editor + glass + matched geometry + transitions + photo
+        // tile) as one expression blew the main thread's stack copying its
+        // generic type — the same budget PostDetailView.body's split guards
+        // against. The struct boundary collapses the type.
+        PostEditContentView(
+            draftContent: $draftContent,
+            draftTone: $draftTone,
+            editorController: editEditorController,
+            editPhoto: editPhoto,
+            existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
+            tone: tone,
+            namespace: postNamespace,
+            onRemoveImage: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
+        )
+    }
+}
 
-        editImageSection
-            .transition(.opacity)
+/// Edit-mode content column. See `postEditContent` for why this is a struct.
+private struct PostEditContentView: View {
+    @Binding var draftContent: String
+    @Binding var draftTone: PostTone
+    let editorController: MarkupEditorController
+    let editPhoto: PhotoAttachmentController
+    let existingImageURL: URL?
+    let tone: PostTone
+    let namespace: Namespace.ID
+    let onRemoveImage: () -> Void
+
+    @Environment(\.photoAttachmentsEnabled) private var photoAttachmentsEnabled
+
+    var body: some View {
+        // Explicit VStack (spacing matches the outer edit column rhythm) —
+        // as a nested struct these are no longer direct children of
+        // PostDetailView's VStack.
+        VStack(alignment: .leading, spacing: 20) {
+            // Tone control — the one edit-mode affordance the composer had
+            // that editing lacked (draftTone always drove the background;
+            // nothing let the user CHANGE it). Same picker as NewPostView,
+            // non-optional bridge since an existing post always has a tone.
+            // The screen's background animates live as tones are tried.
+            TonePicker(selection: $draftTone)
+
+            // The same rich composer as NewPostView: markers dim in place,
+            // and the formatting bar comes with it as the field's own
+            // keyboard accessory — nothing for this screen to place or gate.
+            // Chrome padding single-sourced on the variant's inset — a
+            // literal here desynchronizes matchedFieldText's negation and
+            // the text visibly shifts during the morph (the
+            // matched-field-text-shift-in regression). properties/anchor
+            // mirror the read-side PostMarkupView's matchedGeometryEffect.
+            MarkupTextEditor(text: $draftContent, controller: editorController)
+                .padding(.horizontal, BoardTextFieldStyle.Variant.body.inset.h)
+                .padding(.vertical, BoardTextFieldStyle.Variant.body.inset.v)
+                .background {
+                    GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                                    fallback: AnyShapeStyle(.thinMaterial))
+                }
+                .matchedFieldText(id: "postContent", in: namespace, variant: .body,
+                                  properties: .position, anchor: .topLeading)
+
+            editImageSection
+        }
+        // Mirrors postContent's fast fade — see the comment at the mode
+        // switch in PostDetailView.body. One transition for the whole
+        // column now that it's a single view.
+        .transition(.opacity.animation(.easeOut(duration: 0.18)))
     }
 
     @ViewBuilder
-    var editImageSection: some View {
+    private var editImageSection: some View {
         if editPhoto.uploadFailed {
             Label("Image couldn't be uploaded — the previous one is kept.", systemImage: "exclamationmark.triangle")
                 .fontStyle(.caption)
@@ -368,9 +410,9 @@ extension PostDetailView {
             PhotoAttachmentTile(
                 controller: editPhoto,
                 onCapture: { editPhoto.uncroppedImage = $0 },
-                existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
+                existingImageURL: existingImageURL,
                 tone: tone,
-                onRemove: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
+                onRemove: onRemoveImage
             )
         }
     }
