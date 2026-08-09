@@ -334,13 +334,23 @@ extension PostDetailView {
         // The same rich composer as NewPostView: markers dim in place, and the
         // formatting bar comes with it as the field's own keyboard accessory —
         // nothing for this screen to place or gate.
+        // Chrome padding single-sourced on the variant's inset — a literal
+        // here desynchronizes matchedFieldText's negation and the text
+        // visibly shifts during the morph (the matched-field-text-shift-in
+        // regression). properties/anchor mirror the read-side
+        // PostMarkupView's matchedGeometryEffect exactly.
         MarkupTextEditor(text: $draftContent, controller: editEditorController)
-            .padding(14)
+            .padding(.horizontal, BoardTextFieldStyle.Variant.body.inset.h)
+            .padding(.vertical, BoardTextFieldStyle.Variant.body.inset.v)
             .background {
                 GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
                                 fallback: AnyShapeStyle(.thinMaterial))
             }
-            .matchedFieldText(id: "postContent", in: postNamespace, variant: .body)
+            .matchedFieldText(id: "postContent", in: postNamespace, variant: .body,
+                              properties: .position, anchor: .topLeading)
+            // Mirrors postContent's fast fade — see the comment at the mode
+            // switch in PostDetailView.body.
+            .transition(.opacity.animation(.easeOut(duration: 0.18)))
 
         editImageSection
             .transition(.opacity)

@@ -86,7 +86,11 @@ enum PostMarkupText {
 
     /// Card-scale fonts, matching the sizes GridCard used for its old
     /// title/description pair so existing cards look unchanged.
-    private static func cardFont(for kind: PostBlockKind, traits: InlineTraits = []) -> Font {
+    private static func cardFont(
+        for kind: PostBlockKind,
+        traits: InlineTraits = [],
+        tier: PostMarkup.BodyOnlyTier = .standard
+    ) -> Font {
         switch kind {
         case .title:
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 16,
@@ -95,8 +99,19 @@ enum PostMarkupText {
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 14,
                                relativeTo: .headline, traits: traits)
         case .body, .bullet:
-            MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 14,
-                               relativeTo: .callout, traits: traits)
+            // Body-only tiers (see PostMarkup.bodyOnlyTier): same face,
+            // bigger — the size does the work, the weight stays honest.
+            switch tier {
+            case .extraLarge:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 21,
+                                   relativeTo: .title3, traits: traits)
+            case .large:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 17,
+                                   relativeTo: .body, traits: traits)
+            case .standard:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 14,
+                                   relativeTo: .callout, traits: traits)
+            }
         }
     }
 
@@ -115,6 +130,7 @@ enum PostMarkupText {
     static func cardText(_ markup: PostMarkup) -> Text {
         let hasHeading = markup.blocks.contains { $0.kind == .title || $0.kind == .subtitle }
         let bodyColor: Color = hasHeading ? .primary.opacity(headedBodyOpacity) : .primary
+        let tier = markup.bodyOnlyTier
 
         var result = Text(verbatim: "")
         var isFirst = true
@@ -142,7 +158,7 @@ enum PostMarkupText {
             }
             for run in block.runs {
                 var segment = Text(verbatim: run.text)
-                    .font(cardFont(for: block.kind, traits: run.traits))
+                    .font(cardFont(for: block.kind, traits: run.traits, tier: tier))
                     .applying(run.traits)
                 if run.traits.contains(.tag) {
                     // ONE differentiating cue (weight), like every platform —
@@ -211,7 +227,7 @@ struct PostMarkupView: View {
         var result = Text(verbatim: "")
         for run in block.runs {
             var segment = Text(verbatim: run.text)
-                .font(detailFont(for: block.kind, traits: run.traits))
+                .font(detailFont(for: block.kind, traits: run.traits, tier: markup.bodyOnlyTier))
                 .applying(run.traits)
             if run.traits.contains(.tag) {
                 segment = segment.fontWeight(.semibold)
@@ -227,7 +243,11 @@ struct PostMarkupView: View {
 
     /// Detail-scale fonts. Title matches the old post-title treatment
     /// (`fontStyle(.largeTitle)`), body matches `fontStyle(.body)`.
-    private func detailFont(for kind: PostBlockKind, traits: InlineTraits = []) -> Font {
+    private func detailFont(
+        for kind: PostBlockKind,
+        traits: InlineTraits = [],
+        tier: PostMarkup.BodyOnlyTier = .standard
+    ) -> Font {
         switch kind {
         case .title:
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 30,
@@ -236,8 +256,21 @@ struct PostMarkupView: View {
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 18,
                                relativeTo: .title2, traits: traits)
         case .body, .bullet:
-            MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 17,
-                               relativeTo: .body, traits: traits)
+            // Body-only tiers mirror the card treatment at detail scale —
+            // the SAME tier resolves on both surfaces (PostMarkup is the
+            // single source), so a post never changes character between
+            // the masonry and the opened post.
+            switch tier {
+            case .extraLarge:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 26,
+                                   relativeTo: .title, traits: traits)
+            case .large:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 21,
+                                   relativeTo: .title2, traits: traits)
+            case .standard:
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 17,
+                                   relativeTo: .body, traits: traits)
+            }
         }
     }
 }

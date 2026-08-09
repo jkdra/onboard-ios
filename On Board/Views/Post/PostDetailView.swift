@@ -138,8 +138,17 @@ struct PostDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if !editMode {
+                        // FAST content fade inside the slower frame morph.
+                        // Read-mode markup and the WYSIWYG editor can never
+                        // pixel-align (the editor shows literal `# ` markers
+                        // and wraps differently), so a full-length crossfade
+                        // double-exposes two offset copies of the text for
+                        // the whole 0.4s morph. Collapsing the CONTENT fade
+                        // to ~0.18s while the glass/geometry keep the 0.4s
+                        // glide reads as one clean motion instead.
                         postContent
                             .opacity(isCommentEditing ? 0.32 : 1)
+                            .transition(.opacity.animation(.easeOut(duration: 0.18)))
                         Divider()
                             .opacity(isCommentEditing ? 0.32 : 1)
                         commentsSection
@@ -224,6 +233,18 @@ struct PostDetailView: View {
                         openImageViewer()
                         try? await Task.sleep(for: .seconds(2))
                         closeImageViewer()
+                    }
+                }
+                // DEV: `-dev.editDemo` enters then cancels edit mode on a
+                // timer, through the SAME beginEditing/cancelEditing paths as
+                // the ••• menu — the only headless way to put the edit-mode
+                // morph on video (same rationale as imageViewerDemo).
+                if ProcessInfo.processInfo.arguments.contains("-dev.editDemo") {
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        beginEditing()
+                        try? await Task.sleep(for: .seconds(2))
+                        cancelEditing()
                     }
                 }
             }

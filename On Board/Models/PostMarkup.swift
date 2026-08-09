@@ -68,6 +68,26 @@ struct PostMarkup: Equatable, Sendable {
         blocks.map(\.plainText).joined(separator: "\n")
     }
 
+    /// Display tier for posts whose every block is plain body text. Short
+    /// text-only posts render LARGER (the X/Threads treatment): without it a
+    /// one-liner is a sad small card next to a titled essay, when it should
+    /// punch. Deterministic by content length so a post never changes size
+    /// between the feed card and the detail screen — and any structural
+    /// markup (heading, subtitle, bullet) means the author chose their own
+    /// hierarchy, which we respect by standing down.
+    enum BodyOnlyTier: Sendable, Equatable {
+        case standard, large, extraLarge
+    }
+
+    var bodyOnlyTier: BodyOnlyTier {
+        guard blocks.allSatisfy({ $0.kind == .body }) else { return .standard }
+        let length = plainText.count
+        guard length > 0 else { return .standard }
+        if length <= 80 { return .extraLarge }
+        if length <= 140 { return .large }
+        return .standard
+    }
+
     /// The post's tags, derived from its inline hashtags: lowercased, unique
     /// in order of appearance, capped at 3. The cap is silent by design —
     /// erroring on a fourth hashtag would punish Instagram habits; extra tags

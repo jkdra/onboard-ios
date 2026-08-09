@@ -144,6 +144,40 @@ struct MarkupTextEditor: UIViewRepresentable {
             textDidChange(textView)
         }
 
+        func textView(_ textView: UITextView,
+                      shouldChangeTextIn range: NSRange,
+                      replacementText replacement: String) -> Bool {
+            // Rule 2 applies here too: never intervene mid-composition.
+            guard textView.markedTextRange == nil else { return true }
+
+            if replacement == "\n",
+               let edit = MarkupEditorController.bulletReturnEdit(
+                   text: textView.text, replacementRange: range
+               ) {
+                apply(edit.range, edit.replacement, caret: edit.caret, in: textView)
+                return false
+            }
+            if replacement.isEmpty,
+               let widened = MarkupEditorController.bulletBackspaceRange(
+                   text: textView.text, deletionRange: range
+               ) {
+                apply(widened, "", caret: widened.location, in: textView)
+                return false
+            }
+            return true
+        }
+
+        /// Routes through `textView.replace` (not raw textStorage) so the
+        /// edit registers with undo and fires the normal didChange pipeline
+        /// (restyle, binding sync, intrinsic-size invalidation).
+        private func apply(_ range: NSRange, _ replacement: String, caret: Int, in textView: UITextView) {
+            guard let start = textView.position(from: textView.beginningOfDocument, offset: range.location),
+                  let end = textView.position(from: start, offset: range.length),
+                  let textRange = textView.textRange(from: start, to: end) else { return }
+            textView.replace(textRange, withText: replacement)
+            textView.selectedRange = NSRange(location: caret, length: 0)
+        }
+
         func textDidChange(_ textView: UITextView) {
             // Rule 2: never restyle mid-composition (CJK, dictation).
             if textView.markedTextRange == nil {

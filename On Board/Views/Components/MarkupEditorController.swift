@@ -226,3 +226,75 @@ final class MarkupEditorController {
         return textView.textRange(from: start, to: end)
     }
 }
+
+// MARK: - Bullet ergonomics (pure, unit-tested)
+
+/// List behavior every editor owes its users, computed as pure edits so the
+/// Coordinator's `shouldChangeTextIn` stays a thin dispatcher:
+///   - Return on a bullet line with content → continue the list.
+///   - Return on an EMPTY bullet line → exit the list (strip the marker).
+///   - Backspace immediately after a line-start marker → un-bullet the line.
+/// Typing `- ` needs no special case — markers are literal text in this
+/// system, so a typed marker already IS a bullet.
+/// All offsets are UTF-16 (NSRange), matching UITextView.
+extension MarkupEditorController {
+    struct BulletEdit: Equatable {
+        /// Range to replace in the current text.
+        let range: NSRange
+        let replacement: String
+        /// Caret position after the edit.
+        let caret: Int
+    }
+
+    private nonisolated static let bulletMarkers = ["- ", "* "]
+
+    /// The edit a Return keypress should perform instead of a plain newline,
+    /// or nil when default behavior is right (non-bullet lines, headings).
+    nonisolated static func bulletReturnEdit(text: String, replacementRange: NSRange) -> BulletEdit? {
+        let ns = text as NSString
+        guard replacementRange.location <= ns.length else { return nil }
+        let lineRange = ns.lineRange(for: NSRange(location: replacementRange.location, length: 0))
+        var line = ns.substring(with: lineRange)
+        if line.hasSuffix("\n") { line.removeLast() }
+
+        for marker in bulletMarkers where line.hasPrefix(marker) {
+            let content = line.dropFirst(marker.count)
+            if content.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Empty bullet + Return = "I'm done with the list": strip the
+                // whole line's content (marker incl. stray whitespace) and
+                // swallow the newline.
+                let strip = NSRange(location: lineRange.location, length: (line as NSString).length)
+                return BulletEdit(range: strip, replacement: "", caret: lineRange.location)
+            } else {
+                // Continue the list — splits the line when the caret is
+                // mid-bullet, exactly like every list editor.
+                let insertion = "\n" + marker
+                return BulletEdit(
+                    range: replacementRange,
+                    replacement: insertion,
+                    caret: replacementRange.location + (insertion as NSString).length
+                )
+            }
+        }
+        return nil
+    }
+
+    /// The widened deletion range when a single-character backspace lands
+    /// immediately after a line-start bullet marker — deleting the whole
+    /// marker un-bullets the line in one gesture instead of leaving "- "
+    /// debris to erase character by character.
+    nonisolated static func bulletBackspaceRange(text: String, deletionRange: NSRange) -> NSRange? {
+        guard deletionRange.length == 1 else { return nil }
+        let ns = text as NSString
+        guard NSMaxRange(deletionRange) <= ns.length else { return nil }
+        let lineRange = ns.lineRange(for: NSRange(location: deletionRange.location, length: 0))
+        let line = ns.substring(with: lineRange)
+        for marker in bulletMarkers where line.hasPrefix(marker) {
+            let markerLength = (marker as NSString).length
+            if NSMaxRange(deletionRange) == lineRange.location + markerLength {
+                return NSRange(location: lineRange.location, length: markerLength)
+            }
+        }
+        return nil
+    }
+}

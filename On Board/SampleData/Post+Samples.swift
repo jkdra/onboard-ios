@@ -14,6 +14,15 @@ import Foundation
 
 extension Post {
     static let samples: [Post] = [
+        // Short body-only post — exercises PostMarkup.bodyOnlyTier's
+        // extraLarge rendering on the card and in detail.
+        sample(
+            author: "danielr",
+            tone: .yellow,
+            content: "who else heard the fire alarm in west hall at 3am or am i losing it",
+            reactionCounts: [.laugh: 31, .hug: 2],
+            comments: []
+        ),
         sample(
             author: "maya.c",
             tone: .green,

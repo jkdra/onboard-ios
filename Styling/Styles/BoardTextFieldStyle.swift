@@ -170,17 +170,21 @@ extension View {
     /// inward to its inset position as the chrome appears — instead of
     /// crossfading two copies offset by one inset. Runs entirely inside the
     /// caller's `withAnimation` transaction; no two-phase settle.
+    /// `properties`/`anchor` must MIRROR the read-side Text's own
+    /// matchedGeometryEffect exactly — asymmetric pairs (one end .frame, the
+    /// other .position) drift and pseudo-scale mid-morph.
     func matchedFieldText(
         id: some Hashable,
         in namespace: Namespace.ID,
         variant: BoardTextFieldStyle.Variant,
+        properties: MatchedGeometryProperties = .frame,
         anchor: UnitPoint = .leading
     ) -> some View {
         let inset = variant.inset
         return self
             .padding(.horizontal, -inset.h)
             .padding(.vertical, -inset.v)
-            .matchedGeometryEffect(id: id, in: namespace, anchor: anchor)
+            .matchedGeometryEffect(id: id, in: namespace, properties: properties, anchor: anchor)
             .padding(.horizontal, inset.h)
             .padding(.vertical, inset.v)
     }
