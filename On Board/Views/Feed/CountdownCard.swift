@@ -226,8 +226,12 @@ struct CountdownCard: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
+                        // Same treatment as a body-only post's extraLarge card
+                        // tier (PostMarkupText.cardFont) — the prompt is the
+                        // board's own short text post, so it should punch
+                        // like one instead of reading as a caption.
                         Text(config.bodyText)
-                            .fontStyle(.callout)
+                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 21, relativeTo: .title3))
                             .fontWeight(config.isPrompt ? .medium : .regular)
                             .foregroundStyle(.primary) // Higher opacity
 
