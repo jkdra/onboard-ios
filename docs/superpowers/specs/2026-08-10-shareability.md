@@ -48,10 +48,12 @@ consistency, QoL, performance, cleanup, shareability.
 6. **Messages/invite variant** (Jawad's idea, endorsed): "[username]
    wants you On Board." — the web invite page ALREADY uses this exact
    phrase, so the iMessage share card + landing page + story card become
-   one voice. Invite-page redesign proposal (artifact):
+   one voice. Invite-page redesign SHIPPED (onboard-web `7eb4b1d`, 2026-08-10):
+   full-bleed poster (no card container — Jawad's call), share-card
+   lock-up with em-sized inline monogram, one-tap code copy,
+   ephemerality hook, Host peeking over the code row. Needs
+   `npm run deploy`. Original proposal artifact:
    https://claude.ai/code/artifact/89b9f93f-6e01-46e1-9bf9-db93bda548c5
-   — share-card-matched composition, one-tap code copy, ephemerality
-   hook, Host replacing the ticket emoji.
 7. **Attribution**: burn `?s=ig`-style ref params into shared URLs so
    installs can be attributed to share surfaces later (the web invite
    page already resolves codes; same pattern).
