@@ -365,12 +365,8 @@ private struct PostEditContentView: View {
         // as a nested struct these are no longer direct children of
         // PostDetailView's VStack.
         VStack(alignment: .leading, spacing: 20) {
-            // Tone control — the one edit-mode affordance the composer had
-            // that editing lacked (draftTone always drove the background;
-            // nothing let the user CHANGE it). Same picker as NewPostView,
-            // non-optional bridge since an existing post always has a tone.
-            // The screen's background animates live as tones are tried.
-            TonePicker(selection: $draftTone)
+            // Tone control lives in the nav bar's principal slot (see
+            // toolbarContent), exactly like NewPostView — not in-content.
 
             // The same rich composer as NewPostView: markers dim in place,
             // and the formatting bar comes with it as the field's own

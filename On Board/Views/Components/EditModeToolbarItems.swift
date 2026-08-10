@@ -23,11 +23,9 @@ struct EditModeToolbarItems: ToolbarContent {
                 Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
             }
         }
-        ToolbarItem(placement: .principal) {
-            EditingIndicator()
-                .fontStyle(.title3)
-                .fixedSize()
-        }
+        // No EDITING… indicator: the X/✓ chrome and morphed fields already
+        // say it, and the principal slot is better spent by the host screen
+        // (post edit puts the tone picker there, matching NewPostView).
         ToolbarItem(placement: .topBarTrailing) {
             Button { onSave() } label: {
                 Label("Save", systemImage: "checkmark").fontWeight(.semibold)

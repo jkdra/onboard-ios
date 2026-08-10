@@ -376,7 +376,10 @@ struct PostDetailView: View {
             } message: { _ in
                 Text("This also removes any replies to it.")
             }
-            .navigationBarTitleDisplayMode(.inline)
+            // .automatic during the clears-soon window: .inline squeezes the
+            // ticking ClearingSoonPrincipal's vertical budget; with no title
+            // text the difference is invisible otherwise.
+            .navigationBarTitleDisplayMode(clearingSoonWeekEnd != nil ? .automatic : .inline)
             .navigationBarBackButtonHidden(editMode || viewerPhase.coversScreen)
             // Deliberately `showImageViewer`, NOT the deferred chrome flag:
             // this must flip the instant the viewer opens, or the 450ms chrome

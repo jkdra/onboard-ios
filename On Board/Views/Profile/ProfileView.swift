@@ -27,6 +27,10 @@ struct ProfileView: View {
     @Namespace private var profileNamespace
     @State private var showAvatarViewer = false
     @State private var avatarViewerPhase: ImageViewerPhase = .closed
+    /// Story-ready share card, re-rendered when the profile/avatar/Pop Score
+    /// change. While nil (first frame, render in flight) the share action
+    /// falls back to the plain profile URL.
+    @State private var shareCard: UIImage?
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
@@ -119,6 +123,12 @@ struct ProfileView: View {
             .task(id: profile.id) {
                 await store.refreshPopScore(for: profile.id)
             }
+            .task(id: shareCardKey) {
+                shareCard = await ProfileShareCardRenderer.render(
+                    profile: displayedProfile,
+                    popScore: totalPopScore
+                )
+            }
             .task(id: profile.id) {
                 // Their birthday, shared publicly → celebrate for whoever's viewing.
                 birthdayCelebrating = displayedProfile.showBirthday
@@ -205,14 +215,10 @@ struct ProfileView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 if store.canEdit(profile: displayedProfile) {
-                    ShareLink(item: shareURL, subject: Text(shareSubject)) {
-                        Label("Share Profile", systemImage: "square.and.arrow.up")
-                    }
+                    profileShareLink
                 } else {
                     Menu {
-                        ShareLink(item: shareURL, subject: Text(shareSubject)) {
-                            Label("Share Profile", systemImage: "square.and.arrow.up")
-                        }
+                        profileShareLink
                         Button {
                             reportTarget = .profile(displayedProfile)
                         } label: {
@@ -233,7 +239,6 @@ struct ProfileView: View {
                             } label: {
                                 Label("Block", systemImage: "hand.raised")
                             }
-                            .tint(.red)
                         }
                     } label: {
                         Image(systemName: "ellipsis").fontWeight(.semibold)
@@ -259,6 +264,49 @@ struct ProfileView: View {
                 }
             }
         }
+    }
+
+    /// The share entry: the story-ready card image when rendered, else the
+    /// bare profile URL. Sharing the IMAGE is the growth loop — the card
+    /// carries the CTA + domain, and Instagram-story recipients get a
+    /// composed asset instead of a naked link preview.
+    @ViewBuilder
+    private var profileShareLink: some View {
+        if let shareCard {
+            ShareLink(
+                item: Image(uiImage: shareCard),
+                subject: Text(shareSubject),
+                preview: SharePreview(shareSubject, image: Image(uiImage: shareCard))
+            ) {
+                Label("Share Profile", systemImage: "square.and.arrow.up")
+            }
+        } else {
+            ShareLink(item: shareURL, subject: Text(shareSubject)) {
+                Label("Share Profile", systemImage: "square.and.arrow.up")
+            }
+        }
+    }
+
+    /// Re-render key: any of these changing invalidates the card.
+    private struct ShareCardKey: Hashable {
+        let id: UUID
+        let handle: String
+        let avatarUrl: String?
+        let popScore: Int?
+    }
+
+    private var shareCardKey: ShareCardKey {
+        ShareCardKey(
+            id: displayedProfile.id,
+            handle: displayedProfile.handle,
+            avatarUrl: displayedProfile.avatarUrl,
+            popScore: totalPopScore
+        )
+    }
+
+    /// Pop Score is stored per reaction; the share card flexes the total.
+    private var totalPopScore: Int? {
+        store.popScore(for: displayedProfile.id).map { $0.values.reduce(0, +) }
     }
 
     // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
