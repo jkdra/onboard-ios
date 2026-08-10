@@ -88,8 +88,7 @@ enum PostMarkupText {
     /// title/description pair so existing cards look unchanged.
     private static func cardFont(
         for kind: PostBlockKind,
-        traits: InlineTraits = [],
-        tier: PostMarkup.BodyOnlyTier = .standard
+        traits: InlineTraits = []
     ) -> Font {
         switch kind {
         case .title:
@@ -99,19 +98,14 @@ enum PostMarkupText {
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 14,
                                relativeTo: .headline, traits: traits)
         case .body, .bullet:
-            // Body-only tiers (see PostMarkup.bodyOnlyTier): same face,
-            // bigger — the size does the work, the weight stays honest.
-            switch tier {
-            case .extraLarge:
-                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 21,
-                                   relativeTo: .title3, traits: traits)
-            case .large:
-                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 17,
-                                   relativeTo: .body, traits: traits)
-            case .standard:
-                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 14,
-                                   relativeTo: .callout, traits: traits)
-            }
+            // Deliberately NO body-only tier at card scale (it applies in
+            // PostDetailView only — see detailFont): a body-only card set
+            // larger than its neighbours reads as shouting in the masonry,
+            // and the grid's rhythm depends on every card sharing one
+            // text scale. Jawad called the tiered cards "offputting"
+            // (2026-08-11) after living with them on device.
+            MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 14,
+                               relativeTo: .callout, traits: traits)
         }
     }
 
@@ -130,7 +124,6 @@ enum PostMarkupText {
     static func cardText(_ markup: PostMarkup) -> Text {
         let hasHeading = markup.blocks.contains { $0.kind == .title || $0.kind == .subtitle }
         let bodyColor: Color = hasHeading ? .primary.opacity(headedBodyOpacity) : .primary
-        let tier = markup.bodyOnlyTier
 
         var result = Text(verbatim: "")
         var isFirst = true
@@ -158,7 +151,7 @@ enum PostMarkupText {
             }
             for run in block.runs {
                 var segment = Text(verbatim: run.text)
-                    .font(cardFont(for: block.kind, traits: run.traits, tier: tier))
+                    .font(cardFont(for: block.kind, traits: run.traits))
                     .applying(run.traits)
                 if run.traits.contains(.tag) {
                     // ONE differentiating cue (weight), like every platform —

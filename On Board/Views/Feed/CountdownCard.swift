@@ -226,12 +226,12 @@ struct CountdownCard: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Same treatment as a body-only post's extraLarge card
-                        // tier (PostMarkupText.cardFont) — the prompt is the
-                        // board's own short text post, so it should punch
-                        // like one instead of reading as a caption.
+                        // Card-body scale, matching every post card's text
+                        // (PostMarkupText.cardFont). The 21pt tier this used to
+                        // mirror was removed from cards — a prompt louder than
+                        // the posts around it breaks the grid's one text scale.
                         Text(config.bodyText)
-                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 21, relativeTo: .title3))
+                            .fontStyle(.callout)
                             .fontWeight(config.isPrompt ? .medium : .regular)
                             .foregroundStyle(.primary) // Higher opacity
 

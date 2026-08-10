@@ -42,6 +42,10 @@ extension ContentView {
                     emptyFeedState
                 }
             }
+            // Bottom-bar clearance for the scroll CONTENT (not BoardFeedView):
+            // on BoardFeedView it wedged 64pt of dead band between an empty
+            // board's cards and the empty-state block below them.
+            .safeAreaPadding(.bottom, 64)
             .scrollPosition($feedScrollPosition)
 
             if store.isLoading, store.posts.isEmpty {
@@ -239,7 +243,15 @@ extension ContentView {
             // glass and looks native. The pre-26 fallback (a hand-rolled
             // material circle) never sat right against the masonry — on 18–25
             // the in-feed compose card is the sole entry point.
-            if postingEnabled, isIOS26OrLater {
+            // …and not on an EMPTY board: iOS 26 re-hosts the toolbar label
+            // inside its liquid-glass platter, where the button's opacity
+            // gate doesn't reach — so the "hidden" + rendered fully visible
+            // next to the dashed compose card every fresh Monday. With no
+            // posts there's nothing to scroll the compose card away behind,
+            // so the item has no job; hasFeedPosts changes on post-create /
+            // reset, not per scroll frame, so this doesn't churn the
+            // toolbar-item array the way the old per-scroll gate did.
+            if postingEnabled, isIOS26OrLater, store.hasFeedPosts {
                 ToolbarItem(placement: .bottomBar) {
                     bottomBarNewPostButton
                 }
@@ -308,21 +320,42 @@ extension ContentView {
                 // states earn a mascot; composing and reading never do). The
                 // figure is the vector rig, static — no looping animation,
                 // per the repeatForever/UI-test rule.
-                VStack(spacing: 14) {
-                    // Scheme-inverted like CountdownCard's Host sprite —
-                    // black-line art vanishes on the dark feed background.
+                // ContentUnavailableView's shape, in the brand's own art:
+                // secondary-weight mark, short title, one-line description.
+                // The compose card above is the screen's actual call to
+                // action, so this block only names the state.
+                //
+                // The Host is STRESSED here, not happy — an empty board is
+                // not a win, and a grinning mascot over "nobody has posted"
+                // reads as tone-deaf. Transparent body + `.secondary` line
+                // color puts him at the description's weight (Apple's
+                // ContentUnavailableView image sits at secondary too), which
+                // also drops the scheme-inversion: `.secondary` adapts.
+                VStack(spacing: 20) {
                     HostFigure(
-                        eye: .happy,
-                        lineColor: scheme == .dark ? .white : .black,
-                        bodyColor: scheme == .dark ? .black : .white
+                        eye: .sad,
+                        article: .sweat,
+                        lineColor: .secondary,
+                        bodyFill: .transparent
                     )
-                    .frame(width: 88)
-                    Text("New week. Someone has to go first.")
-                        .fontStyle(.headline)
-                    Text("Be the first to pin something to this week's board.")
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
+                    .frame(width: 56)
+                    // Canvas resolves `Color.secondary` to secondaryLabel's
+                    // RGB but DROPS its 0.6 alpha (a GraphicsContext fill
+                    // takes a concrete color, not a hierarchical style), so
+                    // he rendered at full strength — obvious in dark mode,
+                    // where he outshone his own caption. Reapplying the
+                    // alpha as a view modifier lands him exactly at the
+                    // description's weight in both schemes.
+                    .opacity(0.6)
+                    VStack(spacing: 6) {
+                        Text("Nothing on the board yet")
+                            .fontStyle(.headline)
+                            .multilineTextAlignment(.center)
+                        Text("Be the first to post.")
+                            .fontStyle(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
                 }
             } else {
                 // Board didn't load — show retry
@@ -349,7 +382,8 @@ extension ContentView {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 80)
+        .padding(.top, 28)
+        .padding(.bottom, 48)
         .padding(.horizontal, 24)
     }
 }

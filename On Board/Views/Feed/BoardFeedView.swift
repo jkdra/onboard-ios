@@ -66,7 +66,6 @@ struct BoardFeedView: View {
             if typeSize.isAccessibilitySize { accessibleStack }
             else { masonryGrid }
         }
-        .safeAreaPadding(.bottom, 64)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { newWidth in
             guard newWidth != containerWidth else { return }
             containerWidth = newWidth
@@ -192,11 +191,25 @@ struct BoardFeedView: View {
             }
     }
 
+    /// Which new-post cells are currently on screen (usually 0 or 1; briefly
+    /// 2 mid-rollover while old and new coexist). See handleVisibilityChange.
+    @State private var visibleNewPostIDs: Set<String> = []
+
     /// Maintains `visibleIDs` and forwards the header cards' visibility to the feed.
+    ///
+    /// The forwarded value is derived from the SET of visible new-post cells,
+    /// not the latest event: at a board rollover the feed items get new ids,
+    /// and the fresh card's "visible" fires BEFORE the old card's unmount
+    /// fires "hidden" — forwarding events raw latched the feed on `false`
+    /// with a compose card fully on screen, which is exactly how the bottom
+    /// bar's + button appeared next to the dashed compose card every Monday.
+    /// Same stale-completion family as the follow/unfollow inversion.
     private func handleVisibilityChange(item: FeedItem, visible: Bool) {
         if visible { visibleIDs.insert(item.id) } else { visibleIDs.remove(item.id) }
         switch item {
-        case .newPost: onNewPostCardVisibilityChanged?(visible)
+        case .newPost:
+            if visible { visibleNewPostIDs.insert(item.id) } else { visibleNewPostIDs.remove(item.id) }
+            onNewPostCardVisibilityChanged?(!visibleNewPostIDs.isEmpty)
         case .countdown, .post: break
         }
     }
