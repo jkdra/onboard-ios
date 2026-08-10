@@ -5,11 +5,13 @@ import Nuke
 // 1080×1920 via ImageRenderer @3x) built for the growth loop: white ground,
 // monochrome brand, ONE accent stolen from the user's avatar, the avatar
 // INLINE in the leading-aligned lock-up (a glyph in the sentence — the
-// brand's alignment), and The Host as a full-figure cameo
-// presenting the download CTA (a corner-crop watermark read as "rounded
-// rect with a dot" — his identity is the eye AND the mouth notch, so he
-// appears whole). Shared as an IMAGE (Instagram stories et al.); the app
-// link is burned in as the CTA line.
+// brand's alignment), and The Host as the composition's terminal
+// character: large, bled off the bottom-right corner, facing left so his
+// gaze returns into the card. Three hierarchy tiers, hard cap (hero
+// lock-up / Pop Score support line / baseline signature) — and no
+// button-shaped CTA: a button on a static image is a false affordance;
+// the reference share cards (Wrapped, Replay, Strava) all sign off with
+// a plain text lockup. Shared as an IMAGE; the link is the set text.
 
 struct ProfileShareCard: View {
     let handle: String
@@ -28,7 +30,9 @@ struct ProfileShareCard: View {
             Color.white
 
             VStack(alignment: .leading, spacing: 0) {
-                Spacer(minLength: 48)
+                // Fixed top interval pins the hero in the upper third — a
+                // flexible spacer let it drift to dead center.
+                Spacer().frame(height: 96)
 
                 // Leading-aligned lock-up (the brand's alignment), with the
                 // avatar INLINE — a glyph in the sentence, sized to the
@@ -64,43 +68,48 @@ struct ProfileShareCard: View {
                     Text("Pop Score · \(popScore)")
                         .font(.custom("ZalandoSansSemiExpanded-Regular", size: 16))
                         .fontWeight(.semibold)
-                        .foregroundStyle(.black.opacity(0.55))
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(.black.opacity(0.06)))
-                        .padding(.top, 16)
+                        .foregroundStyle(.black.opacity(0.5))
+                        .padding(.top, 14)
                 }
 
+                // The gap between the hero block and the signature is the
+                // card's LARGEST interval — shaped whitespace, not trapped.
                 Spacer()
 
-                // The Host presents the CTA — full figure, full strength,
-                // his computed shadow doing the grounding.
-                HStack(alignment: .bottom, spacing: 18) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("download now")
-                            .font(.custom("ZalandoSansExpanded-Regular", size: 17))
-                            .fontWeight(.heavy)
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .fixedSize()
-                            .padding(.horizontal, 22)
-                            .padding(.vertical, 12)
-                            .background(Capsule().fill(.black))
-                        Text("onboardapp.org")
-                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
-                            .fontWeight(.medium)
-                            .foregroundStyle(.black.opacity(0.4))
-                            .padding(.leading, 4)
-                    }
-                    Spacer(minLength: 0)
-                    HostFigure(eye: .happy)
-                        .frame(width: 86)
-                        .padding(.trailing, 2)
+                // Tier-3 signature: one baseline, no button chrome (a
+                // button shape on a static image is a false affordance no
+                // reference share card uses — the URL as set text carries
+                // the CTA, Wrapped-style).
+                // Stacked two-line signature, flush-left — narrow enough
+                // that the terminal character's zone stays clear.
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("download now")
+                        .font(.custom("ZalandoSansExpanded-Regular", size: 14))
+                        .fontWeight(.heavy)
+                        .foregroundStyle(.black)
+                    Text("onboardapp.org")
+                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
+                        .fontWeight(.medium)
+                        .foregroundStyle(.black.opacity(0.45))
                 }
-                .padding(.top, 12)
+                .lineLimit(1)
+                .fixedSize()
             }
             .padding(32)
             .frame(maxWidth: .infinity, alignment: .leading)
+
+            // The Host as the Z-pattern's terminal character — promoted to
+            // compositional imagery (Duolingo's mascot pattern): large,
+            // bled off the bottom-right corner so the frame holds him, and
+            // FACING LEFT so his gaze returns the eye into the card.
+            // Bleed calibrated so BOTH identity features survive the crop
+            // (eye top-right of the mirrored figure, notch on his left,
+            // pointing into the card) — v4 cropped him to fragments.
+            HostFigure(eye: .happy, facing: .left)
+                .frame(width: 122)
+                .offset(x: 2, y: 30)
+                .padding(.trailing, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .clipped()
