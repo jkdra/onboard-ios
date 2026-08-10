@@ -80,20 +80,24 @@ struct ProfileShareCard: View {
                 // button shape on a static image is a false affordance no
                 // reference share card uses — the URL as set text carries
                 // the CTA, Wrapped-style).
-                // Stacked two-line signature, flush-left — narrow enough
-                // that the terminal character's zone stays clear.
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("download now")
-                        .font(.custom("ZalandoSansExpanded-Regular", size: 14))
-                        .fontWeight(.heavy)
-                        .foregroundStyle(.black)
-                    Text("onboardapp.org")
-                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
-                        .fontWeight(.medium)
-                        .foregroundStyle(.black.opacity(0.45))
+                // Signature trails bottom-right — the deliberate counter-
+                // edge to the leading axis — while The Host holds the
+                // bottom-left corner in his natural stance.
+                HStack {
+                    Spacer(minLength: 0)
+                    VStack(alignment: .trailing, spacing: 3) {
+                        Text("download now")
+                            .font(.custom("ZalandoSansExpanded-Regular", size: 14))
+                            .fontWeight(.heavy)
+                            .foregroundStyle(.black)
+                        Text("onboardapp.org")
+                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
+                            .fontWeight(.medium)
+                            .foregroundStyle(.black.opacity(0.45))
+                    }
+                    .lineLimit(1)
+                    .fixedSize()
                 }
-                .lineLimit(1)
-                .fixedSize()
             }
             .padding(32)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -105,11 +109,13 @@ struct ProfileShareCard: View {
             // Bleed calibrated so BOTH identity features survive the crop
             // (eye top-right of the mirrored figure, notch on his left,
             // pointing into the card) — v4 cropped him to fragments.
-            HostFigure(eye: .happy, facing: .left)
+            // Bottom-LEFT terminal, natural right-facing stance — his gaze
+            // and notch point into the card from the left, no mirror needed.
+            HostFigure(eye: .happy)
                 .frame(width: 122)
-                .offset(x: 2, y: 30)
-                .padding(.trailing, 14)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                .offset(x: -2, y: 30)
+                .padding(.leading, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .clipped()
