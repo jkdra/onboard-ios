@@ -4,7 +4,8 @@ import Nuke
 // The profile share card — a story-ready 9:16 composition (rendered at
 // 1080×1920 via ImageRenderer @3x) built for the growth loop: white ground,
 // monochrome brand, ONE accent stolen from the user's avatar, the avatar
-// itself crowning the lock-up, and The Host as a full-figure cameo
+// INLINE in the leading-aligned lock-up (a glyph in the sentence — the
+// brand's alignment), and The Host as a full-figure cameo
 // presenting the download CTA (a corner-crop watermark read as "rounded
 // rect with a dot" — his identity is the eye AND the mouth notch, so he
 // appears whole). Shared as an IMAGE (Instagram stories et al.); the app
@@ -26,19 +27,24 @@ struct ProfileShareCard: View {
         ZStack {
             Color.white
 
-            VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 Spacer(minLength: 48)
 
-                avatarCircle
-                    .frame(width: 108, height: 108)
-
-                VStack(spacing: 2) {
-                    Text("@\(handle)")
-                        .font(.custom("ZalandoSansExpanded-Regular", size: 34))
-                        .fontWeight(.heavy)
-                        .foregroundStyle(accent)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
+                // Leading-aligned lock-up (the brand's alignment), with the
+                // avatar INLINE — a glyph in the sentence, sized to the
+                // display line and baseline-seated, not a badge floating
+                // above the words.
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 10) {
+                        avatarCircle
+                            .frame(width: 44, height: 44)
+                        Text("@\(handle)")
+                            .font(.custom("ZalandoSansExpanded-Regular", size: 34))
+                            .fontWeight(.heavy)
+                            .foregroundStyle(accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
                     // One line each — a mid-phrase wrap reads like a mistake
                     // at display scale.
                     Text("is On Board.")
@@ -53,7 +59,6 @@ struct ProfileShareCard: View {
                         .foregroundStyle(.black.opacity(0.35))
                         .lineLimit(1)
                 }
-                .padding(.top, 22)
 
                 if let popScore, popScore > 0 {
                     Text("Pop Score · \(popScore)")
@@ -95,6 +100,7 @@ struct ProfileShareCard: View {
                 .padding(.top, 12)
             }
             .padding(32)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .clipped()
@@ -106,7 +112,7 @@ struct ProfileShareCard: View {
             Image(uiImage: avatar)
                 .resizable()
                 .scaledToFill()
-                .frame(width: 108, height: 108)
+                .frame(width: 44, height: 44)
                 .clipShape(Circle())
                 .overlay(Circle().strokeBorder(.black.opacity(0.08), lineWidth: 1))
         } else {
@@ -114,7 +120,7 @@ struct ProfileShareCard: View {
             ZStack {
                 Circle().fill(accent)
                 Text(String(handle.prefix(1)).uppercased())
-                    .font(.custom("ZalandoSansExpanded-Regular", size: 44))
+                    .font(.custom("ZalandoSansExpanded-Regular", size: 20))
                     .fontWeight(.heavy)
                     .foregroundStyle(.white)
             }
