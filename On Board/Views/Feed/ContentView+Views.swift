@@ -34,7 +34,11 @@ extension ContentView {
                     }
                 )
 
-                if store.isLive, !store.isLoading, !store.hasFeedPosts {
+                // Not gated on `store.isLive`: a cleared mock board is the
+                // same fresh-Monday moment (and the only way to demo/verify
+                // this state headlessly). `!isLoading` still prevents the
+                // initial-load flash.
+                if !store.isLoading, !store.hasFeedPosts {
                     emptyFeedState
                 }
             }
@@ -299,9 +303,21 @@ extension ContentView {
     private var emptyFeedState: some View {
         Group {
             if store.activeBoardWeek != nil {
-                // Board loaded, no posts yet
-                VStack(spacing: 12) {
-                    Text("Nothing posted yet")
+                // Board loaded, no posts yet — the fresh-Monday moment is The
+                // Host's canvas (one of his few budgeted surfaces: empty
+                // states earn a mascot; composing and reading never do). The
+                // figure is the vector rig, static — no looping animation,
+                // per the repeatForever/UI-test rule.
+                VStack(spacing: 14) {
+                    // Scheme-inverted like CountdownCard's Host sprite —
+                    // black-line art vanishes on the dark feed background.
+                    HostFigure(
+                        eye: .happy,
+                        lineColor: scheme == .dark ? .white : .black,
+                        bodyColor: scheme == .dark ? .black : .white
+                    )
+                    .frame(width: 88)
+                    Text("New week. Someone has to go first.")
                         .fontStyle(.headline)
                     Text("Be the first to pin something to this week's board.")
                         .fontStyle(.subheadline)

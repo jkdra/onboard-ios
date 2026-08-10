@@ -145,6 +145,14 @@ struct ContentView: View {
                   navigationPath.isEmpty else { return }
             navigationPath.append(.post(store.posts[index].id))
         }
+        .onAppear {
+            // DEV: `-dev.emptyBoard` rolls the seeded mock week over into a
+            // fresh empty one — the only headless way to reach the
+            // fresh-Monday empty state (the Host's empty-board canvas).
+            // Mock-only by devRollOverWeek's own isLive guard.
+            guard ProcessInfo.processInfo.arguments.contains("-dev.emptyBoard") else { return }
+            _ = store.devRollOverWeek()
+        }
         .onAppear { openPendingProfileIfReady() }
         .onChange(of: NotificationService.shared.pendingPostID) { _, _ in
             openPendingPostIfReady()
