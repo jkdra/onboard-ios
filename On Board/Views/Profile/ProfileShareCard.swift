@@ -3,9 +3,11 @@ import Nuke
 
 // The profile share card — a story-ready 9:16 composition (rendered at
 // 1080×1920 via ImageRenderer @3x) built for the growth loop: white ground,
-// monochrome brand, ONE accent stolen from the user's avatar, The Host
-// peeking from the corner per the CountdownCard watermark recipe, and a
-// download CTA. Shared as an IMAGE (Instagram stories et al.); the app
+// monochrome brand, ONE accent stolen from the user's avatar, the avatar
+// itself crowning the lock-up, and The Host as a full-figure cameo
+// presenting the download CTA (a corner-crop watermark read as "rounded
+// rect with a dot" — his identity is the eye AND the mouth notch, so he
+// appears whole). Shared as an IMAGE (Instagram stories et al.); the app
 // link is burned in as the CTA line.
 
 struct ProfileShareCard: View {
@@ -14,6 +16,9 @@ struct ProfileShareCard: View {
     /// Prominent avatar color, or the neutral fallback when the avatar is
     /// missing/monochrome. See UIImage.prominentColor.
     let accent: Color
+    /// The avatar itself; nil renders the monogram fallback (handle initial
+    /// on the accent), so avatarless users still get a composed card.
+    var avatar: UIImage? = nil
 
     static let size = CGSize(width: 360, height: 640)
 
@@ -21,72 +26,99 @@ struct ProfileShareCard: View {
         ZStack {
             Color.white
 
-            // Host watermark — CountdownCard recipe: bottom-corner anchor,
-            // hung past the edge, 12% ink, clipped by the card bounds.
-            // ~30% of card width — bigger than the CountdownCard's ~19%
-            // (a share card is a poster, not a feed tile) but not so big
-            // he crowds the CTA.
-            HostFigure()
-                .frame(width: 110)
-                .opacity(0.12)
-                .offset(x: 20, y: 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            VStack(spacing: 0) {
+                Spacer(minLength: 48)
 
-            VStack(alignment: .leading, spacing: 0) {
-                Spacer()
+                avatarCircle
+                    .frame(width: 108, height: 108)
 
-                Text("@\(handle)")
-                    .font(.custom("ZalandoSansExpanded-Regular", size: 40))
-                    .fontWeight(.heavy)
-                    .foregroundStyle(accent)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-
-                // One line each — a mid-phrase wrap ("is On / Board.")
-                // reads like a mistake at display scale.
-                Text("is On Board.")
-                    .font(.custom("ZalandoSansExpanded-Regular", size: 40))
-                    .fontWeight(.heavy)
-                    .foregroundStyle(.black)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                Text("Are you?")
-                    .font(.custom("ZalandoSansExpanded-Regular", size: 40))
-                    .fontWeight(.heavy)
-                    .foregroundStyle(.black)
-                    .lineLimit(1)
+                VStack(spacing: 2) {
+                    Text("@\(handle)")
+                        .font(.custom("ZalandoSansExpanded-Regular", size: 34))
+                        .fontWeight(.heavy)
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.5)
+                    // One line each — a mid-phrase wrap reads like a mistake
+                    // at display scale.
+                    Text("is On Board.")
+                        .font(.custom("ZalandoSansExpanded-Regular", size: 34))
+                        .fontWeight(.heavy)
+                        .foregroundStyle(.black)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Text("Are you?")
+                        .font(.custom("ZalandoSansExpanded-Regular", size: 34))
+                        .fontWeight(.heavy)
+                        .foregroundStyle(.black.opacity(0.35))
+                        .lineLimit(1)
+                }
+                .padding(.top, 22)
 
                 if let popScore, popScore > 0 {
                     Text("Pop Score · \(popScore)")
-                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 17))
+                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 16))
                         .fontWeight(.semibold)
                         .foregroundStyle(.black.opacity(0.55))
-                        .padding(.top, 14)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
+                        .background(Capsule().fill(.black.opacity(0.06)))
+                        .padding(.top, 16)
                 }
 
                 Spacer()
-                Spacer()
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("download now")
-                        .font(.custom("ZalandoSansExpanded-Regular", size: 17))
-                        .fontWeight(.heavy)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 22)
-                        .padding(.vertical, 12)
-                        .background(Capsule().fill(.black))
-                    Text("onboardapp.org")
-                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
-                        .fontWeight(.medium)
-                        .foregroundStyle(.black.opacity(0.4))
-                        .padding(.leading, 4)
+                // The Host presents the CTA — full figure, full strength,
+                // his computed shadow doing the grounding.
+                HStack(alignment: .bottom, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("download now")
+                            .font(.custom("ZalandoSansExpanded-Regular", size: 17))
+                            .fontWeight(.heavy)
+                            .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .fixedSize()
+                            .padding(.horizontal, 22)
+                            .padding(.vertical, 12)
+                            .background(Capsule().fill(.black))
+                        Text("onboardapp.org")
+                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
+                            .fontWeight(.medium)
+                            .foregroundStyle(.black.opacity(0.4))
+                            .padding(.leading, 4)
+                    }
+                    Spacer(minLength: 0)
+                    HostFigure(eye: .happy)
+                        .frame(width: 86)
+                        .padding(.trailing, 2)
                 }
+                .padding(.top, 12)
             }
-            .padding(36)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(32)
         }
         .frame(width: Self.size.width, height: Self.size.height)
         .clipped()
+    }
+
+    @ViewBuilder
+    private var avatarCircle: some View {
+        if let avatar {
+            Image(uiImage: avatar)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 108, height: 108)
+                .clipShape(Circle())
+                .overlay(Circle().strokeBorder(.black.opacity(0.08), lineWidth: 1))
+        } else {
+            // Monogram fallback — accent ground, white initial.
+            ZStack {
+                Circle().fill(accent)
+                Text(String(handle.prefix(1)).uppercased())
+                    .font(.custom("ZalandoSansExpanded-Regular", size: 44))
+                    .fontWeight(.heavy)
+                    .foregroundStyle(.white)
+            }
+        }
     }
 }
 
@@ -96,16 +128,20 @@ struct ProfileShareCard: View {
 enum ProfileShareCardRenderer {
     static func render(profile: Profile, popScore: Int?) async -> UIImage? {
         var accent = Color(white: 0.35) // the "darker gray" fallback
+        var avatar: UIImage?
         if let urlString = profile.avatarUrl,
            let url = URL(string: urlString),
-           let response = try? await ImagePipeline.shared.imageTask(with: url).response,
-           let prominent = response.image.prominentColor {
-            accent = Color(uiColor: prominent)
+           let response = try? await ImagePipeline.shared.imageTask(with: url).response {
+            avatar = response.image
+            if let prominent = response.image.prominentColor {
+                accent = Color(uiColor: prominent)
+            }
         }
         let renderer = ImageRenderer(content: ProfileShareCard(
             handle: profile.handle,
             popScore: popScore,
-            accent: accent
+            accent: accent,
+            avatar: avatar
         ))
         renderer.scale = 3
         return renderer.uiImage
