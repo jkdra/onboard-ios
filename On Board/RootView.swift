@@ -56,6 +56,21 @@ struct RootView: View {
                 // Checked before every other branch so no store state can
                 // hide it. See HostLabView's header.
                 HostLabView()
+            } else if ProcessInfo.processInfo.arguments.contains("-dev.shareCardPreview") {
+                // DEV: renders the profile share card at fit-to-screen scale
+                // — the headless way to eyeball the composition (same
+                // rationale as hostLab).
+                ZStack {
+                    Color(white: 0.1).ignoresSafeArea()
+                    ProfileShareCard(
+                        handle: "maya.c",
+                        popScore: 128,
+                        accent: Color(red: 0.72, green: 0.31, blue: 0.18)
+                    )
+                    .scaleEffect(0.86)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .shadow(radius: 24)
+                }
             } else if remoteConfig.config.updateRequirement() == .required {
                 // A root branch, not a presentation — same mechanism as the
                 // offline gate below, and for the same reason: this must never

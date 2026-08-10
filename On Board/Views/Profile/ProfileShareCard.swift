@@ -23,10 +23,13 @@ struct ProfileShareCard: View {
 
             // Host watermark — CountdownCard recipe: bottom-corner anchor,
             // hung past the edge, 12% ink, clipped by the card bounds.
+            // ~30% of card width — bigger than the CountdownCard's ~19%
+            // (a share card is a poster, not a feed tile) but not so big
+            // he crowds the CTA.
             HostFigure()
-                .frame(width: 150)
+                .frame(width: 110)
                 .opacity(0.12)
-                .offset(x: 26, y: 30)
+                .offset(x: 20, y: 24)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
 
             VStack(alignment: .leading, spacing: 0) {
@@ -39,14 +42,19 @@ struct ProfileShareCard: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.5)
 
+                // One line each — a mid-phrase wrap ("is On / Board.")
+                // reads like a mistake at display scale.
                 Text("is On Board.")
                     .font(.custom("ZalandoSansExpanded-Regular", size: 40))
                     .fontWeight(.heavy)
                     .foregroundStyle(.black)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
                 Text("Are you?")
                     .font(.custom("ZalandoSansExpanded-Regular", size: 40))
                     .fontWeight(.heavy)
                     .foregroundStyle(.black)
+                    .lineLimit(1)
 
                 if let popScore, popScore > 0 {
                     Text("Pop Score · \(popScore)")
