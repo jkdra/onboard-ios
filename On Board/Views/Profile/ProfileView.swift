@@ -126,7 +126,7 @@ struct ProfileView: View {
             .task(id: shareCardKey) {
                 shareCard = await ProfileShareCardRenderer.render(
                     profile: displayedProfile,
-                    popScore: totalPopScore
+                    popScore: store.popScore(for: displayedProfile.id) ?? [:]
                 )
             }
             .task(id: profile.id) {
@@ -292,7 +292,7 @@ struct ProfileView: View {
         let id: UUID
         let handle: String
         let avatarUrl: String?
-        let popScore: Int?
+        let popScore: [Reaction: Int]
     }
 
     private var shareCardKey: ShareCardKey {
@@ -300,14 +300,11 @@ struct ProfileView: View {
             id: displayedProfile.id,
             handle: displayedProfile.handle,
             avatarUrl: displayedProfile.avatarUrl,
-            popScore: totalPopScore
+            popScore: store.popScore(for: displayedProfile.id) ?? [:]
         )
     }
 
-    /// Pop Score is stored per reaction; the share card flexes the total.
-    private var totalPopScore: Int? {
-        store.popScore(for: displayedProfile.id).map { $0.values.reduce(0, +) }
-    }
+
 
     // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
     // onOpenURL handling in On_BoardApp.swift, just a different path segment.

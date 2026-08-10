@@ -59,18 +59,9 @@ struct RootView: View {
             } else if ProcessInfo.processInfo.arguments.contains("-dev.shareCardPreview") {
                 // DEV: renders the profile share card at fit-to-screen scale
                 // — the headless way to eyeball the composition (same
-                // rationale as hostLab).
-                ZStack {
-                    Color(white: 0.1).ignoresSafeArea()
-                    ProfileShareCard(
-                        handle: "maya.c",
-                        popScore: 128,
-                        accent: Color(red: 0.72, green: 0.31, blue: 0.18)
-                    )
-                    .scaleEffect(0.86)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .shadow(radius: 24)
-                }
+                // rationale as hostLab). Own struct: inline construction
+                // blew RootView's type-check budget.
+                DevShareCardPreview()
             } else if remoteConfig.config.updateRequirement() == .required {
                 // A root branch, not a presentation — same mechanism as the
                 // offline gate below, and for the same reason: this must never
@@ -362,4 +353,22 @@ private struct SessionSyncToken: Equatable {
         .environment(BoardStore.previewBoard())
         .environment(NetworkMonitor())
         .environment(RemoteConfigStore())
+}
+
+
+/// DEV-only stage for `-dev.shareCardPreview`. See RootView's branch.
+private struct DevShareCardPreview: View {
+    var body: some View {
+        ZStack {
+            Color(white: 0.1).ignoresSafeArea()
+            ProfileShareCard(
+                handle: "maya.c",
+                popScore: [.like: 89, .laugh: 12, .hug: 21],
+                accent: Color(red: 0.72, green: 0.31, blue: 0.18)
+            )
+            .scaleEffect(0.86)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(radius: 24)
+        }
+    }
 }

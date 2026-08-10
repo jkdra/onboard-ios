@@ -15,7 +15,10 @@ import Nuke
 
 struct ProfileShareCard: View {
     let handle: String
-    let popScore: Int?
+    /// Per-reaction Pop Score distribution — rendered as the app's own
+    /// segmented monochrome bar + emoji legend (PopScoreView's language at
+    /// card scale). Empty (or all-zero) hides the block.
+    let popScore: [Reaction: Int]
     /// Prominent avatar color, or the neutral fallback when the avatar is
     /// missing/monochrome. See UIImage.prominentColor.
     let accent: Color
@@ -64,12 +67,9 @@ struct ProfileShareCard: View {
                         .lineLimit(1)
                 }
 
-                if let popScore, popScore > 0 {
-                    Text("Pop Score · \(popScore)")
-                        .font(.custom("ZalandoSansSemiExpanded-Regular", size: 16))
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.black.opacity(0.5))
-                        .padding(.top, 14)
+                if !nonZeroReactions.isEmpty {
+                    popScoreBlock
+                        .padding(.top, 18)
                 }
 
                 // The gap between the hero block and the signature is the
@@ -121,6 +121,57 @@ struct ProfileShareCard: View {
         .clipped()
     }
 
+    /// Reactions with votes, in the canonical order.
+    private var nonZeroReactions: [Reaction] {
+        Reaction.allCases.filter { (popScore[$0] ?? 0) > 0 }
+    }
+
+    /// The app's Pop Score distribution at card scale: label, segmented
+    /// monochrome capsule bar (same ink ramp as PopScoreView), emoji legend.
+    /// One grouped support unit — tier 2, quiet.
+    private var popScoreBlock: some View {
+        let total = max(1, popScore.values.reduce(0, +))
+        let barWidth: CGFloat = 190
+        return VStack(alignment: .leading, spacing: 7) {
+            Text("Pop Score")
+                .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
+                .fontWeight(.semibold)
+                .foregroundStyle(.black.opacity(0.45))
+            HStack(spacing: 2) {
+                ForEach(nonZeroReactions, id: \.self) { reaction in
+                    Rectangle()
+                        .fill(segmentInk(for: reaction))
+                        .frame(width: max(3, barWidth * CGFloat(popScore[reaction] ?? 0) / CGFloat(total)))
+                }
+            }
+            .frame(width: barWidth, height: 8)
+            .clipShape(Capsule())
+            HStack(spacing: 14) {
+                ForEach(nonZeroReactions, id: \.self) { reaction in
+                    HStack(spacing: 4) {
+                        Text(reaction.emoji)
+                            .font(.system(size: 13))
+                        Text("\(popScore[reaction] ?? 0)")
+                            .font(.custom("ZalandoSansSemiExpanded-Regular", size: 13))
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.black.opacity(0.5))
+                    }
+                }
+            }
+        }
+    }
+
+    /// PopScoreView's monochrome ramp, in explicit ink (the card is always
+    /// on white; hierarchy styles would need an environment).
+    private func segmentInk(for reaction: Reaction) -> Color {
+        switch reaction {
+        case .like: .black
+        case .dislike: .black.opacity(0.55)
+        case .laugh: .black.opacity(0.32)
+        case .hug: .black.opacity(0.16)
+        }
+    }
+
     @ViewBuilder
     private var avatarCircle: some View {
         if let avatar {
@@ -147,7 +198,7 @@ struct ProfileShareCard: View {
 /// via the profile screen), derives the accent, renders @3x → 1080×1920.
 @MainActor
 enum ProfileShareCardRenderer {
-    static func render(profile: Profile, popScore: Int?) async -> UIImage? {
+    static func render(profile: Profile, popScore: [Reaction: Int]) async -> UIImage? {
         var accent = Color(white: 0.35) // the "darker gray" fallback
         var avatar: UIImage?
         if let urlString = profile.avatarUrl,
@@ -170,9 +221,9 @@ enum ProfileShareCardRenderer {
 }
 
 #Preview("Share card") {
-    ProfileShareCard(handle: "maya.c", popScore: 128, accent: Color(red: 0.72, green: 0.31, blue: 0.18))
+    ProfileShareCard(handle: "maya.c", popScore: [.like: 89, .laugh: 12, .hug: 21], accent: Color(red: 0.72, green: 0.31, blue: 0.18))
 }
 
 #Preview("No pop score, neutral") {
-    ProfileShareCard(handle: "leokp", popScore: nil, accent: Color(white: 0.35))
+    ProfileShareCard(handle: "leokp", popScore: [:], accent: Color(white: 0.35))
 }

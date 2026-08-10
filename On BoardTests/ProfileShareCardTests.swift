@@ -8,7 +8,7 @@ struct ProfileShareCardTests {
     @Test func cardRendersAtStoryDimensions() {
         let renderer = ImageRenderer(content: ProfileShareCard(
             handle: "maya.c",
-            popScore: 128,
+            popScore: [.like: 89, .laugh: 12, .hug: 21],
             accent: Color(red: 0.72, green: 0.31, blue: 0.18)
         ))
         renderer.scale = 3
@@ -27,10 +27,10 @@ struct ProfileShareCardTests {
     }
 
     @Test func cardOmitsPopScoreWhenAbsent() {
-        // Zero and nil both suppress the line — a "Pop Score · 0" flex is
-        // an anti-flex.
-        let rendererNil = ImageRenderer(content: ProfileShareCard(handle: "leokp", popScore: nil, accent: Color(white: 0.35)))
-        let rendererZero = ImageRenderer(content: ProfileShareCard(handle: "leokp", popScore: 0, accent: Color(white: 0.35)))
+        // Empty and all-zero distributions both suppress the block — a
+        // zero-bar flex is an anti-flex.
+        let rendererNil = ImageRenderer(content: ProfileShareCard(handle: "leokp", popScore: [:], accent: Color(white: 0.35)))
+        let rendererZero = ImageRenderer(content: ProfileShareCard(handle: "leokp", popScore: [.like: 0, .hug: 0], accent: Color(white: 0.35)))
         #expect(rendererNil.uiImage != nil)
         #expect(rendererZero.uiImage != nil)
     }
