@@ -55,4 +55,24 @@ struct ProfileShareCardTests {
         #expect(solidImage(.white).prominentColor == nil)
         #expect(solidImage(.black).prominentColor == nil)
     }
+
+    /// The accent is display type on a white card — every derived color must
+    /// clear WCAG's large-text floor. Sweeps the hue wheel at maximum
+    /// brightness/saturation (yellow is the killer: at the old fixed 0.72
+    /// brightness ceiling it sat near 2.4:1 while blue cleared 5:1).
+    @Test func prominentColorAlwaysClearsLargeTextContrastOnWhite() throws {
+        for hueStep in 0..<12 {
+            let hue = CGFloat(hueStep) / 12
+            let source = solidImage(UIColor(hue: hue, saturation: 0.9, brightness: 0.95, alpha: 1))
+            guard let accent = source.prominentColor else { continue } // near-white brights may read monochrome
+            #expect(accent.contrastOnWhite >= 3.0, "hue \(hue) landed at \(accent.contrastOnWhite):1")
+        }
+    }
+
+    @Test func darkColorsAreNotNeedlesslyDarkened() {
+        // A color already past the floor must come back untouched — the walk
+        // is a floor, not a normalizer that flattens every accent to one value.
+        let navy = UIColor(hue: 0.62, saturation: 0.8, brightness: 0.45, alpha: 1)
+        #expect(navy.darkenedToContrastOnWhite(atLeast: 3.0) == navy)
+    }
 }

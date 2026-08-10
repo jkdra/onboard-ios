@@ -9,6 +9,7 @@ extension BoardStore {
     func addPost(
         content: String,
         tone: PostTone,
+        toneExplicit: Bool = false,
         imageUrl: String? = nil,
         imageAspectRatio: Double? = nil
     ) async -> Bool {
@@ -34,6 +35,7 @@ extension BoardStore {
                 authorID: user.id,
                 content: content,
                 tone: tone,
+                toneExplicit: toneExplicit,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
                 // Derived here, not passed in: content is the source of truth,
@@ -52,6 +54,7 @@ extension BoardStore {
         id: UUID,
         content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?
     ) async -> Bool {
@@ -85,6 +88,7 @@ extension BoardStore {
                 id: id,
                 content: content,
                 tone: tone,
+                toneExplicit: toneExplicit,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
                 tags: PostMarkup.parse(content).tags

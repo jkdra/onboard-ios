@@ -57,6 +57,10 @@ protocol BoardService: Sendable {
         authorID: UUID,
         content: String,
         tone: PostTone,
+        /// True only when the author deliberately picked this tone (as
+        /// opposed to leaving the composer on "Any Color!", which rolls one).
+        /// Feeds the Favorite Color tally.
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -65,6 +69,7 @@ protocol BoardService: Sendable {
         id: UUID,
         content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -106,6 +111,7 @@ protocol BoardService: Sendable {
     func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws
     
     func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int]
+    func fetchUserToneCounts(for userID: UUID) async throws -> [PostTone: Int]
     func followUser(id: UUID) async throws
     func unfollowUser(id: UUID) async throws
     func fetchFollowedUserIDs() async throws -> Set<UUID>

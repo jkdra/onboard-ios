@@ -62,8 +62,8 @@ struct BoardSwitchRaceTests {
             return commentsToReturn
         }
         func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws { fatalError("unused") }
-        func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
-        func updatePost(id: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
+        func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, toneExplicit: Bool, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
+        func updatePost(id: UUID, content: String, tone: PostTone, toneExplicit: Bool, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { fatalError("unused") }
         func deletePost(id: UUID) async throws { fatalError("unused") }
         func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment { fatalError("unused") }
         func updateComment(id: UUID, body: String) async throws { }
@@ -80,6 +80,7 @@ struct BoardSwitchRaceTests {
         func fetchNotificationSettings(for userID: UUID) async throws -> NotificationSettings { NotificationSettings() }
         func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws { fatalError("unused") }
         func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { [:] }
+        func fetchUserToneCounts(for userID: UUID) async throws -> [PostTone: Int] { [:] }
         func followUser(id: UUID) async throws { fatalError("unused") }
         func unfollowUser(id: UUID) async throws { fatalError("unused") }
         // refresh() fetches followed IDs after every snapshot — must not trap.

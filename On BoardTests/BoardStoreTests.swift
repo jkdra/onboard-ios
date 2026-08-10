@@ -223,6 +223,7 @@ extension BoardStoreTests {
             snapshot: BoardSnapshot(week: week, posts: [], profiles: [], userReactions: [:]),
             archivedWeeks: [],
             popScores: [:],
+            toneCounts: nil,
             comments: [:],
             commentVotes: [:],
             notificationSettings: nil

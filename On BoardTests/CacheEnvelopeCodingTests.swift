@@ -35,6 +35,7 @@ struct CacheEnvelopeCodingTests {
             ),
             archivedWeeks: [],
             popScores: [profile.id: [.like: 3, .hug: 1]],
+            toneCounts: [profile.id: [.blue: 7, .mint: 2]],
             comments: [:],
             commentVotes: [:],
             notificationSettings: NotificationSettings(pushComments: false)
@@ -48,6 +49,7 @@ struct CacheEnvelopeCodingTests {
         #expect(decoded.snapshot.week.id == week.id)
         #expect(decoded.snapshot.posts.first?.id == post.id)
         #expect(decoded.popScores[profile.id]?[.like] == 3)
+        #expect(decoded.toneCounts?[profile.id]?[.blue] == 7)
         #expect(decoded.notificationSettings?.pushComments == false)
     }
 }

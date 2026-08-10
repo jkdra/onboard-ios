@@ -314,12 +314,16 @@ struct NewPostView: View {
 
     private func submit() {
         guard canSubmit else { return }
+        // "Any Color!" rolls a tone; only a real pick counts toward the
+        // author's Favorite Color.
         let resolvedTone = selectedTone ?? .random()
+        let tonePickedDeliberately = selectedTone != nil
         isSubmitting = true
         Task {
             let succeeded = await store.addPost(
                 content: content.trimmed,
                 tone: resolvedTone,
+                toneExplicit: tonePickedDeliberately,
                 imageUrl: photo.uploadedURL,
                 imageAspectRatio: photo.uploadedAspectRatio
             )

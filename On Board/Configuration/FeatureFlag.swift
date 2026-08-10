@@ -39,12 +39,18 @@ enum FeatureFlag: String, CaseIterable, Sendable {
     /// bar every user has today.
     case reactionOverflow
 
+    /// Favorite Color on the profile: the tone a user posts in most, tallied
+    /// server-side so it outlives the weekly clear. Dark-deployed — the code
+    /// ships inert and switches on whenever we choose, so the reveal isn't
+    /// chained to App Review.
+    case favoriteColor
+
     /// Behavior when the server says nothing — must equal what the app does today.
     var compiledDefault: Bool {
         switch self {
         case .zoomTransition, .glassEffects, .postPhotoAttachments, .hostVoice:
             true
-        case .reactionOverflow:
+        case .reactionOverflow, .favoriteColor:
             false
         }
     }
@@ -125,6 +131,13 @@ private struct EnabledReactionsKey: EnvironmentKey {
     static let defaultValue = Reaction.defaultOrder
 }
 
+private struct FavoriteColorEnabledKey: EnvironmentKey {
+    /// `false` for the same reason as `ReactionOverflowEnabledKey`: this
+    /// gates a surface that has never shipped, so previews and any view
+    /// outside the app's environment must keep showing today's profile.
+    static let defaultValue = false
+}
+
 private struct ReactionOverflowEnabledKey: EnvironmentKey {
     /// `false`, unlike its neighbours here: those gate surfaces that already
     /// shipped, so their default has to be "what the app does today". This one
@@ -179,6 +192,14 @@ extension EnvironmentValues {
     var reactionOverflowEnabled: Bool {
         get { self[ReactionOverflowEnabledKey.self] }
         set { self[ReactionOverflowEnabledKey.self] = newValue }
+    }
+
+    /// Shows the Favorite Color row on profiles. Display-only: the tally is
+    /// maintained server-side by a trigger regardless, so switching this on
+    /// reveals real history rather than starting a count from zero.
+    var favoriteColorEnabled: Bool {
+        get { self[FavoriteColorEnabledKey.self] }
+        set { self[FavoriteColorEnabledKey.self] = newValue }
     }
 
     /// Max comment length. A display + validation hint only — `comments.body`

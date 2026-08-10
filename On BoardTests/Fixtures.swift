@@ -20,10 +20,10 @@ final class MockBoardService: BoardService, @unchecked Sendable {
         return CommentThread(comments: [], userVotes: [:])
     }
     func setCommentVote(commentID: UUID, postID: UUID, userID: UUID, vote: CommentVote?) async throws {}
-    func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
+    func createPost(weekID: UUID, authorID: UUID, content: String, tone: PostTone, toneExplicit: Bool, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post {
         Post(authorId: authorID, boardWeekId: weekID, content: content, author: "maya.c", tone: tone, imageUrl: imageUrl, imageAspectRatio: imageAspectRatio)
     }
-    func updatePost(id: UUID, content: String, tone: PostTone, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
+    func updatePost(id: UUID, content: String, tone: PostTone, toneExplicit: Bool, imageUrl: String?, imageAspectRatio: Double?, tags: [String]) async throws -> Post { throw BoardServiceError.notConfigured }
     func deletePost(id: UUID) async throws {}
     func createComment(postID: UUID, authorID: UUID, authorHandle: String, body: String, parentCommentID: UUID?) async throws -> On_Board.Comment {
         On_Board.Comment(authorId: authorID, author: authorHandle, body: body)
@@ -60,7 +60,9 @@ final class MockBoardService: BoardService, @unchecked Sendable {
         if let updateNotificationSettingsError { throw updateNotificationSettingsError }
     }
     var stubbedReactionCounts: [Reaction: Int] = [:]
+    var stubbedToneCounts: [PostTone: Int] = [:]
     func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int] { stubbedReactionCounts }
+    func fetchUserToneCounts(for userID: UUID) async throws -> [PostTone: Int] { stubbedToneCounts }
     func followUser(id: UUID) async throws {}
     func unfollowUser(id: UUID) async throws {}
     func fetchFollowedUserIDs() async throws -> Set<UUID> { [] }

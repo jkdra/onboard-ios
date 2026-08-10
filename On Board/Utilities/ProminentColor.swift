@@ -45,13 +45,52 @@ nonisolated extension UIImage {
         guard let winner = bucketVotes.indices.max(by: { bucketVotes[$0] < bucketVotes[$1] }),
               bucketVotes[winner] >= (side * side) / 20 else { return nil } // ≥5% colorful
         let count = CGFloat(bucketVotes[winner])
-        return UIColor(
+        let candidate = UIColor(
             hue: bucketSums[winner].h / count,
-            // Clamp toward legible-on-white: saturated enough to read as a
-            // color, dark enough to hold contrast as display type.
+            // Saturated enough to read as a color, dark enough to start near
+            // legibility — the contrast walk below is what guarantees it.
             saturation: min(0.85, max(0.45, bucketSums[winner].s / count)),
             brightness: min(0.72, max(0.35, bucketSums[winner].b / count)),
             alpha: 1
         )
+        return candidate.darkenedToContrastOnWhite(atLeast: 3.0)
+    }
+}
+
+nonisolated extension UIColor {
+    /// WCAG 2.x relative luminance (sRGB linearization).
+    var wcagLuminance: CGFloat {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0
+        getRed(&r, green: &g, blue: &b, alpha: nil)
+        func lin(_ c: CGFloat) -> CGFloat {
+            c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    }
+
+    /// Contrast ratio of this color against white, per WCAG.
+    var contrastOnWhite: CGFloat {
+        1.05 / (wcagLuminance + 0.05)
+    }
+
+    /// Walks brightness down (hue and saturation untouched) until the color
+    /// clears the given contrast against a white ground. 3.0 is the WCAG
+    /// large-text floor — the accent is only ever display-scale type (the
+    /// share card's 34pt-heavy handle). The old fixed brightness ceiling was
+    /// hue-blind: 0.72-brightness yellow sits near 2.4:1 while the same
+    /// brightness blue clears 5:1, so bright-avatar users got an accent that
+    /// was technically "clamped" and still unreadable. Black is 21:1, so the
+    /// walk always terminates.
+    func darkenedToContrastOnWhite(atLeast target: CGFloat) -> UIColor {
+        var h: CGFloat = 0, s: CGFloat = 0, b: CGFloat = 0
+        getHue(&h, saturation: &s, brightness: &b, alpha: nil)
+        var current = self
+        var steps = 0
+        while current.contrastOnWhite < target, b > 0.02, steps < 40 {
+            b -= 0.02
+            current = UIColor(hue: h, saturation: s, brightness: b, alpha: 1)
+            steps += 1
+        }
+        return current
     }
 }

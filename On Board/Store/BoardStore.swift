@@ -65,6 +65,10 @@ final class BoardStore {
     /// Pop Score per profile, keyed by user ID — moved here from ProfileView's
     /// local @State so it's cacheable and prefetchable. See BoardStore+Profiles.swift.
     var popScores: [UUID: [Reaction: Int]] = [:]
+    /// Favorite Color tally per profile, keyed by user ID. Same shape and
+    /// lifecycle as `popScores` — server-tallied so it outlives the weekly
+    /// clear. See BoardStore+Profiles.swift.
+    var toneCounts: [UUID: [PostTone: Int]] = [:]
     var notificationSettings: NotificationSettings?
     /// Surfaces a failed notification-settings save as an alert. Deliberately
     /// separate from `loadError`, which is about board-loading failures.
@@ -220,6 +224,7 @@ final class BoardStore {
         cachedArchiveWeekIDs = []
         loadError = nil
         popScores = [:]
+        toneCounts = [:]
         notificationSettings = nil
         notificationSettingsSaveError = nil
         notificationSettingsSyncTask?.cancel()

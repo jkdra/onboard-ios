@@ -60,6 +60,9 @@ extension PostDetailView {
                 id: livePost.id,
                 content: draftContent.trimmed,
                 tone: draftTone,
+                // The edit-mode tone picker has no "Any Color!" — reaching it
+                // at all means the author chose this tone deliberately.
+                toneExplicit: true,
                 imageUrl: effectiveImageUrl,
                 imageAspectRatio: effectiveAspectRatio
             )

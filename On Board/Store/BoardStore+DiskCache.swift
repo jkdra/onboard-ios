@@ -113,6 +113,7 @@ extension BoardStore {
         }
         apply(envelope.snapshot, incomingArchivedWeeks: envelope.archivedWeeks)
         popScores = envelope.popScores
+        toneCounts = envelope.toneCounts ?? [:]
         commentsByPostID = envelope.comments
         userCommentVotes = envelope.commentVotes
         notificationSettings = envelope.notificationSettings
@@ -155,6 +156,7 @@ extension BoardStore {
             snapshot: snapshot,
             archivedWeeks: archivedWeeks,
             popScores: popScores,
+            toneCounts: toneCounts,
             comments: commentsByPostID,
             commentVotes: userCommentVotes,
             notificationSettings: notificationSettings

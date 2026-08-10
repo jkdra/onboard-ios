@@ -123,6 +123,12 @@ struct ProfileView: View {
             .task(id: profile.id) {
                 await store.refreshPopScore(for: profile.id)
             }
+            // Separate task from the Pop Score fetch on purpose: two
+            // independent revalidation reads, and one failing (silently, per
+            // the read-vs-write rule) must not cost the other its result.
+            .task(id: profile.id) {
+                await store.refreshFavoriteTone(for: profile.id)
+            }
             .task(id: shareCardKey) {
                 shareCard = await ProfileShareCardRenderer.render(
                     profile: displayedProfile,

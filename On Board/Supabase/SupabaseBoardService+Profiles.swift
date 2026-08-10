@@ -120,6 +120,28 @@ extension SupabaseBoardService {
         }
         return counts
     }
+
+    /// The Favorite Color tally — a per-tone post count that outlives the
+    /// weekly clear (see `user_tone_counts`). Unknown tone keys are dropped
+    /// rather than mapped onto a known tone: inventing a tone here would
+    /// silently inflate that color's count and could hand someone a
+    /// "favorite" they never posted in.
+    func fetchUserToneCounts(for userID: UUID) async throws -> [PostTone: Int] {
+        struct Params: Encodable { let pUserId: UUID }
+
+        let response: [String: Int] = try await client
+            .rpc("get_user_tone_counts", params: Params(pUserId: userID))
+            .execute()
+            .value
+
+        var counts: [PostTone: Int] = [:]
+        for (key, value) in response {
+            if let tone = PostTone(rawValue: key) {
+                counts[tone] = value
+            }
+        }
+        return counts
+    }
     
     /// A single `follows` row, in both directions.
     ///

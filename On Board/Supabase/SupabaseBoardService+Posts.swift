@@ -70,6 +70,7 @@ extension SupabaseBoardService {
         authorID: UUID,
         content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -84,6 +85,10 @@ extension SupabaseBoardService {
             let title: String
             let description: String
             let tone: PostTone
+            /// Did the author PICK this tone, or did "Any Color!" roll it?
+            /// Only deliberate picks feed the Favorite Color tally — see the
+            /// `tone_explicit_for_favorite_color` migration.
+            let toneExplicit: Bool
             let imageUrl: String?
             let imageAspectRatio: Double?
         }
@@ -106,6 +111,7 @@ extension SupabaseBoardService {
                     title: "",
                     description: content,
                     tone: tone,
+                    toneExplicit: toneExplicit,
                     imageUrl: imageUrl,
                     imageAspectRatio: imageAspectRatio
                 )
@@ -158,6 +164,7 @@ extension SupabaseBoardService {
         id: UUID,
         content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -166,6 +173,7 @@ extension SupabaseBoardService {
             let title: String
             let description: String
             let tone: PostTone
+            let toneExplicit: Bool
             let imageUrl: String?
             let imageAspectRatio: Double?
         }
@@ -173,6 +181,7 @@ extension SupabaseBoardService {
         try await client
             .from("posts")
             .update(Update(title: "", description: content, tone: tone,
+                           toneExplicit: toneExplicit,
                            imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
             .eq("id", value: id.uuidString)
             .execute()

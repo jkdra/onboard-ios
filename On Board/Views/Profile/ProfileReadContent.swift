@@ -17,6 +17,7 @@ enum ProfileGeometryID: Hashable {
     case username
     case bio
     case popScore
+    case favoriteColor
     case actionButton
     case avatarImage
 }
@@ -33,6 +34,7 @@ struct ProfileReadContent: View {
     var onTestBirthday: (() -> Void)? = nil
 
     @Environment(BoardStore.self) private var store
+    @Environment(\.favoriteColorEnabled) private var favoriteColorEnabled
 
     private var canEdit: Bool { store.canEdit(profile: profile) }
     private var isBlockedByMe: Bool { store.isBlocked(userID: profile.id) }
@@ -73,6 +75,16 @@ struct ProfileReadContent: View {
                     popScoreSkeleton
                         .padding(.top, 8)
                         .matchedGeometryEffect(id: ProfileGeometryID.popScore, in: namespace)
+                }
+
+                // Dark-deployed (FeatureFlag.favoriteColor). No skeleton: a
+                // user who hasn't earned a favorite yet shows nothing at all,
+                // so a placeholder here would promise a row that may never
+                // arrive.
+                if favoriteColorEnabled, let favorite = store.favoriteTone(for: profile.id) {
+                    FavoriteColorView(favorite: favorite)
+                        .padding(.top, 14)
+                        .matchedGeometryEffect(id: ProfileGeometryID.favoriteColor, in: namespace)
                 }
             }
 
