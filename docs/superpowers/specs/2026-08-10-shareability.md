@@ -45,7 +45,14 @@ consistency, QoL, performance, cleanup, shareability.
    after posting your own post (motivation peak), "your post topped the
    board", and the parked weekly recap. Surface share CTAs there, not as
    ambient chrome.
-6. **Attribution**: burn `?s=ig`-style ref params into shared URLs so
+6. **Messages/invite variant** (Jawad's idea, endorsed): "[username]
+   wants you On Board." — the web invite page ALREADY uses this exact
+   phrase, so the iMessage share card + landing page + story card become
+   one voice. Invite-page redesign proposal (artifact):
+   https://claude.ai/code/artifact/89b9f93f-6e01-46e1-9bf9-db93bda548c5
+   — share-card-matched composition, one-tap code copy, ephemerality
+   hook, Host replacing the ticket emoji.
+7. **Attribution**: burn `?s=ig`-style ref params into shared URLs so
    installs can be attributed to share surfaces later (the web invite
    page already resolves codes; same pattern).
 
