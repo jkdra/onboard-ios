@@ -331,7 +331,7 @@ extension ContentView {
                 // color puts him at the description's weight (Apple's
                 // ContentUnavailableView image sits at secondary too), which
                 // also drops the scheme-inversion: `.secondary` adapts.
-                VStack(spacing: 20) {
+                VStack(spacing: 24) {
                     HostFigure(
                         eye: .sad,
                         article: .sweat,
@@ -347,7 +347,7 @@ extension ContentView {
                     // alpha as a view modifier lands him exactly at the
                     // description's weight in both schemes.
                     .opacity(0.6)
-                    VStack(spacing: 6) {
+                    VStack(spacing: 8) {
                         Text("Nothing on the board yet")
                             .fontStyle(.headline)
                             .multilineTextAlignment(.center)
@@ -382,7 +382,11 @@ extension ContentView {
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 28)
+        // Separated from the board above by more than the masonry's own
+        // 16pt row rhythm — this block is a different kind of thing, not
+        // another card, so it needs its own air to read as commentary on
+        // the board rather than the next item in it.
+        .padding(.top, 72)
         .padding(.bottom, 48)
         .padding(.horizontal, 24)
     }
