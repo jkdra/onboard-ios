@@ -22,6 +22,7 @@ struct LinkSignInMethodView: View {
 
     @Environment(AuthStore.self) private var auth
     @Environment(NetworkMonitor.self) private var network
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.dismiss) private var dismiss
 
     @State private var value = ""
@@ -33,7 +34,8 @@ struct LinkSignInMethodView: View {
     @State private var submittedDestination = ""
     @State private var resendCooldown = OTPCooldown()
 
-    private let otpCooldownSeconds = 60
+    /// Server-tunable (`otp_cooldown_seconds`, default 30) — see SignInView.
+    private var otpCooldownSeconds: Int { remoteConfig.config.otpCooldownSeconds }
 
     private var usesLiveBackend: Bool {
         AppConfiguration.current.isSupabaseConfigured

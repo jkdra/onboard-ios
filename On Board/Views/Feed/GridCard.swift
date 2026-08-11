@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct GridCard: View {
+    @Environment(\.enabledReactions) private var enabledReactions
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let post: Post
     var userReaction: Reaction?
     var currentUser: Profile?
@@ -201,25 +203,21 @@ struct GridCard: View {
 
     private var postCardContent: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(post.title)
-                .fontStyle(.title3)
-                .fontWeight(.heavy)
-                .foregroundStyle(.primary)
-                // Matches the composer's own cap (NewPostView's title field is
-                // `lineLimit(1...3)`) — without this, an unusually long title can
-                // overflow the card's fixed `cardHeight` in the masonry grid.
-                .lineLimit(3)
+            // One concatenated Text for the whole post: mixed run styling
+            // (headings, bold, strikethrough…) with a single line budget that
+            // truncates across the entire post — a per-block VStack can't cap
+            // its total lines, and the card's height is fixed. 7 matches the
+            // old title(3) + description(4) budget.
+            PostMarkupText.cardText(PostMarkup.cached(post.content))
+                .lineLimit(7)
                 .truncationMode(.tail)
-            Text(post.description)
-                .font(.custom("ZalandoSansSemiExpanded-Regular", size: 14, relativeTo: .callout))
-                .fontWeight(.regular)
-                .opacity(0.8)
-                .foregroundStyle(.secondary)
-                .lineLimit(4)
-                .truncationMode(.tail)
-                
-            if !post.tags.isEmpty {
-                tagsRow
+                .lineSpacing(2.5)
+
+            // Read once: ViewThatFits below probes up to four candidate
+            // layouts, and each `post.tags` access re-derives from the parse.
+            let tags = post.tags
+            if !tags.isEmpty {
+                tagsRow(tags)
             }
             Spacer(minLength: 0)
             ViewThatFits(in: .horizontal) {
@@ -244,23 +242,23 @@ struct GridCard: View {
     // first, then progressively fewer with a "+N" badge standing in for the rest —
     // it always lands on the last candidate (a single tag + overflow badge) if
     // nothing wider fits, so there's never a case with no valid layout.
-    private var tagsRow: some View {
+    private func tagsRow(_ tags: [String]) -> some View {
         // ViewThatFits picks the first candidate that fits; it can't enumerate a
         // dynamic ForEach as separate candidates, so these are spelled out. Showing
         // 4 down to 1 covers every real post (samples top out around 3 tags) — if a
         // post ever had more, several early candidates would just collapse to the
         // same "N tags + overflow" width and get skipped over harmlessly.
         ViewThatFits(in: .horizontal) {
-            tagsRow(showing: 4)
-            tagsRow(showing: 3)
-            tagsRow(showing: 2)
-            tagsRow(showing: 1)
+            tagsRow(tags, showing: 4)
+            tagsRow(tags, showing: 3)
+            tagsRow(tags, showing: 2)
+            tagsRow(tags, showing: 1)
         }
     }
 
-    private func tagsRow(showing count: Int) -> some View {
-        let shown = post.tags.prefix(count)
-        let overflow = post.tags.count - count
+    private func tagsRow(_ tags: [String], showing count: Int) -> some View {
+        let shown = tags.prefix(count)
+        let overflow = tags.count - count
         return HStack(spacing: 6) {
             ForEach(Array(shown), id: \.self) { tagChip("#\($0)") }
             if overflow > 0 {
@@ -325,7 +323,7 @@ struct GridCard: View {
 
     private var displayedReactions: [ReactionDisplayEntry] {
         Array(
-            Reaction.defaultOrder
+            enabledReactions
                 .map { ReactionDisplayEntry(reaction: $0, count: post.reactionCounts[$0] ?? 0) }
                 .sorted { $0.count > $1.count }
                 .prefix(3)
@@ -336,7 +334,7 @@ struct GridCard: View {
 
     @ViewBuilder
     private var cardBackground: some View {
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(
                     .regular.tint(tone.color.opacity(0.20)),
@@ -354,63 +352,9 @@ struct GridCard: View {
     }
 }
 
-// MARK: - Reaction sticker pill
-
-private struct ReactionStickerPill: View {
-    let reaction: Reaction
-    let profile: Profile
-    let tone: PostTone
-
-    var body: some View {
-        HStack(spacing: 3) {
-            AvatarView(profile: profile, size: .xsmall)
-            Text(reaction.emoji)
-                .font(.system(size: 11))
-        }
-        .padding(3)
-        .background(Capsule(style: .continuous).fill(tone.color))
-        .allowsHitTesting(false)
-    }
-}
-
 // MARK: - Supporting types
 
 private struct ReactionDisplayEntry: Equatable {
     let reaction: Reaction
     let count: Int
-}
-
-/// Resolves a feed card from the store by ID so reaction and tone updates re-render only this cell.
-struct FeedGridCard: View {
-    let postID: UUID
-    var cardNamespace: Namespace.ID? = nil
-    var transitionID: BoardRoute? = nil
-    var cardRotation: Double = 0
-    var isLeadingColumn: Bool = false
-    var columnWidth: CGFloat = 0
-    @Environment(BoardStore.self) private var store
-    @AppStorage("rotationIntensity") private var rotationIntensity: Double = 0.6
-
-    var body: some View {
-        if let proxy = store.postProxies[postID] {
-            GridCard(
-                post: proxy.post,
-                userReaction: proxy.reaction,
-                currentUser: store.currentUser,
-                authorProfile: store.profile(forAuthor: proxy.post.author),
-                cardNamespace: cardNamespace,
-                transitionID: transitionID,
-                cardRotation: cardRotation,
-                rotationIntensity: rotationIntensity,
-                isLeadingColumn: isLeadingColumn,
-                columnWidth: columnWidth
-            )
-            // id is the post alone — including tone here would force a full
-            // remount on every tone change, which destroys and recreates the
-            // view AT the new color, so the `.animation(value: post.tone)`
-            // modifiers below (textCard/imageCard) never see an old value to
-            // cross-fade from and the tone change hard-cuts instead.
-            .id(postID.uuidString)
-        }
-    }
 }

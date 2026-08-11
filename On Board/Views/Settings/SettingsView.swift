@@ -10,6 +10,7 @@ struct SettingsView: View {
     @Environment(AuthStore.self) private var auth
     @Environment(BoardStore.self) private var store
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("appearance") private var appearance: AppearancePreference = .system
     @AppStorage("hapticsEnabled") private var hapticsEnabled: Bool = true
@@ -165,6 +166,22 @@ struct SettingsView: View {
                     .fontStyle(.subheadline)
             }
 
+            #if DEBUG
+            // Debug builds only — compiled out of releases, matching the
+            // inspector view itself. Shows what THIS device resolved from
+            // remote config, per flag, with the why.
+            Section {
+                NavigationLink {
+                    RemoteConfigInspectorView()
+                } label: {
+                    SettingsRowLabel(title: "Remote Config [DEV]", systemImage: "flag.2.crossed.fill")
+                }
+            } header: {
+                Text("Developer")
+                    .fontStyle(.subheadline)
+            }
+            #endif
+
             Section {
                 if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
                    let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
@@ -236,7 +253,12 @@ struct SettingsView: View {
 
                 ShareLink(
                     item: url,
-                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: instantRemaining > 0))
+                    message: Text(InviteLink.shareMessage(
+                        code: code,
+                        hasInstantInvites: instantRemaining > 0,
+                        instantOverride: remoteConfig.config.referralShareMessageInstant,
+                        waitlistOverride: remoteConfig.config.referralShareMessage
+                    ))
                 ) {
                     SettingsRowLabel(title: "Share Invite", systemImage: "square.and.arrow.up.fill")
                 }
@@ -310,4 +332,5 @@ struct SettingsView: View {
         auth: AuthStore(service: MockAuthService()),
         network: NetworkMonitor()
     ))
+        .environment(RemoteConfigStore())
 }

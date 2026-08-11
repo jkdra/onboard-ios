@@ -10,23 +10,34 @@ import Foundation
 struct Board: Identifiable, Hashable, Codable {
     var id: UUID
     var name: String
+    /// Capitalized campus abbreviation ("IVC") for tight UI slots — widget
+    /// eyebrows, Live Activity subtitles. Server column `boards.short_name`,
+    /// nullable: older cache blobs and boards without one fall back to `name`
+    /// via `displayShortName`.
+    var shortName: String?
     /// When the board space was created. Used to mark the origin day on the archive calendar.
     var createdAt: Date?
 
-    init(id: UUID = UUID(), name: String, createdAt: Date? = nil) {
+    /// What tight UI slots should render: the abbreviation when the board has
+    /// one, the full name otherwise.
+    var displayShortName: String { shortName ?? name }
+
+    init(id: UUID = UUID(), name: String, shortName: String? = nil, createdAt: Date? = nil) {
         self.id = id
         self.name = name
+        self.shortName = shortName
         self.createdAt = createdAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, createdAt
+        case id, name, shortName, createdAt
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
+        shortName = try container.decodeIfPresent(String.self, forKey: .shortName)
         createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     }
 }

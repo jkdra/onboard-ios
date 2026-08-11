@@ -10,11 +10,12 @@
 import SwiftUI
 
 struct PopScoreView: View {
+    @Environment(\.enabledReactions) private var enabledReactions
     let score: [Reaction: Int]
 
     var body: some View {
         let total = max(1, score.values.reduce(0, +))
-        let sortedReactions = Reaction.defaultOrder.filter { (score[$0] ?? 0) > 0 }
+        let sortedReactions = enabledReactions.filter { (score[$0] ?? 0) > 0 }
 
         VStack(alignment: .leading, spacing: 12) {
             Text("Pop Score")

@@ -47,6 +47,7 @@ struct On_BoardApp: App {
     @State private var network: NetworkMonitor
     @State private var auth: AuthStore
     @State private var onboarding: OnboardingStore
+    @State private var remoteConfig = RemoteConfigStore()
 
     init() {
         NavigationBarAppearance.configureIfNeeded()
@@ -62,7 +63,14 @@ struct On_BoardApp: App {
         // Local-only (no CloudKit sync), no artificial throttling beyond each
         // Tip's own rules — one donation per cold launch, used by ArchiveTip's
         // "shown after the 2nd launch" rule.
-        try? Tips.configure([.datastoreLocation(.applicationDefault), .displayFrequency(.immediate)])
+        // `-dev.disableTips`: keeps TipKit popovers out of headless
+        // walkthrough screenshots — every fresh sim install resets the tip
+        // datastore, so the Archive tip otherwise photobombs every capture.
+        if ProcessInfo.processInfo.arguments.contains("-dev.disableTips") {
+            Tips.hideAllTipsForTesting()
+        } else {
+            try? Tips.configure([.datastoreLocation(.applicationDefault), .displayFrequency(.immediate)])
+        }
         Task { await ArchiveTip.appLaunchEvent.donate() }
     }
 
@@ -74,6 +82,7 @@ struct On_BoardApp: App {
                 .environment(auth)
                 .environment(onboarding)
                 .environment(network)
+                .environment(remoteConfig)
                 .onOpenURL { url in
                     // Let GoogleSignIn handle its own callback URL first.
                     if GoogleSignInService.handle(url) { return }

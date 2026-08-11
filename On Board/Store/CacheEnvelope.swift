@@ -26,6 +26,9 @@ struct CacheEnvelope: Sendable {
     let snapshot: BoardSnapshot
     let archivedWeeks: [BoardWeek]
     let popScores: [UUID: [Reaction: Int]]
+    /// Optional so cache files written before Favorite Color existed still
+    /// decode (see CLAUDE.md — a new Optional field needs no schema bump).
+    let toneCounts: [UUID: [PostTone: Int]]?
     let comments: [UUID: [Comment]]
     let commentVotes: [UUID: CommentVote]
     let notificationSettings: NotificationSettings?
@@ -37,6 +40,7 @@ struct CacheEnvelope: Sendable {
         snapshot: BoardSnapshot,
         archivedWeeks: [BoardWeek],
         popScores: [UUID: [Reaction: Int]],
+        toneCounts: [UUID: [PostTone: Int]]?,
         comments: [UUID: [Comment]],
         commentVotes: [UUID: CommentVote],
         notificationSettings: NotificationSettings?
@@ -47,6 +51,7 @@ struct CacheEnvelope: Sendable {
         self.snapshot = snapshot
         self.archivedWeeks = archivedWeeks
         self.popScores = popScores
+        self.toneCounts = toneCounts
         self.comments = comments
         self.commentVotes = commentVotes
         self.notificationSettings = notificationSettings
@@ -60,7 +65,7 @@ struct CacheEnvelope: Sendable {
 extension CacheEnvelope: Codable {
     enum CodingKeys: CodingKey {
         case schemaVersion, cachedAt, boardId, snapshot, archivedWeeks
-        case popScores, comments, commentVotes, notificationSettings
+        case popScores, toneCounts, comments, commentVotes, notificationSettings
     }
 
     nonisolated init(from decoder: Decoder) throws {
@@ -71,6 +76,7 @@ extension CacheEnvelope: Codable {
         snapshot = try container.decode(BoardSnapshot.self, forKey: .snapshot)
         archivedWeeks = try container.decode([BoardWeek].self, forKey: .archivedWeeks)
         popScores = try container.decode([UUID: [Reaction: Int]].self, forKey: .popScores)
+        toneCounts = try container.decodeIfPresent([UUID: [PostTone: Int]].self, forKey: .toneCounts)
         comments = try container.decode([UUID: [Comment]].self, forKey: .comments)
         commentVotes = try container.decode([UUID: CommentVote].self, forKey: .commentVotes)
         notificationSettings = try container.decodeIfPresent(NotificationSettings.self, forKey: .notificationSettings)
@@ -84,6 +90,7 @@ extension CacheEnvelope: Codable {
         try container.encode(snapshot, forKey: .snapshot)
         try container.encode(archivedWeeks, forKey: .archivedWeeks)
         try container.encode(popScores, forKey: .popScores)
+        try container.encodeIfPresent(toneCounts, forKey: .toneCounts)
         try container.encode(comments, forKey: .comments)
         try container.encode(commentVotes, forKey: .commentVotes)
         try container.encodeIfPresent(notificationSettings, forKey: .notificationSettings)

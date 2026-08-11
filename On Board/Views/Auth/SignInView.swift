@@ -7,7 +7,8 @@ import AuthenticationServices
 import SwiftUI
 
 struct SignInView: View {
-    private enum CredentialMode: String, CaseIterable, Identifiable {
+    // Not private: SignInView+Logic.swift's credential/OTP helpers switch on it.
+    enum CredentialMode: String, CaseIterable, Identifiable {
         case phone
         case email
 
@@ -27,25 +28,28 @@ struct SignInView: View {
     @Environment(AuthStore.self) var auth
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(NetworkMonitor.self) var network
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.colorScheme) private var scheme
 
-    @State private var credentialMode: CredentialMode = .phone
-    @State private var phoneNumber = ""
-    @State private var emailAddress = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var usePassword = false
-    @State private var otpCode = ""
-    @State private var otpSent = false
-    @State private var isSendingOTP = false
-    @State private var emailStatus: EmailStatus? = nil
-    @State private var phoneExists: Bool? = nil
-    @State private var showAccountDetectedToast = false
-    @State private var requiresEmailVerification = false
+    // Form state is not private: SignInView+Logic.swift's helpers (resetOTPSession,
+    // sendOTP, verifyOTP, the password paths) read and mutate it.
+    @State var credentialMode: CredentialMode = .phone
+    @State var phoneNumber = ""
+    @State var emailAddress = ""
+    @State var password = ""
+    @State var confirmPassword = ""
+    @State var usePassword = false
+    @State var otpCode = ""
+    @State var otpSent = false
+    @State var isSendingOTP = false
+    @State var emailStatus: EmailStatus? = nil
+    @State var phoneExists: Bool? = nil
+    @State var showAccountDetectedToast = false
+    @State var requiresEmailVerification = false
     @State var alertError: PresentableAlertError?
-    @State private var submittedDestination = ""
-    @State private var resendCooldown = OTPCooldown()
-    @State private var isVerifyingOTP = false
+    @State var submittedDestination = ""
+    @State var resendCooldown = OTPCooldown()
+    @State var isVerifyingOTP = false
     @State var appleFlowInFlight = false
     @State var appeared = false
     /// The provider whose sign-in succeeded and is now waiting on onboarding status
@@ -53,7 +57,10 @@ struct SignInView: View {
     /// window so we never swap in a separate loading screen here.
     @State var resolvingProvider: AuthProvider?
 
-    private let otpCooldownSeconds = 60
+    /// Server-tunable (`otp_cooldown_seconds`, default 30) — an anti-abuse dial
+    /// on an endpoint that costs real money per send.
+    /// (Not private: read by SignInView+Logic.swift's `sendOTP`.)
+    var otpCooldownSeconds: Int { remoteConfig.config.otpCooldownSeconds }
 
     /// True from the moment sign-in succeeds until onboarding status is known —
     /// the page is disabled and the tapped button keeps spinning during it.
@@ -392,191 +399,7 @@ struct SignInView: View {
         }
     }
 
-    // MARK: - Helpers (logic unchanged)
-
-    private func resetOTPSession() {
-        otpSent = false
-        otpCode = ""
-        password = ""
-        confirmPassword = ""
-        usePassword = false
-        submittedDestination = ""
-        isVerifyingOTP = false
-        emailStatus = nil
-        phoneExists = nil
-        showAccountDetectedToast = false
-        requiresEmailVerification = false
-        // Deliberately NOT resendCooldown.reset(): backing out clears the form,
-        // not the send history. Re-submitting the same destination inside the
-        // window reuses the in-flight code (see sendOTP) instead of burning it
-        // with a fresh send — the "Back ➜ Continue" loop used to fire a new
-        // OTP every pass, invalidating the email already on its way.
-    }
-
-    private func signUpWithPassword() async {
-        if usesLiveBackend, !network.isConnected {
-            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
-            return
-        }
-        guard !normalizedCredentialValue.isEmpty, !password.isEmpty, password == confirmPassword else { return }
-
-        do {
-            let email = try resolvedDestination()
-            resolvingProvider = .email
-            let session = try await auth.signUpWithPassword(email: email, password: password)
-            if session == nil {
-                withAnimation(.snappy(duration: 0.3)) {
-                    requiresEmailVerification = true
-                }
-            }
-        } catch {
-            presentAlert(PresentableAlertError.from(error))
-        }
-    }
-
-    private func signInWithPassword() async {
-        if usesLiveBackend, !network.isConnected {
-            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
-            return
-        }
-        guard !normalizedCredentialValue.isEmpty, !password.isEmpty else { return }
-
-        do {
-            let email = try resolvedDestination()
-            resolvingProvider = .email
-            await auth.signInWithPassword(email: email, password: password)
-        } catch {
-            presentAlert(PresentableAlertError.from(error))
-        }
-    }
-
-    func presentAlert(_ error: PresentableAlertError?) {
-        guard let error else { return }
-        alertError = error
-    }
-
-    private var isSigningInCredential: Bool {
-        switch credentialMode {
-        case .phone:
-            if case .signingIn(.phone) = auth.state { true } else { false }
-        case .email:
-            if case .signingIn(.email) = auth.state { true } else { false }
-        }
-    }
-
-    private var credentialProvider: AuthProvider {
-        credentialMode == .phone ? .phone : .email
-    }
-
-    private var otpSentMessage: String {
-        switch credentialMode {
-        case .phone:
-            let label = PhoneNumberNormalizer.displayLabel(for: submittedDestination)
-            return "Code sent to \(label)"
-        case .email:
-            return "Code sent to \(submittedDestination)"
-        }
-    }
-
-    private var normalizedCredentialValue: String {
-        switch credentialMode {
-        case .phone:
-            phoneNumber.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .email:
-            EmailNormalizer.normalized(emailAddress)
-        }
-    }
-
-    private func resolvedDestination() throws -> String {
-        switch credentialMode {
-        case .phone:
-            guard let e164 = PhoneNumberNormalizer.e164(from: normalizedCredentialValue) else {
-                throw AuthError.invalidPhoneNumber
-            }
-            return e164
-        case .email:
-            let email = normalizedCredentialValue
-            guard email.contains("@"), email.contains(".") else {
-                throw AuthError.unknown("Enter a valid email address.")
-            }
-            return email
-        }
-    }
-
-    private func sendOTP(isResend: Bool) async {
-        if usesLiveBackend, !network.isConnected {
-            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
-            return
-        }
-
-        isSendingOTP = true
-        defer { isSendingOTP = false }
-
-        do {
-            let destination = try resolvedDestination()
-
-            // One window for BOTH send paths. Continue with the same address
-            // inside the window doesn't re-send (the code already in flight is
-            // still valid — a re-send would invalidate it mid-delivery); it
-            // just returns to the code-entry screen. A different address has
-            // no code in flight, so it sends immediately.
-            guard resendCooldown.canSend(to: destination) else {
-                if !isResend {
-                    submittedDestination = destination
-                    withAnimation(.snappy(duration: 0.35)) { otpSent = true }
-                }
-                return
-            }
-
-            switch credentialMode {
-            case .phone:
-                if !isResend {
-                    phoneExists = try await auth.checkPhoneExists(phone: destination)
-                }
-                try await auth.sendPhoneOTP(phone: destination)
-            case .email:
-                if !isResend {
-                    emailStatus = try await auth.checkEmailExists(email: destination)
-                }
-                try await auth.sendEmailOTP(email: destination)
-            }
-            submittedDestination = destination
-            withAnimation(.snappy(duration: 0.35)) {
-                if !isResend && (emailStatus?.exists == true || phoneExists == true) {
-                    showAccountDetectedToast = true
-                }
-                otpSent = true
-            }
-            if !isResend { otpCode = "" }
-            resendCooldown.start(duration: otpCooldownSeconds, destination: destination)
-        } catch {
-            presentAlert(PresentableAlertError.from(error))
-        }
-    }
-
-    private func verifyOTP() async {
-        guard !isVerifyingOTP else { return }
-        if usesLiveBackend, !network.isConnected {
-            presentAlert(PresentableAlertError.from(AuthError.networkUnavailable))
-            return
-        }
-
-        isVerifyingOTP = true
-        resolvingProvider = credentialProvider
-        defer { isVerifyingOTP = false }
-
-        let token = OTPCodeInput.sanitized(otpCode)
-        let destination = submittedDestination.isEmpty
-            ? (try? resolvedDestination()) ?? normalizedCredentialValue
-            : submittedDestination
-
-        switch credentialMode {
-        case .phone:
-            await auth.verifyPhoneOTP(phone: destination, token: token)
-        case .email:
-            await auth.verifyEmailOTP(email: destination, token: token)
-        }
-    }
+    // The credential/OTP/password helpers live in SignInView+Logic.swift.
 }
 
 #Preview {
@@ -590,4 +413,5 @@ struct SignInView: View {
         ))
         .environment(BoardStore.sampleBoard())
         .environment(NetworkMonitor())
+        .environment(RemoteConfigStore())
 }

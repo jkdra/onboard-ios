@@ -55,22 +55,46 @@ struct RemotePostRow: Decodable, Sendable {
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
     }
 
-    func toPost(comments: [Comment] = []) -> Post {
+    /// Joins the legacy two-column wire shape into single-field markup
+    /// content. A pre-migration post's title becomes a real `# ` heading, so
+    /// old posts render exactly as they used to — heading over body — through
+    /// the one new pipeline. Runs until the schema migration collapses the
+    /// columns server-side.
+    private func joinedContent(extraTags: [String]) -> String {
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedBody = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        var content: String
+        if trimmedTitle.isEmpty { content = trimmedBody }
+        else if trimmedBody.isEmpty { content = "# \(trimmedTitle)" }
+        else { content = "# \(trimmedTitle)\n\(trimmedBody)" }
+        // Legacy rows carry tags in their own column; fold them in as a
+        // trailing hashtag line (mirroring the server migration) so derived
+        // Post.tags sees them. Skipped if the body already contains them.
+        let legacyTags = tags.isEmpty ? extraTags : tags
+        if !legacyTags.isEmpty, PostMarkup.parse(content).tags.isEmpty {
+            let line = legacyTags.map { "#\($0)" }.joined(separator: " ")
+            content = content.isEmpty ? line : content + "\n\n" + line
+        }
+        return content
+    }
+
+    /// `extraTags`: the week fetch delivers tags as separate
+    /// `fetch_tags_for_week` rows rather than on the post row — pass them in
+    /// so a legacy post's tags still fold into its content.
+    func toPost(comments: [Comment] = [], extraTags: [String] = []) -> Post {
         Post(
             id: id,
             authorId: authorId,
             boardWeekId: boardWeekId,
             isReadOnly: isReadOnly,
-            title: title,
-            description: description,
+            content: joinedContent(extraTags: extraTags),
             author: author,
             tone: tone,
             reactionCounts: reactionCounts,
             comments: comments,
             createdAt: createdAt,
             imageUrl: imageUrl,
-            imageAspectRatio: imageAspectRatio,
-            tags: tags
+            imageAspectRatio: imageAspectRatio
         )
     }
 

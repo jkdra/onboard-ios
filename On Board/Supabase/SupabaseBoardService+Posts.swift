@@ -49,20 +49,28 @@ extension SupabaseBoardService {
 
         return BoardWeekPosts(
             posts: postRows.map { row in
-                var post = row.toPost()
-                post.tags = tagsByPost[row.id] ?? []
-                return post
+                row.toPost(extraTags: tagsByPost[row.id] ?? [])
             },
-            userReactions: Dictionary(uniqueKeysWithValues: reactionRows.map { ($0.postId, $0.type) })
+            // uniquingKeysWith, not uniqueKeysWithValues: the latter *traps* on a
+            // duplicate key. Today the reactions PK (post_id, user_id) makes
+            // duplicates impossible, but that safety lives entirely in a database
+            // constraint this code can't see — an RPC or join change would turn a
+            // data anomaly into a hard crash with no rollback and no error path.
+            userReactions: Dictionary(
+                reactionRows.compactMap { row in
+                    Reaction(rawValue: row.type).map { (row.postId, $0) }
+                },
+                uniquingKeysWith: { _, latest in latest }
+            )
         )
     }
 
     func createPost(
         weekID: UUID,
         authorID: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -70,9 +78,17 @@ extension SupabaseBoardService {
         struct Insert: Encodable {
             let boardWeekId: UUID
             let authorId: UUID
+            // Pre-migration wire shape: the posts table still carries NOT
+            // NULL title/description columns. title is written empty and
+            // description carries the full markup content — the moderation
+            // drain reads description, so the judge sees the whole post.
             let title: String
             let description: String
             let tone: PostTone
+            /// Did the author PICK this tone, or did "Any Color!" roll it?
+            /// Only deliberate picks feed the Favorite Color tally — see the
+            /// `tone_explicit_for_favorite_color` migration.
+            let toneExplicit: Bool
             let imageUrl: String?
             let imageAspectRatio: Double?
         }
@@ -92,9 +108,10 @@ extension SupabaseBoardService {
                 Insert(
                     boardWeekId: weekID,
                     authorId: authorID,
-                    title: title,
-                    description: description,
+                    title: "",
+                    description: content,
                     tone: tone,
+                    toneExplicit: toneExplicit,
                     imageUrl: imageUrl,
                     imageAspectRatio: imageAspectRatio
                 )
@@ -117,9 +134,9 @@ extension SupabaseBoardService {
         let enriched = try await enrichedTask
         await tagsAttached
 
-        var post = enriched.toPost()
-        post.tags = tags
-        return post
+        // Tags need no re-attachment: new-format content carries its
+        // hashtags inline, so toPost derives them.
+        return enriched.toPost()
     }
 
     private func fetchPostByIdWithRetry(id: UUID) async throws -> RemotePostRow {
@@ -145,9 +162,9 @@ extension SupabaseBoardService {
 
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -156,13 +173,15 @@ extension SupabaseBoardService {
             let title: String
             let description: String
             let tone: PostTone
+            let toneExplicit: Bool
             let imageUrl: String?
             let imageAspectRatio: Double?
         }
 
         try await client
             .from("posts")
-            .update(Update(title: title, description: description, tone: tone,
+            .update(Update(title: "", description: content, tone: tone,
+                           toneExplicit: toneExplicit,
                            imageUrl: imageUrl, imageAspectRatio: imageAspectRatio))
             .eq("id", value: id.uuidString)
             .execute()
@@ -178,9 +197,7 @@ extension SupabaseBoardService {
         let enriched = try await enrichedTask
         await tagsAttached
 
-        var post = enriched.toPost()
-        post.tags = tags
-        return post
+        return enriched.toPost()
     }
 
     func deletePost(id: UUID) async throws {
@@ -191,20 +208,4 @@ extension SupabaseBoardService {
             .execute()
     }
     
-    func searchTags(query: String, boardID: UUID) async throws -> [Tag] {
-        // An empty query returns the board's most-used tags (search_tags with an
-        // empty prefix orders by post_count) — this powers the picker's
-        // "Popular Tags" state so users discover and reuse existing tags rather
-        // than typing blind and creating duplicates.
-        let cleanQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        struct SearchParams: Encodable {
-            let prefix: String
-            let p_board_id: UUID
-            let p_limit: Int
-        }
-        return try await client
-            .rpc("search_tags", params: SearchParams(prefix: cleanQuery, p_board_id: boardID, p_limit: 10))
-            .execute()
-            .value
-    }
 }

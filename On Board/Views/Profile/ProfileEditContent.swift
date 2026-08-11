@@ -12,6 +12,8 @@ import PhotosUI
 import SwiftUI
 
 struct ProfileEditContent: View {
+    @Environment(\.handleChangeRule) private var handleChangeRule
+    @Environment(\.profileFieldLimits) private var profileFieldLimits
     let profile: Profile
     let namespace: Namespace.ID
     @Bindable var draft: ProfileDraft
@@ -29,7 +31,8 @@ struct ProfileEditContent: View {
 
     /// Friendly "in 6 days" for when the username may next be changed.
     private var handleUnlockText: String {
-        guard let at = profile.handleChangeAvailableAt else { return "soon" }
+        guard let at = profile.handleChangeAvailableAt(windowDays: handleChangeRule.windowDays,
+                                                       maxPerWindow: handleChangeRule.maxPerWindow) else { return "soon" }
         return Self.relativeDateTimeFormatter.localizedString(for: at, relativeTo: .now)
     }
 
@@ -51,7 +54,10 @@ struct ProfileEditContent: View {
         .alert("Username locked", isPresented: $showHandleLockedAlert) {
             Button("OK", role: .cancel) {}
         } message: {
-            Text("You can change your username twice every 14 days. You'll be able to change it again \(handleUnlockText).")
+            // Interpolated from the same rule the gate reads — hardcoding
+            // "twice every 14 days" here meant retuning the config made the
+            // explanation lie about the limit it was explaining.
+            Text("You can change your username \(handleChangeRule.maxPerWindow == 1 ? "once" : handleChangeRule.maxPerWindow == 2 ? "twice" : "\(handleChangeRule.maxPerWindow) times") every \(handleChangeRule.windowDays) days. You'll be able to change it again \(handleUnlockText).")
         }
     }
 
@@ -70,9 +76,10 @@ struct ProfileEditContent: View {
                 .textContentType(.name)
                 .textInputAutocapitalization(.words)
                 .matchedFieldText(id: ProfileGeometryID.displayName, in: namespace, variant: .title)
-            FieldLimitCaption(count: draft.displayName.count, limit: ProfileDraft.displayNameLimit)
+            FieldLimitCaption(count: draft.displayName.count, limit: profileFieldLimits.displayName)
 
-            if profile.canChangeHandle {
+            if profile.canChangeHandle(windowDays: handleChangeRule.windowDays,
+                                       maxPerWindow: handleChangeRule.maxPerWindow) {
                 TextField("username", text: $draft.handle)
                     .textFieldStyle(.boardUsername)
                     .lineLimit(1)
@@ -156,7 +163,7 @@ struct ProfileEditContent: View {
             .foregroundStyle(.primary)
             .keyboardType(.twitter)
             .matchedFieldText(id: ProfileGeometryID.bio, in: namespace, variant: .body)
-        FieldLimitCaption(count: draft.bio.count, limit: ProfileDraft.bioLimit)
+        FieldLimitCaption(count: draft.bio.count, limit: profileFieldLimits.bio)
     }
 
     // MARK: - Birthday

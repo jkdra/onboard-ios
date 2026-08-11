@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 954766D82FE858F900447B56 /* GoogleSignIn */; };
-		954766DB2FE858F900447B56 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 954766DA2FE858F900447B56 /* GoogleSignInSwift */; };
 		95DC401A2FD36BD700F6E770 /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC40192FD36BD700F6E770 /* Auth */; };
 		95DC40202FD36BD700F6E770 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC401F2FD36BD700F6E770 /* Supabase */; };
 		95DC40232FD36BD700F6E770 /* NukeUI in Frameworks */ = {isa = PBXBuildFile; productRef = 95DC40222FD36BD700F6E770 /* NukeUI */; };
@@ -80,7 +79,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				954766DB2FE858F900447B56 /* GoogleSignInSwift in Frameworks */,
 				95DC40202FD36BD700F6E770 /* Supabase in Frameworks */,
 				954766D92FE858F900447B56 /* GoogleSignIn in Frameworks */,
 				95DC401A2FD36BD700F6E770 /* Auth in Frameworks */,
@@ -161,7 +159,6 @@
 				95DC401F2FD36BD700F6E770 /* Supabase */,
 				95DC40222FD36BD700F6E770 /* NukeUI */,
 				954766D82FE858F900447B56 /* GoogleSignIn */,
-				954766DA2FE858F900447B56 /* GoogleSignInSwift */,
 			);
 			productName = "On Board";
 			productReference = 95DC3FE72FD3688800F6E770 /* On Board.app */;
@@ -457,7 +454,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "On Board/On Board.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				ENABLE_DEBUG_DYLIB = YES;
 				ENABLE_PREVIEWS = YES;
@@ -476,7 +473,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
 				PRODUCT_MODULE_NAME = On_Board;
 				PRODUCT_NAME = "On Board";
@@ -500,7 +497,7 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = "On Board/On Board.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -518,7 +515,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = org.onboardapp.onboard;
 				PRODUCT_MODULE_NAME = On_Board;
 				PRODUCT_NAME = "On Board";
@@ -539,10 +536,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jawadalkhadra.On-BoardTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -560,10 +557,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jawadalkhadra.On-BoardTests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -580,10 +577,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jawadalkhadra.On-BoardUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -600,10 +597,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = CY6ALA5KQP;
 				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 2.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.jawadalkhadra.On-BoardUITests";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -689,11 +686,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
-		};
-		954766DA2FE858F900447B56 /* GoogleSignInSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 954766D72FE858F900447B56 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignInSwift;
 		};
 		95DC40192FD36BD700F6E770 /* Auth */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -23,7 +23,16 @@ extension SupabaseBoardService {
 
         return CommentThread(
             comments: CommentTreeBuilder.buildTree(from: flat),
-            userVotes: Dictionary(uniqueKeysWithValues: voteRows.map { ($0.commentId, $0.vote) })
+            // uniquingKeysWith, not uniqueKeysWithValues — see the note in
+            // SupabaseBoardService+Posts.fetchPosts. The comment_votes PK
+            // (comment_id, user_id) makes duplicates impossible today; this
+            // removes the trap regardless.
+            userVotes: Dictionary(
+                voteRows.compactMap { row in
+                    CommentVote(rawValue: row.vote).map { (row.commentId, $0) }
+                },
+                uniquingKeysWith: { _, latest in latest }
+            )
         )
     }
 

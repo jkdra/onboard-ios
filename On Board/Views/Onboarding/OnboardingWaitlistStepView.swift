@@ -8,6 +8,7 @@ import UserNotifications
 
 struct OnboardingWaitlistStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
+    @Environment(RemoteConfigStore.self) private var remoteConfig
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var appeared = false
@@ -15,7 +16,7 @@ struct OnboardingWaitlistStepView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            OnboardingProgressBar(step: 7, totalSteps: 7)
+            OnboardingProgressBar(step: 6, totalSteps: 6)
 
             Spacer()
 
@@ -183,7 +184,11 @@ struct OnboardingWaitlistStepView: View {
             if let inviteURL {
                 ShareLink(
                     item: inviteURL,
-                    message: Text(InviteLink.shareMessage(code: code, hasInstantInvites: false))
+                    message: Text(InviteLink.shareMessage(
+                        code: code,
+                        hasInstantInvites: false,
+                        waitlistOverride: remoteConfig.config.referralShareMessage
+                    ))
                 ) {
                     LoadingButtonLabel("Invite Friends", systemImage: "square.and.arrow.up", isLoading: false)
                 }
@@ -264,4 +269,5 @@ struct OnboardingWaitlistStepView: View {
         auth: AuthStore(service: MockAuthService()),
         network: NetworkMonitor()
     ))
+        .environment(RemoteConfigStore())
 }

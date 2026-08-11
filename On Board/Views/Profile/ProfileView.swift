@@ -11,7 +11,6 @@
 
 import SwiftUI
 import PhotosUI
-import Supabase
 
 enum ProfilePresentation {
     case sheet
@@ -24,9 +23,13 @@ struct ProfileView: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.profileFieldLimits) private var profileFieldLimits
     @Namespace private var profileNamespace
     @State private var showAvatarViewer = false
-    @State private var avatarViewerScale: CGFloat = 1.0
+    @State private var avatarViewerPhase: ImageViewerPhase = .closed
+    /// Story-ready share card, re-rendered when the profile/avatar/Pop Score
+    /// change. While nil (first frame, render in flight) the share action
+    /// falls back to the plain profile URL.
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
@@ -93,7 +96,7 @@ struct ProfileView: View {
                     sourceID: ProfileGeometryID.avatarImage,
                     isPresented: $showAvatarViewer,
                     aspectRatio: 1.0,
-                    currentScale: $avatarViewerScale
+                    phase: $avatarViewerPhase
                 )
                 .ignoresSafeArea()
                 .zIndex(100)
@@ -118,6 +121,12 @@ struct ProfileView: View {
             }
             .task(id: profile.id) {
                 await store.refreshPopScore(for: profile.id)
+            }
+            // Separate task from the Pop Score fetch on purpose: two
+            // independent revalidation reads, and one failing (silently, per
+            // the read-vs-write rule) must not cost the other its result.
+            .task(id: profile.id) {
+                await store.refreshFavoriteTone(for: profile.id)
             }
             .task(id: profile.id) {
                 // Their birthday, shared publicly → celebrate for whoever's viewing.
@@ -159,7 +168,7 @@ struct ProfileView: View {
                         onEditProfile: beginEditing,
                         onAvatarTap: {
                             if displayedProfile.avatarUrl != nil {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                                withAnimation(ImageViewerMotion.morphSpring) {
                                     showAvatarViewer = true
                                 }
                             }
@@ -205,14 +214,10 @@ struct ProfileView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 if store.canEdit(profile: displayedProfile) {
-                    ShareLink(item: shareURL, subject: Text(shareSubject)) {
-                        Label("Share Profile", systemImage: "square.and.arrow.up")
-                    }
+                    profileShareLink
                 } else {
                     Menu {
-                        ShareLink(item: shareURL, subject: Text(shareSubject)) {
-                            Label("Share Profile", systemImage: "square.and.arrow.up")
-                        }
+                        profileShareLink
                         Button {
                             reportTarget = .profile(displayedProfile)
                         } label: {
@@ -233,7 +238,6 @@ struct ProfileView: View {
                             } label: {
                                 Label("Block", systemImage: "hand.raised")
                             }
-                            .tint(.red)
                         }
                     } label: {
                         Image(systemName: "ellipsis").fontWeight(.semibold)
@@ -243,10 +247,13 @@ struct ProfileView: View {
             }
         }
 
-        if showAvatarViewer, avatarViewerScale <= 1.0 {
+        // `.settled`, not `showAvatarViewer`: adopts the same deferred-chrome
+        // behavior as PostDetailView (X arrives after the open morph, never
+        // inside its transaction), which this call site previously lacked.
+        if avatarViewerPhase == .settled {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
+                    withAnimation(ImageViewerMotion.morphSpring) {
                         showAvatarViewer = false
                     }
                 } label: {
@@ -258,6 +265,20 @@ struct ProfileView: View {
         }
     }
 
+    /// The share entry: the story-ready card image when rendered, else the
+    /// A LINK, deliberately — `shareURL` is a universal link, so a recipient
+    /// with the app installed opens straight to this profile in-app (and
+    /// everyone else lands on the web page), which an image share cannot do.
+    /// `ProfileShareCard` still exists for the story-share surface (see
+    /// docs/superpowers/specs/2026-08-10-shareability.md): that's an
+    /// ADDITIONAL, explicitly-chosen action, not a replacement for Share.
+    private var profileShareLink: some View {
+        ShareLink(item: shareURL, subject: Text(shareSubject)) {
+            Label("Share Profile", systemImage: "square.and.arrow.up")
+        }
+    }
+
+
     // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
     // onOpenURL handling in On_BoardApp.swift, just a different path segment.
     // Force-unwrap is safe: a fixed HTTPS host + `/profile/` + a UUID's
@@ -267,12 +288,16 @@ struct ProfileView: View {
     }
 
     private var shareSubject: String {
-        displayedProfile.displayName.isEmpty ? displayedProfile.handle : displayedProfile.displayName
+        displayedProfile.displayNameOrHandle
     }
 
     // MARK: - Edit lifecycle
 
     private func beginEditing() {
+        // Hand the (possibly remote-overridden) limits to the draft before it
+        // starts validating — it's a model, not a View, so it can't read them.
+        draft.displayNameLimit = profileFieldLimits.displayName
+        draft.bioLimit = profileFieldLimits.bio
         draft.begin(from: displayedProfile) { candidate in
             await store.checkHandleAvailable(candidate)
         }

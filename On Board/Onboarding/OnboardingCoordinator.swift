@@ -19,8 +19,8 @@ struct OnboardingCoordinator: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(AuthStore.self) private var auth
 
-    /// Client-only completion flag for `.contentPreferences` — see that case's
-    /// doc comment on `OnboardingStep` for why this can't live on `OnboardingStatus`.
+    /// Client-only completion flag for `.contentPreferences` — the preference
+    /// itself (`profanityEnabled`) is per-device, so its step's done-ness is too.
     @AppStorage("hasCompletedProfanityStep") private var hasCompletedProfanityStep = false
 
     @State private var path: [OnboardingStep] = []
@@ -41,17 +41,22 @@ struct OnboardingCoordinator: View {
     private var effectiveStep: OnboardingStep {
         guard let status = onboarding.status else { return .birthday }
         let backendStep = status.effectiveOnboardingStep
-        // .contentPreferences has no backing DB state, so it can't come back from
-        // effectiveOnboardingStep — insert it locally once profile is behind the
-        // user and it hasn't been shown yet.
-        if !hasCompletedProfanityStep, Self.rank(backendStep) > Self.rank(.profile) {
-            return .contentPreferences
-        }
-        // .graduation is also client-inserted: shown right after school
-        // verification while `expected_graduation` is still null. Existing users
-        // were backfilled to a value, so they never see it.
+        // A step this build doesn't recognize short-circuits everything below —
+        // the client-inserted steps and rank() arithmetic are meaningless once
+        // the server is running a flow we don't know about.
+        if backendStep == .unrecognized { return .unrecognized }
+        // .graduation is client-inserted: it HOLDS the user on the school
+        // screen's final stage while `expected_graduation` is still null.
+        // Existing users were backfilled to a value, so they never see it.
         if status.verifiedSchoolEmail != nil, status.expectedGraduation == nil {
             return .graduation
+        }
+        // .contentPreferences follows graduation, before the waitlist — gated
+        // on .waitlist specifically: if the server already says .complete
+        // (admin approval landing mid-flow), admission wins and the toggle
+        // waits in Settings rather than blocking entry to the board.
+        if backendStep == .waitlist, !hasCompletedProfanityStep {
+            return .contentPreferences
         }
         return backendStep
     }
@@ -77,14 +82,22 @@ struct OnboardingCoordinator: View {
                             OnboardingUsernameStepView()
                         case .profile:
                             OnboardingProfileStepView()
-                        case .contentPreferences:
-                            OnboardingContentPreferencesStepView()
                         case .schoolVerify:
                             OnboardingSchoolEmailStepView()
-                        case .graduation:
-                            OnboardingGraduationStepView()
+                        // .graduation renders no destination of its own: it
+                        // holds the user ON the school screen (same target
+                        // path) while its graduation stage collects the date.
+                        // It can never appear in `path`.
+                        case .contentPreferences:
+                            OnboardingContentPreferencesStepView()
                         case .waitlist:
                             OnboardingWaitlistStepView()
+                        case .unrecognized:
+                            // The server is running an onboarding flow this build
+                            // doesn't know. Explicit case, not the `default` below:
+                            // falling through to EmptyView would strand the user on
+                            // a blank screen with no way forward.
+                            OnboardingUpdateRequiredView()
                         default:
                             EmptyView()
                         }
@@ -194,10 +207,17 @@ struct OnboardingCoordinator: View {
         case .birthday:            return [.birthday]
         case .username:            return [.birthday, .username]
         case .profile:             return [.birthday, .username, .profile]
-        case .contentPreferences:  return [.birthday, .username, .profile, .contentPreferences]
-        case .schoolVerify:        return [.birthday, .username, .profile, .contentPreferences, .schoolVerify]
-        case .graduation:          return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation]
-        case .waitlist:            return [.birthday, .username, .profile, .contentPreferences, .schoolVerify, .graduation, .waitlist]
+        case .schoolVerify:        return [.birthday, .username, .profile, .schoolVerify]
+        // Same path as schoolVerify ON PURPOSE: verification must not push
+        // anywhere — the school screen advances to its graduation stage in
+        // place, and only submitting graduation moves the path forward.
+        case .graduation:          return [.birthday, .username, .profile, .schoolVerify]
+        case .contentPreferences:  return [.birthday, .username, .profile, .schoolVerify, .contentPreferences]
+        case .waitlist:            return [.birthday, .username, .profile, .schoolVerify, .contentPreferences, .waitlist]
+        // Pushed alone, with none of the real steps beneath it: the preceding
+        // steps are meaningless when the server's flow is one this build can't
+        // complete, and stacking them would offer a back button into it.
+        case .unrecognized:        return [.unrecognized]
         }
     }
 }

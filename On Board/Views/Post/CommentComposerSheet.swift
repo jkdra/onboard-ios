@@ -12,6 +12,7 @@
 import SwiftUI
 
 struct CommentComposerSheet: View {
+    @Environment(\.commentMaxLength) private var commentMaxLength
     @Binding var composer: CommentComposerState
     let tone: PostTone
     let onPost: () async -> Void
@@ -51,11 +52,11 @@ struct CommentComposerSheet: View {
                     .focused($isFocused)
                     .disabled(isPosting)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .characterLimited($composer.draft, to: CommentComposerState.maxLength)
+                    .characterLimited($composer.draft, to: commentMaxLength)
 
-                Text("\(composer.draft.count) / \(CommentComposerState.maxLength)")
+                Text("\(composer.draft.count) / \(commentMaxLength)")
                     .fontStyle(.caption)
-                    .foregroundStyle(composer.draft.count >= CommentComposerState.maxLength ? .red : .secondary)
+                    .foregroundStyle(composer.draft.count >= commentMaxLength ? .red : .secondary)
                     .frame(maxWidth: .infinity, alignment: .trailing)
 
                 Button {

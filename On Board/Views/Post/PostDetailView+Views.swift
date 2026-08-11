@@ -21,14 +21,16 @@ extension PostDetailView {
                 onCancel: cancelEditing,
                 onSave: saveEdits
             )
-            ToolbarItem(placement: .bottomBar) { Spacer() }
-            ToolbarItem(placement: .bottomBar) {
-                TonePicker(selection: $draftTone, showBackground: false)
-            }
-            ToolbarItem(placement: .bottomBar) { Spacer() }
         }
 
-        if isReadOnly {
+        if editMode {
+            // Same principal-slot reasoning as NewPostView: tone is a
+            // POST property, so it lives in post-level chrome — not beside
+            // the text buttons, and not under the keyboard in a bottomBar.
+            ToolbarItem(placement: .principal) {
+                TonePicker(selection: $draftTone, showBackground: false)
+            }
+        } else if isReadOnly {
             ToolbarItem(placement: .principal) {
                 Label("Archived Post", systemImage: "archivebox")
                     .fontStyle(.caption)
@@ -44,12 +46,10 @@ extension PostDetailView {
             }
         }
 
-        if showImageViewer, imageViewerScale <= 1.0 {
+        if viewerPhase == .settled {
             ToolbarItem(placement: .topBarLeading) {
                 Button {
-                    withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) {
-                        showImageViewer = false
-                    }
+                    closeImageViewer()
                 } label: {
                     Label("Close", systemImage: "xmark")
                         .fontWeight(.semibold)
@@ -58,7 +58,7 @@ extension PostDetailView {
             }
         }
 
-        if !editMode, !isCommentEditing, !showImageViewer {
+        if !editMode, !isCommentEditing, !viewerPhase.coversScreen {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     if canEdit && !isReadOnly {
@@ -69,7 +69,7 @@ extension PostDetailView {
                             Label("Delete", systemImage: "trash")
                         }
                     }
-                    ShareLink(item: shareURL, subject: Text(livePost.title)) {
+                    ShareLink(item: shareURL, subject: Text(livePost.previewLine)) {
                         Label("Share", systemImage: "square.and.arrow.up")
                     }
                     if !isOwnPost {
@@ -147,7 +147,9 @@ extension PostDetailView {
                     .fontStyle(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
-                Text(livePost.createdAt.boardRelativeAge)
+                // The opened post has room for the phrase; the card's
+                // corner and the comment bylines keep the compact form.
+                Text(livePost.createdAt.boardVerboseAge)
                     .fontStyle(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -158,34 +160,16 @@ extension PostDetailView {
     @ViewBuilder
     private var restOfPostContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(livePost.title)
-                .fontStyle(.largeTitle)
-                // matchedGeometryEffect with properties: .position (no .size) can still
-                // leave Text trusting a stale cached frame from the transition, wrapping
-                // it to one line until the next layout pass. fixedSize forces it to always
-                // measure its own natural multiline height instead.
-                .fixedSize(horizontal: false, vertical: true)
-                .matchedGeometryEffect(id: "postTitle", in: postNamespace, properties: .position, anchor: .leading)
-            Text(livePost.description)
-                .fontStyle(.body)
-                .fixedSize(horizontal: false, vertical: true)
-                .matchedGeometryEffect(id: "postDescription", in: postNamespace, properties: .position, anchor: .leading)
+            // Rendered markup (titles, bold, bullets…) — PostMarkupView already
+            // applies fixedSize per block (see the old note about
+            // matchedGeometryEffect leaving Text with a stale cached frame).
+            PostMarkupView(content: livePost.content)
+                .matchedGeometryEffect(id: "postContent", in: postNamespace, properties: .position, anchor: .topLeading)
                 
-            if !livePost.tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(livePost.tags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-                .padding(.top, 4)
-            }
+            // Tag chips are gone from detail on purpose: tags are inline
+            // hashtags in the content now, highlighted right where they were
+            // typed. (Cards keep their chips row — a truncated card can cut
+            // off a trailing hashtag line, so chips guarantee visibility.)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .doubleTapHeart(
@@ -209,7 +193,12 @@ extension PostDetailView {
                         .stroke(tone.color.opacity(0.25), lineWidth: 0.9)
                 }
                 .background {
-                    Color.clear.matchedGeometryEffect(id: "postImage", in: postNamespace)
+                    // `isSource` hands off while the viewer is up: two live
+                    // sources for one id is undefined, and it's exactly what
+                    // makes the close morph start from a stale frame.
+                    Color.clear.matchedGeometryEffect(
+                        id: PostGeometryID.postImage, in: postNamespace, isSource: !showImageViewer
+                    )
                 }
                 .opacity(showImageViewer ? 0 : 1)
                 .doubleTapHeart(
@@ -217,7 +206,7 @@ extension PostDetailView {
                     isEnabled: !isReadOnly,
                     isLiked: { store.userReaction(for: livePost.id) == .like },
                     onLike: { store.setReaction(postId: livePost.id, reaction: .like) },
-                    onSingleTap: { withAnimation(.spring(response: 0.35, dampingFraction: 1.0)) { showImageViewer = true } }
+                    onSingleTap: { openImageViewer() }
                 )
         }
     }
@@ -342,77 +331,87 @@ extension PostDetailView {
     /// slots as the read-mode text, so entering edit mode morphs in place.
     @ViewBuilder
     var postEditContent: some View {
-        // Panels occupy real space, so the outer VStack's 16pt spacing is the
-        // true visible rhythm — no inner stack needed.
-        TextField("Title", text: $draftTitle, axis: .vertical)
-            .textFieldStyle(.boardTitle)
-            .fixedSize(horizontal: false, vertical: true)
-            .fontStyle(.largeTitle)
-            .keyboardType(.default)
-            .textInputAutocapitalization(.sentences)
-            .matchedFieldText(id: "postTitle", in: postNamespace, variant: .title)
-        TextField("Description", text: $draftDescription, axis: .vertical)
-            .textFieldStyle(.boardBody)
-            // Multi-line fields re-measure a beat after appearing; without
-            // this they settle unanimated mid-morph. Mirrors read mode's
-            // fixedSize note above.
-            .fixedSize(horizontal: false, vertical: true)
-            .fontStyle(.body)
-            .keyboardType(.twitter)
-            .matchedFieldText(id: "postDescription", in: postNamespace, variant: .body)
-
-        editTagsSection
-
-        editImageSection
-            .transition(.opacity)
+        // A real View struct, not an inline builder chain: the edit stack
+        // (picker + editor + glass + matched geometry + transitions + photo
+        // tile) as one expression blew the main thread's stack copying its
+        // generic type — the same budget PostDetailView.body's split guards
+        // against. The struct boundary collapses the type.
+        PostEditContentView(
+            draftContent: $draftContent,
+            draftTone: $draftTone,
+            editorController: editEditorController,
+            editPhoto: editPhoto,
+            existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
+            tone: tone,
+            namespace: postNamespace,
+            onRemoveImage: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
+        )
     }
+}
 
-    @ViewBuilder
-    var editTagsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Tags (\(draftTags.count)/3)", systemImage: "number")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(draftTags.isEmpty ? "Add Tags" : "Edit") {
-                    showingTagSelection = true
+/// Edit-mode content column. See `postEditContent` for why this is a struct.
+private struct PostEditContentView: View {
+    @Binding var draftContent: String
+    @Binding var draftTone: PostTone
+    let editorController: MarkupEditorController
+    let editPhoto: PhotoAttachmentController
+    let existingImageURL: URL?
+    let tone: PostTone
+    let namespace: Namespace.ID
+    let onRemoveImage: () -> Void
+
+    @Environment(\.photoAttachmentsEnabled) private var photoAttachmentsEnabled
+
+    var body: some View {
+        // Explicit VStack (spacing matches the outer edit column rhythm) —
+        // as a nested struct these are no longer direct children of
+        // PostDetailView's VStack.
+        VStack(alignment: .leading, spacing: 20) {
+            // Tone control lives in the nav bar's principal slot (see
+            // toolbarContent), exactly like NewPostView — not in-content.
+
+            // The same rich composer as NewPostView: markers dim in place,
+            // and the formatting bar comes with it as the field's own
+            // keyboard accessory — nothing for this screen to place or gate.
+            // Chrome padding single-sourced on the variant's inset — a
+            // literal here desynchronizes matchedFieldText's negation and
+            // the text visibly shifts during the morph (the
+            // matched-field-text-shift-in regression). properties/anchor
+            // mirror the read-side PostMarkupView's matchedGeometryEffect.
+            MarkupTextEditor(text: $draftContent, controller: editorController)
+                .padding(.horizontal, BoardTextFieldStyle.Variant.body.inset.h)
+                .padding(.vertical, BoardTextFieldStyle.Variant.body.inset.v)
+                .background {
+                    GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                                    fallback: AnyShapeStyle(.thinMaterial))
                 }
-                .fontStyle(.subheadline)
-            }
-            
-            if !draftTags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(draftTags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
+                .matchedFieldText(id: "postContent", in: namespace, variant: .body,
+                                  properties: .position, anchor: .topLeading)
+
+            editImageSection
         }
-        .padding(.vertical, 8)
+        // Mirrors postContent's fast fade — see the comment at the mode
+        // switch in PostDetailView.body. One transition for the whole
+        // column now that it's a single view.
+        .transition(.opacity.animation(.easeOut(duration: 0.18)))
     }
 
     @ViewBuilder
-    var editImageSection: some View {
+    private var editImageSection: some View {
         if editPhoto.uploadFailed {
             Label("Image couldn't be uploaded — the previous one is kept.", systemImage: "exclamationmark.triangle")
                 .fontStyle(.caption)
                 .foregroundStyle(.secondary)
         }
 
-        PhotoAttachmentTile(
-            controller: editPhoto,
-            onCapture: { editPhoto.uncroppedImage = $0 },
-            existingImageURL: draftImageUrl.flatMap(URL.init(string:)),
-            tone: tone,
-            onRemove: { withAnimation(.smooth(duration: 0.25)) { removeEditImage() } }
-        )
+        if photoAttachmentsEnabled {
+            PhotoAttachmentTile(
+                controller: editPhoto,
+                onCapture: { editPhoto.uncroppedImage = $0 },
+                existingImageURL: existingImageURL,
+                tone: tone,
+                onRemove: onRemoveImage
+            )
+        }
     }
 }

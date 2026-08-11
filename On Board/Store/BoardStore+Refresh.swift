@@ -136,7 +136,7 @@ extension BoardStore {
     }
 
     private func evictOldArchiveWeeksIfNeeded() {
-        while cachedArchiveWeekIDs.count > Self.maxCachedArchiveWeeks {
+        while cachedArchiveWeekIDs.count > archiveWeekCacheLimit {
             evictArchiveWeekPosts(weekID: cachedArchiveWeekIDs.removeFirst())
         }
     }

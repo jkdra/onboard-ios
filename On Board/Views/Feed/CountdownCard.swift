@@ -7,6 +7,7 @@ import SwiftUI
 import UIKit
 
 struct CountdownCard: View {
+    @Environment(\.glassEffectsEnabled) private var glassEffectsEnabled
     let week: BoardWeek?
     let isArchived: Bool
     var columnWidth: CGFloat = 0
@@ -225,8 +226,14 @@ struct CountdownCard: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
+                        // The board TALKING, not a post: Expanded (the
+                        // display face the wordmark and titles use) at the
+                        // body-only extraLarge card size, so the prompt sits
+                        // level with a short post card instead of louder than
+                        // one. Post bodies stay SemiExpanded — the face is
+                        // what marks this as the board's own voice.
                         Text(config.bodyText)
-                            .fontStyle(.callout)
+                            .font(.custom("ZalandoSansExpanded-Regular", size: 16, relativeTo: .subheadline))
                             .fontWeight(config.isPrompt ? .medium : .regular)
                             .foregroundStyle(.primary) // Higher opacity
 
@@ -287,7 +294,7 @@ struct CountdownCard: View {
     @ViewBuilder
     private func cardBackground(showRed: Bool = false) -> some View {
         let border = showRed ? Color.red.opacity(0.4) : Color.secondary.opacity(0.25)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *), glassEffectsEnabled {
             Color.clear
                 .glassEffect(
                     showRed ? .regular.tint(Color.red.opacity(0.12)) : .regular,

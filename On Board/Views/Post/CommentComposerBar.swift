@@ -13,6 +13,7 @@
 import SwiftUI
 
 struct CommentComposerBar: View {
+    @Environment(\.commentMaxLength) private var commentMaxLength
     let tone: PostTone
     let counts: [Reaction: Int]
     @Binding var selectedReaction: Reaction?
@@ -180,7 +181,7 @@ struct CommentComposerBar: View {
                 fieldHeight = height
             }
             .padding(.vertical, 6)
-            .characterLimited($composer.draft, to: CommentComposerState.maxLength)
+            .characterLimited($composer.draft, to: commentMaxLength)
 
             VStack(spacing: 6) {
                 if showExpandButton {

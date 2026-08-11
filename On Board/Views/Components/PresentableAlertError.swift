@@ -178,12 +178,28 @@ extension BoardServiceError: PresentableDomainError {
     }
 }
 
+/// The error buzz, at the single choke point every user-facing error alert
+/// already routes through — a failed optimistic write is FELT, not just
+/// shown (read-vs-write rule: writes never fail silently). Same
+/// `hapticsEnabled` gate as every other haptic in the app.
+private struct ErrorHapticModifier: ViewModifier {
+    @AppStorage("hapticsEnabled") private var hapticsEnabled = true
+    let isPresented: Bool
+
+    func body(content: Content) -> some View {
+        content.sensoryFeedback(trigger: isPresented) { _, nowPresented in
+            (nowPresented && hapticsEnabled) ? .error : nil
+        }
+    }
+}
+
 extension View {
     func presentableErrorAlert(
         error: Binding<PresentableAlertError?>,
         onDismiss: (() -> Void)? = nil
     ) -> some View {
-        alert(
+        modifier(ErrorHapticModifier(isPresented: error.wrappedValue != nil))
+            .alert(
             isPresented: Binding(
                 get: { error.wrappedValue != nil },
                 set: { isPresented in
