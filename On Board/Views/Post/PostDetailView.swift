@@ -14,15 +14,15 @@ struct PostDetailView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var scheme
     @Environment(\.originatingProfileID) var originatingProfileID
+    @Environment(\.photoAttachmentsEnabled) var photoAttachmentsEnabled
     @Namespace var postNamespace
 
     // Post editing
     @State var editMode = false
-    @State var draftTitle = ""
-    @State var draftDescription = ""
+    @State var draftContent = ""
+    /// Toolbar↔editor bridge for edit mode's rich composer.
+    @State var editEditorController = MarkupEditorController()
     @State var draftTone: PostTone
-    @State var draftTags: [String] = []
-    @State var showingTagSelection = false
     // Guards Save against a double-tap firing two concurrent updatePost
     // calls for the same post — the slower response would silently win.
     @State var isSavingEdits = false
@@ -46,7 +46,25 @@ struct PostDetailView: View {
     @State var alertError: PresentableAlertError?
     @State var isLoadingComments = false
     @State var showImageViewer = false
-    @State var imageViewerScale: CGFloat = 1.0
+    /// The viewer's lifecycle, written by ImageViewerView. Nav-bar chrome
+    /// derives from it (X in, ••• out, back hidden — only once `.settled`,
+    /// never during `.morphing`): toolbar mutations are UIKit layout work,
+    /// and when they ran inside the opening transaction they were the
+    /// enter-morph's stutter. Photos does the same thing: zoom first,
+    /// chrome after. The viewer owns the settle timing — this view runs no
+    /// timer of its own.
+    @State var viewerPhase: ImageViewerPhase = .closed
+
+    /// The single open/close pair every call site uses — the tap, the
+    /// toolbar X, and the `-dev.imageViewerDemo` timer — so the morph
+    /// animation cannot diverge per path.
+    func openImageViewer() {
+        withAnimation(ImageViewerMotion.morphSpring) { showImageViewer = true }
+    }
+
+    func closeImageViewer() {
+        withAnimation(ImageViewerMotion.morphSpring) { showImageViewer = false }
+    }
 
     // Moderation
     @State var reportTarget: ReportTarget?
@@ -55,9 +73,7 @@ struct PostDetailView: View {
     init(post: Post) {
         self.post = post
         _draftTone = State(initialValue: post.tone)
-        _draftTitle = State(initialValue: post.title)
-        _draftDescription = State(initialValue: post.description)
-        _draftTags = State(initialValue: post.tags)
+        _draftContent = State(initialValue: post.content)
     }
 
     // MARK: - Derived
@@ -95,7 +111,8 @@ struct PostDetailView: View {
     var clearingSoonWeekEnd: Date? {
         guard !isReadOnly,
               let endsAt = store.activeBoardWeek?.endsAt,
-              BoardSchedule.isClearingSoon(weekEnd: endsAt) else { return nil }
+              BoardSchedule.isClearingSoon(weekEnd: endsAt,
+                                           thresholds: store.boardThresholds) else { return nil }
         return endsAt
     }
 
@@ -121,8 +138,17 @@ struct PostDetailView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     if !editMode {
+                        // FAST content fade inside the slower frame morph.
+                        // Read-mode markup and the WYSIWYG editor can never
+                        // pixel-align (the editor shows literal `# ` markers
+                        // and wraps differently), so a full-length crossfade
+                        // double-exposes two offset copies of the text for
+                        // the whole 0.4s morph. Collapsing the CONTENT fade
+                        // to ~0.18s while the glass/geometry keep the 0.4s
+                        // glide reads as one clean motion instead.
                         postContent
                             .opacity(isCommentEditing ? 0.32 : 1)
+                            .transition(.opacity.animation(.easeOut(duration: 0.18)))
                         Divider()
                             .opacity(isCommentEditing ? 0.32 : 1)
                         commentsSection
@@ -180,6 +206,48 @@ struct PostDetailView: View {
                 guard let authorId = livePost.authorId else { return }
                 store.prefetchPopScore(for: authorId)
             }
+            .onAppear {
+                // DEV: `-dev.editPost` enters edit mode on appear. Edit mode is
+                // otherwise only reachable through the ••• menu, and synthesized
+                // taps on a SwiftUI Menu are broken under this Xcode — this is
+                // the only way to see the edit composer headlessly.
+                if ProcessInfo.processInfo.arguments.contains("-dev.editPost") {
+                    beginEditing()
+                }
+                // DEV: `-dev.reactAs laugh` seeds the viewer's own reaction, so
+                // the reaction bar's selected states can be screenshotted —
+                // they otherwise need a tap, and taps on the bar's Menu don't
+                // deliver under this Xcode.
+                if let raw = UserDefaults.standard.string(forKey: "dev.reactAs"),
+                   let reaction = Reaction(rawValue: raw) {
+                    store.setReaction(postId: livePost.id, reaction: reaction)
+                }
+                // DEV: `-dev.imageViewerDemo` opens then closes the image
+                // viewer on a timer, using the SAME animations as the real
+                // tap/close call sites — the only headless way to put the
+                // hero morph on video for frame-by-frame review.
+                if ProcessInfo.processInfo.arguments.contains("-dev.imageViewerDemo"),
+                   livePost.imageUrl != nil {
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        openImageViewer()
+                        try? await Task.sleep(for: .seconds(2))
+                        closeImageViewer()
+                    }
+                }
+                // DEV: `-dev.editDemo` enters then cancels edit mode on a
+                // timer, through the SAME beginEditing/cancelEditing paths as
+                // the ••• menu — the only headless way to put the edit-mode
+                // morph on video (same rationale as imageViewerDemo).
+                if ProcessInfo.processInfo.arguments.contains("-dev.editDemo") {
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        beginEditing()
+                        try? await Task.sleep(for: .seconds(2))
+                        cancelEditing()
+                    }
+                }
+            }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 // Hidden while editing a post OR a comment — both put the keyboard
                 // up for a different text session, and the bar previously rode the
@@ -199,6 +267,31 @@ struct PostDetailView: View {
                         // handoff as a cancel and wipe the draft.
                         isSheetPresented: showExpandedComposer,
                         isErrorPresented: alertError != nil
+                    )
+                    // The bar should only ride the keyboard when it OWNS the
+                    // keyboard. `CommentComposerBar` keeps `isFieldFocused` and
+                    // `composer.isComposing` in lockstep (focus is set from
+                    // isComposing, and losing focus clears it), so in browse mode
+                    // nothing here is focused — and any bottom keyboard inset is
+                    // therefore stale, inherited from a sheet (NewPostView,
+                    // CommentComposerSheet) that was dismissed just before this
+                    // screen was pushed. Honouring it strands the reaction bar
+                    // mid-screen until something else forces a relayout.
+                    //
+                    // The earlier fix for this dismissed the keyboard at the
+                    // *sender* before dismissing the sheet. That reduces the
+                    // window but cannot close it: it races the keyboard's hide
+                    // animation, which is why the symptom kept coming back
+                    // intermittently. This makes position depend on state we
+                    // control rather than on winning a race, and it holds no
+                    // matter which screen preceded this one.
+                    //
+                    // An empty edge set (rather than an if/else) keeps the bar's
+                    // view identity stable so the browse/compose morph animation
+                    // is unaffected.
+                    .ignoresSafeArea(
+                        .keyboard,
+                        edges: composer.isComposing ? [] : .bottom
                     )
                 }
             }
@@ -251,9 +344,6 @@ struct PostDetailView: View {
                     if case .post = target { dismiss() }
                 }
             }
-            .sheet(isPresented: $showingTagSelection) {
-                TagSelectionView(selectedTags: $draftTags)
-            }
             .confirmationDialog(
                 "Block \(blockCandidate?.handle ?? "")?",
                 isPresented: Binding(
@@ -286,8 +376,17 @@ struct PostDetailView: View {
             } message: { _ in
                 Text("This also removes any replies to it.")
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(editMode || showImageViewer)
+            // .automatic during the clears-soon window: .inline squeezes the
+            // ticking ClearingSoonPrincipal's vertical budget; with no title
+            // text the difference is invisible otherwise.
+            .navigationBarTitleDisplayMode(clearingSoonWeekEnd != nil ? .automatic : .inline)
+            .navigationBarBackButtonHidden(editMode || viewerPhase.coversScreen)
+            // Deliberately `showImageViewer`, NOT the deferred chrome flag:
+            // this must flip the instant the viewer opens, or the 450ms chrome
+            // window would leave the zoom-pop edge swipe live mid-morph — an
+            // ancestor transform during the interactive pop is exactly the
+            // zoom-transition landmine documented in CLAUDE.md. It's a
+            // presentation flag, not toolbar layout, so it's cheap in-transaction.
             .interactiveDismissDisabled(editMode || showImageViewer)
             // Keep the single-finger interactive pop (governed above), but drop the
             // zoom transition's two-finger pinch-to-dismiss — it reads as accidental.
@@ -297,10 +396,10 @@ struct PostDetailView: View {
                 ImageViewerView(
                     url: URL(string: livePost.imageUrl ?? ""),
                     namespace: postNamespace,
-                    sourceID: "postImage",
+                    sourceID: PostGeometryID.postImage,
                     isPresented: $showImageViewer,
                     aspectRatio: livePost.imageAspectRatio.map { CGFloat($0) },
-                    currentScale: $imageViewerScale
+                    phase: $viewerPhase
                 )
                 .ignoresSafeArea()
                 .zIndex(100)
@@ -337,8 +436,7 @@ struct PostDetailView: View {
     NavigationStack {
         PostDetailView(
             post: .init(
-                title: "Test Post With A Title That Wraps Across Multiple Lines",
-                description: "Hello",
+                content: "# Test Post With A Title That Wraps Across Multiple Lines\nHello **bold** and ~~gone~~",
                 author: "author1",
                 tone: .red,
                 reactionCounts: [.like: 1367, .dislike: 126, .laugh: 2_200_000],

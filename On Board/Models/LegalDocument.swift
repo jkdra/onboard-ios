@@ -9,7 +9,6 @@
 //
 
 import Foundation
-import Supabase
 
 /// NOTE: NO explicit snake_case CodingKeys — the Supabase client decodes with
 /// `convertFromSnakeCase`, so `doc_type`/`effective_at`/`requires_reacceptance`
@@ -44,28 +43,5 @@ enum LegalDocumentType: String, CaseIterable {
         case .terms: AppLinks.termsOfServiceURL
         case .privacy: AppLinks.privacyPolicyURL
         }
-    }
-}
-
-enum LegalServiceError: Error {
-    /// No Supabase client (mock/unconfigured build) — fall back to the web page.
-    case unavailable
-    case notFound
-}
-
-/// Read-only fetch of the latest published version of a policy. Public content,
-/// so no auth is required; a build without Supabase configured throws
-/// `.unavailable` and the caller offers the web page instead.
-enum LegalService {
-    static func fetch(_ type: LegalDocumentType) async throws -> LegalDocument {
-        guard let client = SupabaseClientFactory.client(for: .current) else {
-            throw LegalServiceError.unavailable
-        }
-        let rows: [LegalDocument] = try await client
-            .rpc("get_legal_document", params: ["p_type": type.rawValue])
-            .execute()
-            .value
-        guard let doc = rows.first else { throw LegalServiceError.notFound }
-        return doc
     }
 }

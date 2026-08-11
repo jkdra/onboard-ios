@@ -39,6 +39,27 @@ enum PostTone: String, CaseIterable, Identifiable, Codable {
         allCases.randomElement() ?? .blue
     }
 
+    /// Unknown wire values map to a known tone instead of throwing.
+    ///
+    /// `fetch_posts_for_week` decodes `[RemotePostRow]`, so a throw here fails
+    /// the *entire* feed response, not one card — a tone added in a future build
+    /// would blank the board for every client that hadn't updated, for the whole
+    /// week, with the content gone at the next reset.
+    nonisolated init(from decoder: any Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = PostTone(rawValue: raw) ?? PostTone.stableFallback(for: raw)
+    }
+
+    /// Deterministic so an unknown tone renders the same color on every launch
+    /// and every device, and so a board full of unknown tones stays varied
+    /// instead of collapsing to a single color.
+    ///
+    /// Must use `StableHash`, not `hashValue` — see that type's doc comment.
+    nonisolated static func stableFallback(for raw: String) -> PostTone {
+        let index = Int(StableHash.fnv1a(raw) % UInt64(allCases.count))
+        return allCases[index]
+    }
+
     /// Legible foreground for content drawn on this tone's color (e.g. a
     /// selected `ReactionBar` pill, tinted with `tone.color` at partial
     /// opacity). White reads fine on every system tone at that blend except

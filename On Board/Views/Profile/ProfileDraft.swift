@@ -16,8 +16,16 @@ import SwiftUI
 @Observable
 @MainActor
 final class ProfileDraft {
+    /// Compiled defaults. Instance copies below are what `canSave` reads, so a
+    /// remote override can raise or lower the limit without a build.
     static let displayNameLimit = 50
     static let bioLimit = 300
+
+    /// Set from `RemoteConfig` by the owning view. `ProfileDraft` is an
+    /// `@Observable` model rather than a `View`, so it can't read the
+    /// environment itself — the limits are handed to it instead.
+    var displayNameLimit = ProfileDraft.displayNameLimit
+    var bioLimit = ProfileDraft.bioLimit
 
     enum HandleAvailability: Equatable {
         case idle
@@ -58,8 +66,8 @@ final class ProfileDraft {
     }
 
     var canSave: Bool {
-        displayName.count <= Self.displayNameLimit
-            && bio.count <= Self.bioLimit
+        displayName.count <= displayNameLimit
+            && bio.count <= bioLimit
             && HandleRules.isValid(handle.trimmed)
             && handleAvailability == .available
             && birthday != nil

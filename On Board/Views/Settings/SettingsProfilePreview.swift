@@ -13,14 +13,10 @@ struct SettingsProfilePreview: View {
             AvatarView(profile: profile, size: .medium)
 
             VStack(alignment: .leading, spacing: 2) {
-                if profile.displayName.isEmpty {
-                    Text(profile.handle)
-                        .fontStyle(.headline)
-                        .foregroundStyle(.primary)
-                } else {
-                    Text(profile.displayName)
-                        .fontStyle(.headline)
-                        .foregroundStyle(.primary)
+                Text(profile.displayNameOrHandle)
+                    .fontStyle(.headline)
+                    .foregroundStyle(.primary)
+                if !profile.displayName.isEmpty {
                     Text(profile.handle)
                         .fontStyle(.subheadline)
                         .foregroundStyle(.secondary)
@@ -30,7 +26,11 @@ struct SettingsProfilePreview: View {
             Spacer(minLength: 8)
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(profile.displayName.isEmpty ? profile.handle : "\(profile.displayName), \(profile.handle)")
+        .accessibilityLabel(
+            profile.displayName.isEmpty
+                ? profile.displayNameOrHandle
+                : "\(profile.displayNameOrHandle), \(profile.handle)"
+        )
         .accessibilityHint("View and edit your profile")
     }
 }

@@ -7,19 +7,18 @@ import Foundation
 
 extension BoardStore {
     func addPost(
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        toneExplicit: Bool = false,
         imageUrl: String? = nil,
-        imageAspectRatio: Double? = nil,
-        tags: [String] = []
+        imageAspectRatio: Double? = nil
     ) async -> Bool {
         guard canInteractWithBoard, let user = currentUser else { return false }
         // Backstop for the posting freeze (the UI disables the entry, this blocks any
         // composer left open from before the cutoff). Covers expiry too: `allowsPosting`
         // is false once the deadline passes, so a stale composer can't write into a week
         // that has already ended while the client waits on the rollover.
-        guard BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt).allowsPosting else {
+        guard BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt, thresholds: boardThresholds).allowsPosting else {
             loadError = "Posting is closed for the final hour before the board clears."
             return false
         }
@@ -34,12 +33,14 @@ extension BoardStore {
             let post = try await boardService.createPost(
                 weekID: weekID,
                 authorID: user.id,
-                title: title,
-                description: description,
+                content: content,
                 tone: tone,
+                toneExplicit: toneExplicit,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
-                tags: tags
+                // Derived here, not passed in: content is the source of truth,
+                // the server's tags table is a denormalized index of it.
+                tags: PostMarkup.parse(content).tags
             )
             insertPost(post)
             return true
@@ -51,12 +52,11 @@ extension BoardStore {
 
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
-        imageAspectRatio: Double?,
-        tags: [String]
+        imageAspectRatio: Double?
     ) async -> Bool {
         guard let index = posts.firstIndex(where: { $0.id == id }),
               canInteract(with: posts[index]),
@@ -70,16 +70,14 @@ extension BoardStore {
                 authorId: existing.authorId,
                 boardWeekId: existing.boardWeekId,
                 isReadOnly: existing.isReadOnly,
-                title: title,
-                description: description,
+                content: content,
                 author: existing.author,
                 tone: tone,
                 reactionCounts: existing.reactionCounts,
                 comments: comments(for: id),
                 createdAt: existing.createdAt,
                 imageUrl: imageUrl,
-                imageAspectRatio: imageAspectRatio,
-                tags: tags
+                imageAspectRatio: imageAspectRatio
             )
             replacePost(at: index, with: updated)
             return true
@@ -88,12 +86,12 @@ extension BoardStore {
         do {
             let updated = try await boardService.updatePost(
                 id: id,
-                title: title,
-                description: description,
+                content: content,
                 tone: tone,
+                toneExplicit: toneExplicit,
                 imageUrl: imageUrl,
                 imageAspectRatio: imageAspectRatio,
-                tags: tags
+                tags: PostMarkup.parse(content).tags
             )
             // `posts` can be rewritten by a concurrent refresh/realtime change while
             // the network call is in flight, so the index captured above is stale.

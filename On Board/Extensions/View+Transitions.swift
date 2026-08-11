@@ -36,6 +36,25 @@ extension View {
     func disableZoomPinchToDismiss() -> some View {
         background(ZoomPinchDisabler().frame(width: 0, height: 0).accessibilityHidden(true))
     }
+
+    /// Applies the zoom navigation transition only when a namespace is present.
+    ///
+    /// Mirrors the `matchedTransitionSource(id:in:)` overload above, so a single
+    /// nil namespace disables *both* ends of the transition at once. That matters:
+    /// a destination that keeps `.navigationTransition(.zoom(...))` while its
+    /// sources have stopped registering resolves no source rect and collapses the
+    /// card toward zero on pop — worse than not having the transition at all.
+    ///
+    /// This is what `FeatureFlag.zoomTransition` switches: off, every card falls
+    /// back to a plain push.
+    @ViewBuilder
+    func zoomTransition(sourceID: some Hashable, in namespace: Namespace.ID?) -> some View {
+        if let namespace {
+            navigationTransition(.zoom(sourceID: sourceID, in: namespace))
+        } else {
+            self
+        }
+    }
 }
 
 /// Host for `disableZoomPinchToDismiss()`. See that modifier for the rationale.

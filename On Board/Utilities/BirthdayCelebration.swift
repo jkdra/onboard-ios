@@ -23,14 +23,6 @@ enum BirthdayCelebration {
         return b.month == t.month && b.day == t.day
     }
 
-    /// "August 12" — the month/day used in the profile greeting cross-fade.
-    static func monthDayString(_ birthday: String?) -> String? {
-        guard let date = parse(birthday) else { return nil }
-        let f = DateFormatter()
-        f.dateFormat = "MMMM d"
-        return f.string(from: date)
-    }
-
     // MARK: Feed gating — once per birthday, per user
 
     private static func feedKey(for userID: UUID) -> String {

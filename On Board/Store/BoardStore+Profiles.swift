@@ -136,4 +136,35 @@ extension BoardStore {
         guard popScores[userID] == nil else { return }
         Task { await refreshPopScore(for: userID) }
     }
+
+    // MARK: - Favorite Color
+
+    /// The user's resolved Favorite Color, or nil if they haven't earned one
+    /// (too few posts, or no dominant tone — see `FavoriteTone.resolve`).
+    func favoriteTone(for userID: UUID) -> FavoriteTone? {
+        guard let counts = toneCounts[userID] else { return nil }
+        return FavoriteTone.resolve(from: counts, userID: userID)
+    }
+
+    /// Fetches (or, offline, locally aggregates) a profile's tone tally.
+    /// Revalidation read, so a failure is silent and only an actual change
+    /// pays for the disk write — same contract as `refreshPopScore`.
+    func refreshFavoriteTone(for userID: UUID) async {
+        let previous = toneCounts[userID]
+        if let boardService {
+            guard let fetched = try? await boardService.fetchUserToneCounts(for: userID) else { return }
+            toneCounts[userID] = fetched
+        } else {
+            // Offline/mock mode: approximate from the posts in memory. This
+            // undercounts by design — the server tally spans every week ever,
+            // and only this week's posts are here.
+            toneCounts[userID] = posts
+                .filter { $0.authorId == userID }
+                .reduce(into: [PostTone: Int]()) { counts, post in
+                    counts[post.tone, default: 0] += 1
+                }
+        }
+        guard toneCounts[userID] != previous else { return }
+        persistToDisk()
+    }
 }

@@ -31,7 +31,7 @@ extension BoardStore {
     func isWeeklyBoundaryFailure(weekIDAtSend: UUID?) -> Bool {
         guard let weekIDAtSend else { return false }
         guard activeBoardWeek?.id == weekIDAtSend else { return true }
-        return BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt).hasEnded
+        return BoardSchedule.phase(weekEnd: activeBoardWeek?.endsAt, thresholds: boardThresholds).hasEnded
     }
 
     var canInteractWithBoard: Bool {

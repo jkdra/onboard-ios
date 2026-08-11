@@ -58,12 +58,13 @@ extension PostDetailView {
             let effectiveAspectRatio = editPhoto.uploadedAspectRatio ?? draftImageAspectRatio
             let succeeded = await store.updatePost(
                 id: livePost.id,
-                title: draftTitle.trimmed,
-                description: draftDescription.trimmed,
+                content: draftContent.trimmed,
                 tone: draftTone,
+                // The edit-mode tone picker has no "Any Color!" — reaching it
+                // at all means the author chose this tone deliberately.
+                toneExplicit: true,
                 imageUrl: effectiveImageUrl,
-                imageAspectRatio: effectiveAspectRatio,
-                tags: draftTags
+                imageAspectRatio: effectiveAspectRatio
             )
             guard succeeded else { return }
             withAnimation(.smooth(duration: 0.4)) { editMode = false }
@@ -76,10 +77,8 @@ extension PostDetailView {
     }
 
     private func resetEditDraft() {
-        draftTitle = livePost.title
-        draftDescription = livePost.description
+        draftContent = livePost.content
         draftTone = livePost.tone
-        draftTags = livePost.tags
         draftImageUrl = livePost.imageUrl
         draftImageAspectRatio = livePost.imageAspectRatio
         editPhoto.reset()

@@ -17,6 +17,7 @@ enum ProfileGeometryID: Hashable {
     case username
     case bio
     case popScore
+    case favoriteColor
     case actionButton
     case avatarImage
 }
@@ -35,6 +36,7 @@ struct ProfileReadContent: View {
     @Environment(BoardStore.self) private var store
     @Environment(EntitlementStore.self) private var entitlement
     @AppStorage("profileColor") private var profileColor: ProfileColor = .none
+    @Environment(\.favoriteColorEnabled) private var favoriteColorEnabled
 
     private var canEdit: Bool { store.canEdit(profile: profile) }
     private var isBlockedByMe: Bool { store.isBlocked(userID: profile.id) }
@@ -84,6 +86,16 @@ struct ProfileReadContent: View {
                         .padding(.top, 8)
                         .matchedGeometryEffect(id: ProfileGeometryID.popScore, in: namespace)
                 }
+
+                // Dark-deployed (FeatureFlag.favoriteColor). No skeleton: a
+                // user who hasn't earned a favorite yet shows nothing at all,
+                // so a placeholder here would promise a row that may never
+                // arrive.
+                if favoriteColorEnabled, let favorite = store.favoriteTone(for: profile.id) {
+                    FavoriteColorView(favorite: favorite)
+                        .padding(.top, 14)
+                        .matchedGeometryEffect(id: ProfileGeometryID.favoriteColor, in: namespace)
+                }
             }
 
             if canEdit {
@@ -119,7 +131,12 @@ struct ProfileReadContent: View {
         Button(action: onAvatarTap) {
             AvatarView(profile: profile, size: .large, tint: avatarTint)
                 .background {
-                    Color.clear.matchedGeometryEffect(id: ProfileGeometryID.avatarImage, in: namespace)
+                    // Same handoff as the post image: exactly one live source
+                    // per id at steady state, or the viewer's close morph can
+                    // resolve against a stale frame.
+                    Color.clear.matchedGeometryEffect(
+                        id: ProfileGeometryID.avatarImage, in: namespace, isSource: !isAvatarViewerOpen
+                    )
                 }
                 .opacity(isAvatarViewerOpen ? 0 : 1)
         }
@@ -137,12 +154,12 @@ struct ProfileReadContent: View {
             // display-name field simply fades in above it, which reads as "you can
             // add one" rather than a glitchy content swap.
             if profile.displayName.isEmpty {
-                Text(profile.handle)
+                Text(profile.displayNameOrHandle)
                     .fontStyle(.title)
                     .fontWeight(.heavy)
                     .matchedGeometryEffect(id: ProfileGeometryID.username, in: namespace, anchor: .leading)
             } else {
-                Text(profile.displayName)
+                Text(profile.displayNameOrHandle)
                     .fontStyle(.title)
                     .fontWeight(.heavy)
                     .matchedGeometryEffect(id: ProfileGeometryID.displayName, in: namespace, anchor: .leading)

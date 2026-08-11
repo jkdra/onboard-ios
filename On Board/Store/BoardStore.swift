@@ -12,13 +12,14 @@
 //  `+Refresh`; ownership/interaction-gating lookups are in `+Lookups`.
 //
 //  This file keeps the caching dicts (postsByWeek, postsByID, profileIndex,
-//  postProxies, the feed-items cache) and every method that touches them
-//  directly, fully private — Swift extensions can't hold stored properties,
-//  so splitting these out further would mean widening them past `private`
-//  for a cluster of methods (rebuildCaches, apply, mergeWeekPosts,
-//  feedItems(for:), profile(id:), etc.) that are genuinely this
-//  interdependent. +Refresh's archive eviction reaches this state only
-//  through cachedPostIDs(inWeek:)/removeProxies(for:), not directly.
+//  postProxies, the feed-items cache) and the rebuild/apply/merge methods
+//  that touch them. Session configuration + DEV board controls live in
+//  `+Configuration`; feed composition (posts(for:)/feedItems) lives in
+//  `+Feed` — the feed caches (postsByWeek, cachedFeedItemsByWeek,
+//  feedItemsCacheKeys) are `internal` rather than `private` solely so that
+//  file can read/write them; nothing outside BoardStore's own extensions
+//  should. +Refresh's archive eviction reaches this state only through
+//  cachedPostIDs(inWeek:)/removeProxies(for:), not directly.
 //
 
 import Foundation
@@ -64,6 +65,10 @@ final class BoardStore {
     /// Pop Score per profile, keyed by user ID — moved here from ProfileView's
     /// local @State so it's cacheable and prefetchable. See BoardStore+Profiles.swift.
     var popScores: [UUID: [Reaction: Int]] = [:]
+    /// Favorite Color tally per profile, keyed by user ID. Same shape and
+    /// lifecycle as `popScores` — server-tallied so it outlives the weekly
+    /// clear. See BoardStore+Profiles.swift.
+    var toneCounts: [UUID: [PostTone: Int]] = [:]
     var notificationSettings: NotificationSettings?
     /// Surfaces a failed notification-settings save as an alert. Deliberately
     /// separate from `loadError`, which is about board-loading failures.
@@ -72,21 +77,20 @@ final class BoardStore {
     // MARK: - Internals
 
     var boardService: (any BoardService)?
-    // These caching dicts (and the rebuild/apply/merge methods that touch
-    // them) all stay in *this* file, not split into an extension — Swift
-    // extensions can't hold stored properties, so any method that moves to a
-    // different file needs its backing state widened past `private`. These
-    // dicts are read/written by a genuinely tangled cluster of methods
-    // (rebuildCaches, apply, mergeWeekPosts, feedItems(for:), profile(id:),
-    // etc.), so splitting them out would cost real encapsulation for no
-    // functional gain — kept fully private instead.
+    // These caching dicts stay in *this* file — Swift extensions can't hold
+    // stored properties. They're read/written by a genuinely tangled cluster
+    // of methods (rebuildCaches, apply, mergeWeekPosts, feedItems(for:),
+    // profile(id:), etc.). postsByWeek, cachedFeedItemsByWeek, and
+    // feedItemsCacheKeys are `internal` (not `private`) only because the
+    // feed-composition methods that use them live in BoardStore+Feed.swift;
+    // treat them as private to BoardStore's own extensions.
     private var profileIndex = ProfileIndex(profiles: [])
-    private var postsByWeek: [UUID: [Post]] = [:]
+    var postsByWeek: [UUID: [Post]] = [:]
     private var postsByID: [UUID: Post] = [:]
     private(set) var archivedWeeks: [BoardWeek] = []
     var commentsByPostID: [UUID: [Comment]] = [:]
-    private var cachedFeedItemsByWeek: [UUID: [FeedItem]] = [:]
-    private var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
+    var cachedFeedItemsByWeek: [UUID: [FeedItem]] = [:]
+    var feedItemsCacheKeys: [UUID: FeedItemsCacheKey] = [:]
     // Refresh-in-flight bookkeeping — only BoardStore+Refresh.swift touches these.
     var refreshTask: Task<Void, Never>?
     var refreshTaskID: UUID?
@@ -118,7 +122,19 @@ final class BoardStore {
 
     // MARK: - Archive LRU
 
+    /// Compiled default; `archiveWeekCacheLimit` below is what the prune reads.
     static let maxCachedArchiveWeeks = 3
+
+    /// Set from `RemoteConfig` by RootView. Read at prune time rather than
+    /// render time, so a plain stored property is fine here — no observation
+    /// is needed for it to take effect on the next refresh.
+    var archiveWeekCacheLimit = BoardStore.maxCachedArchiveWeeks
+
+    /// Set from `RemoteConfig` by RootView (launch + foreground), same pattern
+    /// as `archiveWeekCacheLimit`. Read at feed-build/gate time, so a server
+    /// change takes effect on the next refresh — and the write gate it feeds is
+    /// UX-only, since the server enforces the posting window independently.
+    var boardThresholds: BoardSchedule.Thresholds = .compiled
     static let maxConnectivityRetries = 2
     // Only BoardStore+Refresh.swift touches this (archive LRU bookkeeping).
     var cachedArchiveWeekIDs: [UUID] = []
@@ -126,7 +142,9 @@ final class BoardStore {
     // two redundant fetches for the same week when they race.
     @ObservationIgnored var inFlightArchiveWeekIDs: Set<UUID> = []
 
-    fileprivate struct FeedItemsCacheKey: Equatable {
+    // `internal` (not `fileprivate`) only so BoardStore+Feed.swift's
+    // feedItems(for:) can build cache keys.
+    struct FeedItemsCacheKey: Equatable {
         let postSignatures: [String]
         let showsNewPost: Bool
         let newPostEnabled: Bool
@@ -181,73 +199,17 @@ final class BoardStore {
     }
 
     // MARK: - Configuration
-
-    func configure(configuration: AppConfiguration) {
-        boardService = BoardServiceFactory.make(configuration: configuration)
-        if boardService == nil {
-            loadError = nil
-        }
-    }
-
-    func setBoard(id: UUID, name: String?) {
-        currentBoard = Board(id: id, name: name ?? currentBoard?.name ?? "On Board")
-    }
-
-    func clearLoadError() {
-        loadError = nil
-    }
-
-    /// Seeds local fixtures for Xcode previews only — not used in production flows.
-    func loadOfflinePreviewData() {
-        guard !isLive, activeBoardWeek == nil else { return }
-
-        posts = Post.samples
-        profiles = Profile.samples
-
-        for post in posts where !post.comments.isEmpty {
-            commentsByPostID[post.id] = post.comments
-        }
-
-        let weekStart = BoardSchedule.startOfWeek(containing: .now)
-        let nextWeekStart = Calendar.current.date(byAdding: .day, value: 7, to: weekStart) ?? weekStart.addingTimeInterval(86_400 * 7)
-        let week = BoardWeek(
-            id: SampleBoardWeekID.active,
-            boardId: SampleBoardID.main,
-            startsAt: weekStart,
-            endsAt: nextWeekStart,
-            status: .active
-        )
-        currentBoard = Board(id: SampleBoardID.main, name: "On Board")
-        activeBoardWeek = week
-        boardWeeks = [week]
-        posts = posts.map { stripForFeed($0.assigning(boardWeekId: week.id, isReadOnly: false)) }
-        rebuildCaches()
-    }
-
-    /// DEV/mock-only: shrink the active week so the clears-soon UI (red countdown,
-    /// disabled new-post card, principal countdown) engages now and the weekly reset
-    /// fires in `seconds`. Rebuilds the week with a near-future `endsAt`; ContentView's
-    /// `.task(id: endsAt)` restarts on the change and drives the reset. No-op when live.
-    func devSetCountdown(seconds: TimeInterval) {
-        guard !isLive, let week = activeBoardWeek else { return }
-        let shortened = BoardWeek(
-            id: week.id,
-            boardId: week.boardId,
-            startsAt: week.startsAt,
-            endsAt: Date.now.addingTimeInterval(seconds),
-            status: week.status,
-            archivedAt: week.archivedAt,
-            promptClean: week.promptClean,
-            promptProfane: week.promptProfane,
-            postCount: week.postCount
-        )
-        activeBoardWeek = shortened
-        boardWeeks = boardWeeks.map { $0.id == shortened.id ? shortened : $0 }
-    }
+    //
+    // Session configuration + the DEV/mock rollover live in
+    // BoardStore+Configuration.swift. Only what *can't* move stays here:
+    // `devRolloverPrompts` is a static stored property (extensions can't hold
+    // those — internal, not private, so +Configuration can read it), and
+    // `resetForSignOut()` writes `postProxies`, whose setter stays
+    // `private(set)` to this file.
 
     /// Prompts the mock rollover cycles through, so each new week reads as a genuinely
     /// different board rather than the same one redrawn.
-    private static let devRolloverPrompts: [(clean: String, profane: String)] = [
+    static let devRolloverPrompts: [(clean: String, profane: String)] = [
         ("What's a class you'd take again just for the professor?",
          "What class would you retake just for the damn professor?"),
         ("What's the best thing you've eaten on campus this week?",
@@ -257,63 +219,6 @@ final class BoardStore {
         ("What's the strangest thing in your backpack right now?",
          "What's the weirdest crap in your backpack right now?"),
     ]
-
-    /// DEV/mock-only stand-in for the server-side weekly rollover.
-    ///
-    /// Mock builds have no `BoardService`, so `refresh(for:)` returns immediately and
-    /// the reset animation used to land on the *exact same posts* — the take-down, the
-    /// arrival, and every downstream "did the board actually change" behaviour were
-    /// untestable offline. This performs the turnover in memory the way the backend
-    /// does it: archive the outgoing week (its posts become read-only records reachable
-    /// from the Archive), then open a fresh empty week with a new prompt.
-    ///
-    /// Returns false when there's nothing to roll over, so callers can fall through to
-    /// the live refresh path instead of assuming a rollover happened.
-    @discardableResult
-    func devRollOverWeek() -> Bool {
-        guard !isLive, let outgoing = activeBoardWeek else { return false }
-
-        // The outgoing week ended when its clock ran out; a rollover triggered early by
-        // the dev hook must not stamp an archivedAt in the future.
-        let boundary = min(outgoing.endsAt, .now)
-        let archived = BoardWeek(
-            id: outgoing.id,
-            boardId: outgoing.boardId,
-            startsAt: outgoing.startsAt,
-            endsAt: boundary,
-            status: .archived,
-            archivedAt: boundary,
-            promptClean: outgoing.promptClean,
-            promptProfane: outgoing.promptProfane,
-            postCount: posts(for: outgoing).count
-        )
-
-        // Rotate deterministically off the number of weeks already on the board, so a
-        // second rollover in one session doesn't repeat the prompt.
-        let prompt = Self.devRolloverPrompts[boardWeeks.count % Self.devRolloverPrompts.count]
-        let incoming = BoardWeek(
-            id: UUID(),
-            boardId: outgoing.boardId,
-            startsAt: boundary,
-            endsAt: boundary.addingTimeInterval(86_400 * 7),
-            status: .active,
-            promptClean: prompt.clean,
-            promptProfane: prompt.profane,
-            postCount: 0
-        )
-
-        // Everything from the outgoing week becomes a read-only record. The new week
-        // starts genuinely empty — that empty state is the thing worth seeing.
-        posts = posts.map { post in
-            post.boardWeekId == outgoing.id
-                ? post.assigning(boardWeekId: outgoing.id, isReadOnly: true)
-                : post
-        }
-        boardWeeks = boardWeeks.map { $0.id == archived.id ? archived : $0 } + [incoming]
-        activeBoardWeek = incoming
-        rebuildCaches()
-        return true
-    }
 
     func resetForSignOut() {
         posts = []
@@ -332,6 +237,7 @@ final class BoardStore {
         cachedArchiveWeekIDs = []
         loadError = nil
         popScores = [:]
+        toneCounts = [:]
         notificationSettings = nil
         notificationSettingsSaveError = nil
         notificationSettingsSyncTask?.cancel()
@@ -355,73 +261,9 @@ final class BoardStore {
     }
 
     // MARK: - Feed composition
-
-    func posts(for week: BoardWeek) -> [Post] {
-        postsByWeek[week.id] ?? []
-    }
-
-    func feedItems(for week: BoardWeek) -> [FeedItem] {
-        let weekPosts = posts(for: week)
-        // The compose card shows on any interactive (active, current-board) week.
-        // Once posting closes it stays put but renders disabled, so nobody is
-        // mid-compose when the weekly wipe lands — and the masonry doesn't reflow the
-        // way it would if the card vanished. Archived/read-only weeks show no card at
-        // all. ContentView's 60s tick re-reads feedItems, so the enabled→disabled flip
-        // happens within a minute of the cutoff.
-        //
-        // `allowsPosting` (not `!isWithinFinalHour`) because it also covers expiry —
-        // otherwise the card flipped back to its tappable "+" the instant the clock hit
-        // zero, inviting a post into a week that had already ended.
-        let showsNewPost = canInteract(with: week)
-        let newPostEnabled = showsNewPost
-            && BoardSchedule.phase(weekEnd: week.endsAt).allowsPosting
-        let cacheKey = FeedItemsCacheKey(
-            postSignatures: weekPosts.map { "\($0.id.uuidString)-\($0.tone.rawValue)" },
-            showsNewPost: showsNewPost,
-            newPostEnabled: newPostEnabled,
-            adsEligible: adsEligible
-        )
-
-        if feedItemsCacheKeys[week.id] == cacheKey,
-           let cached = cachedFeedItemsByWeek[week.id] {
-            return cached
-        }
-
-        var items: [FeedItem] = [.countdown(week: week, isArchived: week.isReadOnly)]
-        if showsNewPost {
-            items.append(.newPost(isEnabled: newPostEnabled, weekID: week.id))
-        }
-
-        // Promoted slots are woven into the *post run* only — never among the
-        // countdown/compose header cards, which is what keeps them out of the
-        // first viewport regardless of how the masonry happens to balance.
-        let slots = Set(AdSlotPlanner.slotPositions(
-            postCount: weekPosts.count,
-            isEligible: adsEligible,
-            isReadOnly: week.isReadOnly
-        ))
-        var slotOrdinal = 0
-        for (index, post) in weekPosts.enumerated() {
-            if slots.contains(index) {
-                items.append(.promoted(slot: slotOrdinal, weekID: week.id))
-                slotOrdinal += 1
-            }
-            items.append(.post(id: post.id, tone: post.tone))
-        }
-
-        cachedFeedItemsByWeek[week.id] = items
-        feedItemsCacheKeys[week.id] = cacheKey
-        return items
-    }
-
-    var feedItems: [FeedItem] {
-        guard let activeBoardWeek else { return [] }
-        return feedItems(for: activeBoardWeek)
-    }
-
-    var hasFeedPosts: Bool {
-        feedItems.contains { if case .post = $0 { return true }; return false }
-    }
+    //
+    // posts(for:), feedItems(for:), feedItems, and hasFeedPosts live in
+    // BoardStore+Feed.swift.
 
     // MARK: - Profile lookups
 

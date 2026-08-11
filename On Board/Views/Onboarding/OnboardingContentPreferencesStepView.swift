@@ -2,6 +2,11 @@
 //  OnboardingContentPreferencesStepView.swift
 //  On Board
 //
+//  The profanity preference as its own pushed step, after graduation and
+//  before the waitlist (Jawad's call, 2026-08-08: one decision per screen).
+//  Completion is the local `hasCompletedProfanityStep` flag — the preference
+//  it records is itself per-device, so its done-ness is too.
+//
 
 import SwiftUI
 
@@ -11,16 +16,13 @@ struct OnboardingContentPreferencesStepView: View {
 
     var body: some View {
         ScrollView {
-            OnboardingProgressBar(step: 4, totalSteps: 7)
+            OnboardingProgressBar(step: 5, totalSteps: 6)
                 .safeAreaPadding(.horizontal)
             VStack(alignment: .leading, spacing: 24) {
-                
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Some weekly prompts and official messaging may have a... more raw version. Enable this if you want to see it.")
-                        .fontStyle(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
+                Text("Some weekly prompts and official messaging may have a... more raw version. Enable this if you want to see it.")
+                    .fontStyle(.subheadline)
+                    .foregroundStyle(.secondary)
 
                 Toggle(isOn: $profanityEnabled) {
                     Text("Allow profanity")
@@ -45,6 +47,7 @@ struct OnboardingContentPreferencesStepView: View {
             .safeAreaPadding(.horizontal)
         }
         .navigationTitle("Profanity")
+        .navigationBarTitleDisplayMode(.large)
     }
 }
 

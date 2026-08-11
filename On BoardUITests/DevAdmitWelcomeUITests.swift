@@ -37,9 +37,13 @@ final class DevAdmitWelcomeUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = [
             "-mock.auth.session", hexLiteral(session),
-            // The content-preferences (profanity) step is gated by this local
-            // flag, not server status.
-            "-hasCompletedProfanityStep", "YES",
+            // The profanity step is gated by this local flag, not server
+            // status — park past it so the walkthrough lands on the waitlist.
+            // Old-style plist syntax, NOT "YES": @AppStorage<Bool> won't
+            // coerce an argument-domain string, so "YES" silently reads as
+            // false (verified 2026-08-08 — the seed looked applied while the
+            // flow still showed the profanity step).
+            "-hasCompletedProfanityStep", "<true/>",
             // The welcome fireworks are a continuous animation; leaving them off
             // keeps the app idle so XCUITest's taps/assertions don't stall.
             "-disableCelebrationFX", "YES"

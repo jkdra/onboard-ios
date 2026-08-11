@@ -9,18 +9,27 @@
 
 import SwiftUI
 import PhotosUI
-import Supabase
 
 struct NewPostView: View {
+    @Environment(RemoteConfigStore.self) private var remoteConfig
+    @Environment(\.photoAttachmentsEnabled) private var photoAttachmentsEnabled
     @Environment(BoardStore.self) private var store
     @Environment(\.dismiss) private var dismiss
     @AppStorage("hapticsEnabled") private var hapticsEnabled = true
     @AppStorage("profanityEnabled") private var profanityEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @State private var title = ""
     @State private var content = ""
-    @State private var tags: [String] = []
+    /// The hesitation loop is the composer's real user: type, lose nerve,
+    /// dismiss, come back. See PostDraftStore's header for the slot's rules
+    /// (one slot, this week, expires with the final-hour lockout).
+    private let draftStore = PostDraftStore()
+    /// Bridge between the formatting toolbar and the bridged text view.
+    @State private var editorController = MarkupEditorController()
+    /// What the draft slot held when this composer opened — dismissing with
+    /// content identical to it needs no dialog (nothing would be lost).
+    @State private var restoredDraft = ""
+    @State private var showDismissDialog = false
     @State private var selectedTone: PostTone? = nil
     @State private var didSubmit = false
     @State private var alertError: PresentableAlertError?
@@ -34,13 +43,9 @@ struct NewPostView: View {
     // Image attachment
     @State private var photo = PhotoAttachmentController(type: .postPhoto)
     @State private var isSubmitting = false
-    @State private var showingTagSelection = false
-
-    @FocusState private var focus: Field?
-    private enum Field { case title, content }
 
     private var canSubmit: Bool {
-        !title.trimmed.isEmpty && !content.trimmed.isEmpty
+        !content.trimmed.isEmpty
             && !photo.isUploading && !isSubmitting && !isWithinFinalHour
     }
 
@@ -85,36 +90,35 @@ struct NewPostView: View {
                         WeeklyPromptBanner(prompt: weeklyPrompt)
                     }
 
-                    // Glass fields — the same "you can touch this" chrome and
-                    // context-matched typography as the post/profile editors,
-                    // so composing a post and editing one speak one language.
-                    TextField("Title", text: $title, axis: .vertical)
-                        .textFieldStyle(.boardTitle)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .fontStyle(.largeTitle)
-                        .lineLimit(1...3)
-                        .keyboardType(.default)
-                        .textInputAutocapitalization(.sentences)
-                        .focused($focus, equals: .title)
+                    // ONE field — the old required Title + required body pair
+                    // bisected a ~60-character median thought and taxed every
+                    // post with summarise-it-first. Structure is opt-in via
+                    // markup, live-rendered as you type: markers dim, the
+                    // text between them formats for real, driven by the SAME
+                    // parse the feed renders. See MarkupTextEditor.
+                    MarkupTextEditor(text: $content, controller: editorController)
+                        .padding(14)
+                        .background {
+                            GlassBackground(shape: RoundedRectangle(cornerRadius: 18, style: .continuous),
+                                            fallback: AnyShapeStyle(.thinMaterial))
+                        }
 
-                    TextField("what's on your mind?", text: $content, axis: .vertical)
-                        .textFieldStyle(.boardBody)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .lineLimit(4...12)
-                        .keyboardType(.twitter)
-                        .focused($focus, equals: .content)
-                        .fontStyle(.body)
-                        
+                    // The countdown lives on the feed; the STAKES live here.
+                    // Impermanence is the app's answer to posting anxiety, and
+                    // it was invisible at the exact moment of hesitation.
+                    Label("clears with the board on monday — nothing here is forever", systemImage: "clock.arrow.circlepath")
+                        .fontStyle(.caption)
+                        .foregroundStyle(.secondary)
+
                     Divider()
                     
-                    tagsRow
-
                     // Image attachment row
                     imageAttachmentRow
                 }
                 .padding(20)
             }
             .scrollDismissesKeyboard(.interactively)
+            .interactiveDismissDisabled(!content.trimmed.isEmpty && content != restoredDraft)
             .disabled(isSubmitting)
             .background {
                 ZStack {
@@ -143,9 +147,14 @@ struct NewPostView: View {
                 }
                 .animation(.smooth(duration: 0.3), value: previewTone)
             }
-            .navigationTitle("New Post")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                // The tone pill takes the title's slot: post-level chrome for
+                // a post-level property, always above the keyboard — and
+                // "New Post" was carrying zero information anyway.
+                ToolbarItem(placement: .principal) {
+                    TonePicker(selection: $selectedTone, showBackground: false)
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     // Resigning the keyboard before the sheet's own dismiss
                     // transition starts keeps the two animations from racing —
@@ -154,32 +163,61 @@ struct NewPostView: View {
                     // screen's bottom-pinned content up until something else
                     // forces a relayout.
                     Button {
-                        KeyboardDismisser.dismiss()
-                        dismiss()
+                        // Dialog only when data would actually be lost:
+                        // empty, or restored-and-untouched, dismisses silently.
+                        if content.trimmed.isEmpty || content == restoredDraft {
+                            KeyboardDismisser.dismiss()
+                            dismiss()
+                        } else {
+                            showDismissDialog = true
+                        }
                     } label: {
                         Label("Cancel", systemImage: "xmark").fontWeight(.semibold)
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { submit() } label: {
-                        if isSubmitting {
-                            ProgressView()
-                        } else {
-                            Label("Post", systemImage: "paperplane.fill").fontWeight(.semibold)
+                        Group {
+                            if isSubmitting {
+                                ProgressView()
+                            } else {
+                                Label("Post", systemImage: "paperplane.fill").fontWeight(.semibold)
+                            }
                         }
+                        // Untinted, borderedProminent fills with .label —
+                        // which in dark mode is a WHITE capsule whose default
+                        // white content vanishes into it. Pin the content to
+                        // the inverse; tones keep white content (they're
+                        // vivid enough either mode).
+                        .foregroundStyle(previewTone == nil ? Color(uiColor: .systemBackground) : .white)
                     }
                     .tint(previewTone?.color ?? Color(uiColor: .label))
                     .buttonStyle(.borderedProminent)
                     .disabled(!canSubmit)
                     .sensoryFeedback(.success, trigger: didSubmit) { _, _ in hapticsEnabled }
                 }
-                ToolbarItem(placement: .bottomBar) {
-                    TonePicker(selection: $selectedTone, showBackground: false)
-                }
             }
-            .keyboardDoneToolbar()
+            // No `.keyboardDoneToolbar()` here: the formatting bar carries its
+            // own Done, and SwiftUI's keyboard group would have stacked a
+            // second one above it.
             .onAppear {
-                focus = .title
+                // DEV: `-dev.composeText "<markup>"` pre-fills the editor so
+                // headless walkthroughs can screenshot the live preview
+                // (synthesized typing is as broken as synthesized taps).
+                if content.isEmpty,
+                   let seeded = UserDefaults.standard.string(forKey: "dev.composeText") {
+                    content = seeded
+                }
+                let allowsPosting = BoardSchedule.phase(
+                    weekEnd: store.activeBoardWeek?.endsAt,
+                    thresholds: store.boardThresholds
+                ).allowsPosting
+                if content.isEmpty,
+                   let draft = draftStore.restore(weekID: store.activeBoardWeek?.id,
+                                                  allowsPosting: allowsPosting) {
+                    content = draft
+                    restoredDraft = draft
+                }
                 updateClearingState()
             }
             .task {
@@ -200,14 +238,30 @@ struct NewPostView: View {
                 updateClearingState()
             }
             .animation(.smooth(duration: 0.3), value: isWithinFinalHour)
+            .confirmationDialog(
+                "Save this as a draft?",
+                isPresented: $showDismissDialog,
+                titleVisibility: .visible
+            ) {
+                Button("Save Draft") {
+                    draftStore.save(content, weekID: store.activeBoardWeek?.id)
+                    KeyboardDismisser.dismiss()
+                    dismiss()
+                }
+                Button("Discard", role: .destructive) {
+                    draftStore.clear()
+                    KeyboardDismisser.dismiss()
+                    dismiss()
+                }
+                Button("Keep Writing", role: .cancel) {}
+            } message: {
+                Text("One draft at a time — it clears an hour before the board does.")
+            }
             .boardErrorHandling(alertError: $alertError)
             .presentableErrorAlert(error: $alertError)
             .presentableErrorAlert(error: $photo.alertError)
             .onChange(of: photo.selectedPhotoItem) { _, item in
                 Task { await photo.loadPickedPhoto(item) }
-            }
-            .sheet(isPresented: $showingTagSelection) {
-                TagSelectionView(selectedTags: $tags)
             }
             .fullScreenCover(item: $photo.uncroppedImage) { image in
                 PostImageCropView(image: image) { cropped in
@@ -229,41 +283,13 @@ struct NewPostView: View {
         }
     }
 
-    // MARK: - Image attachment & Tags
-    
-    private var tagsRow: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label("Tags (\(tags.count)/3)", systemImage: "number")
-                    .fontStyle(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button(tags.isEmpty ? "Add Tags" : "Edit") {
-                    showingTagSelection = true
-                }
-                .fontStyle(.subheadline)
-            }
-            
-            if !tags.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(tags, id: \.self) { tag in
-                            Text("#\(tag)")
-                                .fontStyle(.caption)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(Color.primary.opacity(0.1))
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-            }
-        }
-    }
+    // MARK: - Image attachment
 
     private var imageAttachmentRow: some View {
         VStack(alignment: .leading, spacing: 10) {
-            PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            if photoAttachmentsEnabled {
+                PhotoAttachmentTile(controller: photo, onCapture: { photo.uncroppedImage = $0 })
+            }
 
             if photo.uploadFailed {
                 Label("Image couldn't be uploaded — post will be text-only.", systemImage: "exclamationmark.triangle")
@@ -280,28 +306,31 @@ struct NewPostView: View {
         // `allowsPosting` rather than `isWithinFinalHour` so an expired week keeps the
         // composer locked. It also *reopens* the composer the moment a new week lands,
         // which is what lets a draft ride through the rollover and post to the new board.
-        isWithinFinalHour = !BoardSchedule.phase(weekEnd: weekEnd).allowsPosting
-        finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd)
+        isWithinFinalHour = !BoardSchedule.phase(weekEnd: weekEnd, thresholds: remoteConfig.config.boardThresholds).allowsPosting
+        finalHourBannerText = BoardSchedule.finalHourBannerText(weekEnd: weekEnd, thresholds: remoteConfig.config.boardThresholds)
     }
 
     // MARK: - Submit
 
     private func submit() {
         guard canSubmit else { return }
+        // "Any Color!" rolls a tone; only a real pick counts toward the
+        // author's Favorite Color.
         let resolvedTone = selectedTone ?? .random()
+        let tonePickedDeliberately = selectedTone != nil
         isSubmitting = true
         Task {
             let succeeded = await store.addPost(
-                title: title.trimmed,
-                description: content.trimmed,
+                content: content.trimmed,
                 tone: resolvedTone,
+                toneExplicit: tonePickedDeliberately,
                 imageUrl: photo.uploadedURL,
-                imageAspectRatio: photo.uploadedAspectRatio,
-                tags: tags
+                imageAspectRatio: photo.uploadedAspectRatio
             )
             isSubmitting = false
             guard succeeded else { return }
             didSubmit = true
+            draftStore.clear()
             KeyboardDismisser.dismiss()
             dismiss()
         }
@@ -312,4 +341,5 @@ struct NewPostView: View {
     NewPostView()
         .environment(BoardStore.sampleBoard(currentUserID: SampleProfileID.maya))
         .environment(AuthStore(service: MockAuthService()))
+        .environment(RemoteConfigStore())
 }

@@ -55,18 +55,21 @@ protocol BoardService: Sendable {
     func createPost(
         weekID: UUID,
         authorID: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        /// True only when the author deliberately picked this tone (as
+        /// opposed to leaving the composer on "Any Color!", which rolls one).
+        /// Feeds the Favorite Color tally.
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
     ) async throws -> Post
     func updatePost(
         id: UUID,
-        title: String,
-        description: String,
+        content: String,
         tone: PostTone,
+        toneExplicit: Bool,
         imageUrl: String?,
         imageAspectRatio: Double?,
         tags: [String]
@@ -108,12 +111,12 @@ protocol BoardService: Sendable {
     func updateNotificationSettings(_ settings: NotificationSettings, for userID: UUID) async throws
     
     func fetchUserReactionCounts(for userID: UUID) async throws -> [Reaction: Int]
+    func fetchUserToneCounts(for userID: UUID) async throws -> [PostTone: Int]
     func followUser(id: UUID) async throws
     func unfollowUser(id: UUID) async throws
     func fetchFollowedUserIDs() async throws -> Set<UUID>
     func isFollowing(userID: UUID) async throws -> Bool
     
-    func searchTags(query: String, boardID: UUID) async throws -> [Tag]
 }
 
 enum BoardServiceFactory {
