@@ -6,7 +6,14 @@ consistency, QoL, performance, cleanup, shareability.
 
 ## Shipped
 
-- **Profile share card** (this branch): 1080×1920 story-ready image —
+- **Profile share card** (this branch), as an ASSET, not as Share:
+  `ProfileShareCard` + `ProfileShareCardRenderer` render it and
+  `ProfileShareCardTests` pin it, but the profile's Share button is a
+  **universal link** (`https://onboardapp.org/profile/<UUID>`) — an image
+  can't deep-link a recipient into the app, and Jawad's ask (2026-08-10)
+  was an Instagram-story asset ALONGSIDE sharing, never instead of it.
+  The card needs its own explicit entry point (story-share action);
+  reachable today only via `-dev.shareCardPreview`. Layout: 1080×1920 —
   white ground, monochrome brand, ONE accent stolen from the avatar's
   prominent color (neutral gray fallback for monochrome/missing avatars),
   "@handle is On Board. Are you?", Pop Score total when nonzero (zero is

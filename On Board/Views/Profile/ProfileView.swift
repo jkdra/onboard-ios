@@ -30,7 +30,6 @@ struct ProfileView: View {
     /// Story-ready share card, re-rendered when the profile/avatar/Pop Score
     /// change. While nil (first frame, render in flight) the share action
     /// falls back to the plain profile URL.
-    @State private var shareCard: UIImage?
 
     @State private var editMode = false
     @State private var draft = ProfileDraft()
@@ -128,12 +127,6 @@ struct ProfileView: View {
             // the read-vs-write rule) must not cost the other its result.
             .task(id: profile.id) {
                 await store.refreshFavoriteTone(for: profile.id)
-            }
-            .task(id: shareCardKey) {
-                shareCard = await ProfileShareCardRenderer.render(
-                    profile: displayedProfile,
-                    popScore: store.popScore(for: displayedProfile.id) ?? [:]
-                )
             }
             .task(id: profile.id) {
                 // Their birthday, shared publicly → celebrate for whoever's viewing.
@@ -273,43 +266,17 @@ struct ProfileView: View {
     }
 
     /// The share entry: the story-ready card image when rendered, else the
-    /// bare profile URL. Sharing the IMAGE is the growth loop — the card
-    /// carries the CTA + domain, and Instagram-story recipients get a
-    /// composed asset instead of a naked link preview.
-    @ViewBuilder
+    /// A LINK, deliberately — `shareURL` is a universal link, so a recipient
+    /// with the app installed opens straight to this profile in-app (and
+    /// everyone else lands on the web page), which an image share cannot do.
+    /// `ProfileShareCard` still exists for the story-share surface (see
+    /// docs/superpowers/specs/2026-08-10-shareability.md): that's an
+    /// ADDITIONAL, explicitly-chosen action, not a replacement for Share.
     private var profileShareLink: some View {
-        if let shareCard {
-            ShareLink(
-                item: Image(uiImage: shareCard),
-                subject: Text(shareSubject),
-                preview: SharePreview(shareSubject, image: Image(uiImage: shareCard))
-            ) {
-                Label("Share Profile", systemImage: "square.and.arrow.up")
-            }
-        } else {
-            ShareLink(item: shareURL, subject: Text(shareSubject)) {
-                Label("Share Profile", systemImage: "square.and.arrow.up")
-            }
+        ShareLink(item: shareURL, subject: Text(shareSubject)) {
+            Label("Share Profile", systemImage: "square.and.arrow.up")
         }
     }
-
-    /// Re-render key: any of these changing invalidates the card.
-    private struct ShareCardKey: Hashable {
-        let id: UUID
-        let handle: String
-        let avatarUrl: String?
-        let popScore: [Reaction: Int]
-    }
-
-    private var shareCardKey: ShareCardKey {
-        ShareCardKey(
-            id: displayedProfile.id,
-            handle: displayedProfile.handle,
-            avatarUrl: displayedProfile.avatarUrl,
-            popScore: store.popScore(for: displayedProfile.id) ?? [:]
-        )
-    }
-
 
 
     // Mirrors PostDetailView+Logic.swift's `shareURL` — same domain, same
