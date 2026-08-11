@@ -114,6 +114,32 @@ struct BodyOnlyTierTests {
         #expect(PostMarkup.parse("").bodyOnlyTier == .standard)
     }
 
+    /// The composer must publish what it previewed: the editor's body size
+    /// and the detail renderer's tier come from one table.
+    @Test func composerBodySizeMatchesTheTierRamp() {
+        #expect(MarkupStyler.bodySize(for: .extraLarge) == 20)
+        #expect(MarkupStyler.bodySize(for: .large) == 18)
+        #expect(MarkupStyler.bodySize(for: .standard) == 17)
+    }
+
+    /// Body-only emphasis is a UI step (~1.2), never the editorial-headline
+    /// ratio (1.5) it shipped as — 26pt on a 17pt body read as a title.
+    @Test func bodyOnlyEmphasisStaysBelowHeadlineRatio() {
+        let standard = MarkupStyler.bodySize(for: .standard)
+        let biggest = MarkupStyler.bodySize(for: .extraLarge)
+        #expect(biggest / standard <= 1.25)
+        #expect(biggest > standard) // still visibly the main event
+    }
+
+    /// Adding a heading stands the tier down, so the composer's body size
+    /// settles back to base — the size is the feedback that structure took.
+    @Test func addingAHeadingReturnsTheComposerToBaseSize() {
+        let bodyOnly = PostMarkup.parse("who's at the library rn")
+        let withHeading = PostMarkup.parse("# study group\nwho's at the library rn")
+        #expect(MarkupStyler.bodySize(for: bodyOnly.bodyOnlyTier) == 20)
+        #expect(MarkupStyler.bodySize(for: withHeading.bodyOnlyTier) == 17)
+    }
+
     @Test func boundariesAreExact() {
         #expect(PostMarkup.parse(String(repeating: "a", count: 80)).bodyOnlyTier == .extraLarge)
         #expect(PostMarkup.parse(String(repeating: "a", count: 81)).bodyOnlyTier == .large)

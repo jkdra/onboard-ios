@@ -249,17 +249,24 @@ struct PostMarkupView: View {
             MarkupFont.resolve(family: "ZalandoSansExpanded-Regular", size: 18,
                                relativeTo: .title2, traits: traits)
         case .body, .bullet:
-            // Body-only tiers mirror the card treatment at detail scale —
-            // the SAME tier resolves on both surfaces (PostMarkup is the
-            // single source), so a post never changes character between
-            // the masonry and the opened post.
+            // Body-only emphasis is a UI step, not an editorial headline.
+            // Type-scale convention splits the two: ~1.125–1.2 (minor
+            // third) for UI hierarchy, 1.333–1.5 (fourth/fifth) only where
+            // a big H1 is the deliberate focal point. This shipped at 26pt
+            // on a 17pt body — 1.53×, exactly the editorial-H1 ratio — and
+            // read as a title, which is the one thing a body-only post is
+            // not. 20pt is one minor-third step (1.18×) and lands on
+            // Apple's own next rung above body (title3); `large` takes the
+            // half step. Tiers only apply when the author added NO heading
+            // (bodyOnlyTier stands down otherwise), so this never competes
+            // with the 30pt title above.
             switch tier {
             case .extraLarge:
-                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 26,
-                                   relativeTo: .title, traits: traits)
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 20,
+                                   relativeTo: .title3, traits: traits)
             case .large:
-                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 21,
-                                   relativeTo: .title2, traits: traits)
+                MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 18,
+                                   relativeTo: .body, traits: traits)
             case .standard:
                 MarkupFont.resolve(family: "ZalandoSansSemiExpanded-Regular", size: 17,
                                    relativeTo: .body, traits: traits)

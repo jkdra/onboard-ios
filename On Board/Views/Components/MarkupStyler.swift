@@ -18,15 +18,35 @@ enum MarkupStyler {
     static let baseFont = UIFont(name: "ZalandoSansSemiExpanded-Regular", size: 17)
         ?? .systemFont(ofSize: 17)
 
-    static var baseAttributes: [NSAttributedString.Key: Any] {
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 3
-        return [.font: baseFont, .foregroundColor: UIColor.label, .paragraphStyle: paragraph]
+    /// Body point size for a body-only draft, mirroring
+    /// PostMarkupText.detailFont's tiers so the composer shows the size the
+    /// post will actually publish at. Adding a `# title` or `## subtitle`
+    /// makes bodyOnlyTier stand down, so the body visibly settles back to
+    /// 17pt as the author types the heading — the size IS the feedback that
+    /// the structure took.
+    static func bodySize(for tier: PostMarkup.BodyOnlyTier) -> CGFloat {
+        switch tier {
+        case .extraLarge: 20
+        case .large: 18
+        case .standard: 17
+        }
     }
 
-    static func attributes(for span: PostMarkup.Span) -> [NSAttributedString.Key: Any] {
-        var attributes = baseAttributes
-        attributes[.font] = font(kind: span.blockKind, traits: span.traits)
+    static func baseAttributes(tier: PostMarkup.BodyOnlyTier = .standard) -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineSpacing = 3
+        let size = bodySize(for: tier)
+        let font = UIFont(name: "ZalandoSansSemiExpanded-Regular", size: size)
+            ?? .systemFont(ofSize: size)
+        return [.font: font, .foregroundColor: UIColor.label, .paragraphStyle: paragraph]
+    }
+
+    static func attributes(
+        for span: PostMarkup.Span,
+        tier: PostMarkup.BodyOnlyTier = .standard
+    ) -> [NSAttributedString.Key: Any] {
+        var attributes = baseAttributes(tier: tier)
+        attributes[.font] = font(kind: span.blockKind, traits: span.traits, tier: tier)
         if span.isMarker {
             // The dim that makes the syntax feel inert: visible enough to
             // edit, quiet enough that the CONTENT reads as the post.
@@ -42,11 +62,15 @@ enum MarkupStyler {
         return attributes
     }
 
-    private static func font(kind: PostBlockKind, traits: InlineTraits) -> UIFont {
+    private static func font(
+        kind: PostBlockKind,
+        traits: InlineTraits,
+        tier: PostMarkup.BodyOnlyTier = .standard
+    ) -> UIFont {
         let (family, size, baseWeight): (String, CGFloat, UIFont.Weight?) = switch kind {
         case .title: ("ZalandoSansExpanded-Regular", 26, .heavy)
         case .subtitle: ("ZalandoSansExpanded-Regular", 19, .semibold)
-        case .body, .bullet: ("ZalandoSansSemiExpanded-Regular", 17, nil)
+        case .body, .bullet: ("ZalandoSansSemiExpanded-Regular", bodySize(for: tier), nil)
         }
         var weight = baseWeight
         if traits.contains(.bold) { weight = .bold }

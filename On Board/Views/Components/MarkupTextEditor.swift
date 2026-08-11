@@ -58,7 +58,7 @@ struct MarkupTextEditor: UIViewRepresentable {
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
         textView.delegate = context.coordinator
-        textView.typingAttributes = MarkupStyler.baseAttributes
+        textView.typingAttributes = MarkupStyler.baseAttributes()
 
         let placeholderLabel = UILabel()
         placeholderLabel.text = placeholder
@@ -190,9 +190,16 @@ struct MarkupTextEditor: UIViewRepresentable {
             textView.invalidateIntrinsicContentSize()
         }
 
+        /// The draft's live body-only tier, refreshed by `restyle`. See
+        /// MarkupStyler.bodySize(for:).
+        private var bodyOnlyTier: PostMarkup.BodyOnlyTier = .standard
+
         func textViewDidChangeSelection(_ textView: UITextView) {
-            // Rule 3: derived styling must never leak into new typing.
-            textView.typingAttributes = MarkupStyler.baseAttributes
+            // Rule 3: derived styling must never leak into new typing —
+            // but the body-only TIER is not derived styling, it's the base
+            // size for this draft, so typing attributes carry it. Read from
+            // the cached tier rather than reparsing on every caret move.
+            textView.typingAttributes = MarkupStyler.baseAttributes(tier: bodyOnlyTier)
             updateCurrentBlock(textView)
             controller.refreshActiveTraits()
         }
@@ -202,15 +209,23 @@ struct MarkupTextEditor: UIViewRepresentable {
         /// restores characters, this re-derives.
         func restyle(_ textView: UITextView) {
             let markup = PostMarkup.parse(textView.text)
+            // Cached for typingAttributes (see textViewDidChangeSelection):
+            // the same parse that styles the draft also tells us its tier,
+            // so caret moves never pay for a reparse.
+            bodyOnlyTier = markup.bodyOnlyTier
             let storage = textView.textStorage
             storage.beginEditing()
-            storage.setAttributes(MarkupStyler.baseAttributes,
+            storage.setAttributes(MarkupStyler.baseAttributes(tier: bodyOnlyTier),
                                   range: NSRange(location: 0, length: storage.length))
             for span in markup.spans {
                 let nsRange = NSRange(span.range, in: textView.text)
-                storage.setAttributes(MarkupStyler.attributes(for: span), range: nsRange)
+                storage.setAttributes(MarkupStyler.attributes(for: span, tier: bodyOnlyTier),
+                                      range: nsRange)
             }
             storage.endEditing()
+            // A tier change resizes every line, so the intrinsic height the
+            // hosting SwiftUI layout sized against is stale.
+            textView.invalidateIntrinsicContentSize()
         }
 
         private func updateCurrentBlock(_ textView: UITextView) {
