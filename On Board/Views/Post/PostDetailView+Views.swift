@@ -147,7 +147,9 @@ extension PostDetailView {
                     .fontStyle(.subheadline)
                     .fontWeight(.semibold)
                     .foregroundStyle(.primary)
-                Text(livePost.createdAt.boardRelativeAge)
+                // The opened post has room for the phrase; the card's
+                // corner and the comment bylines keep the compact form.
+                Text(livePost.createdAt.boardVerboseAge)
                     .fontStyle(.caption)
                     .foregroundStyle(.secondary)
             }

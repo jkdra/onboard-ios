@@ -226,12 +226,14 @@ struct CountdownCard: View {
                     }
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Card-body scale, matching every post card's text
-                        // (PostMarkupText.cardFont). The 21pt tier this used to
-                        // mirror was removed from cards — a prompt louder than
-                        // the posts around it breaks the grid's one text scale.
+                        // The board TALKING, not a post: Expanded (the
+                        // display face the wordmark and titles use) at the
+                        // body-only extraLarge card size, so the prompt sits
+                        // level with a short post card instead of louder than
+                        // one. Post bodies stay SemiExpanded — the face is
+                        // what marks this as the board's own voice.
                         Text(config.bodyText)
-                            .fontStyle(.callout)
+                            .font(.custom("ZalandoSansExpanded-Regular", size: 16, relativeTo: .subheadline))
                             .fontWeight(config.isPrompt ? .medium : .regular)
                             .foregroundStyle(.primary) // Higher opacity
 

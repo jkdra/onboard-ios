@@ -152,3 +152,35 @@ struct BodyOnlyTierTests {
         #expect(PostMarkup.parse("**loud** short post #tag").bodyOnlyTier == .extraLarge)
     }
 }
+
+@MainActor
+struct VerboseAgeTests {
+    private func age(minutesAgo: Double) -> String {
+        Date.now.addingTimeInterval(-minutesAgo * 60).boardVerboseAge
+    }
+
+    @Test func spellsOutRecentAges() {
+        #expect(age(minutesAgo: 0.2) == "just now")
+        #expect(age(minutesAgo: 1) == "1 min ago")
+        #expect(age(minutesAgo: 45) == "45 mins ago")
+        #expect(age(minutesAgo: 60) == "1 hour ago")
+        #expect(age(minutesAgo: 60 * 5) == "5 hours ago")
+        #expect(age(minutesAgo: 60 * 24) == "1 day ago")
+        #expect(age(minutesAgo: 60 * 24 * 3) == "3 days ago")
+    }
+
+    /// Past a week the week-count stops being placeable, so it becomes the
+    /// calendar date.
+    @Test func olderThanAWeekBecomesADate() {
+        let old = Date.now.addingTimeInterval(-60 * 60 * 24 * 9)
+        let parts = Calendar.current.dateComponents([.month, .day], from: old)
+        #expect(old.boardVerboseAge == "\(parts.month!)-\(parts.day!)")
+    }
+
+    /// The compact form is unchanged — dense surfaces still use it.
+    @Test func compactFormIsUntouched() {
+        #expect(Date.now.addingTimeInterval(-30).boardRelativeAge == "now")
+        #expect(Date.now.addingTimeInterval(-60 * 5).boardRelativeAge == "5m")
+        #expect(Date.now.addingTimeInterval(-60 * 60 * 24 * 2).boardRelativeAge == "2d")
+    }
+}
