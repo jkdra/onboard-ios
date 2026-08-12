@@ -59,7 +59,7 @@ extension Comment {
     static let freePizzaComments: [Comment] = [
         .authored(by: "leokp", body: "on my way"),
         .authored(by: "danielr", body: "is it still there", replies: [
-            .authored(by: "saraa", body: "half a box of hawaiian left. you've been warned")
+            .authored(by: "saraa", body: "one tray left and its the good one. you've been warned")
         ]),
         .authored(by: "rileyc", body: "got here too late. devastating")
     ]

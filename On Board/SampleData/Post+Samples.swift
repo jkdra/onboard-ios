@@ -17,7 +17,17 @@
 //     course codes are the generic kind ("stats 200"). One screenshot with
 //     "DC basement" in it tells every reader which school this is, and
 //     prices the app as that school's app.
-//  2. THE SPREAD IS THE PITCH. On Board is where campus social life lives,
+//  2. IMAGES COME FROM ONE SAFE SOURCE. picsum.photos only, which serves
+//     Unsplash photos: the Unsplash License grants commercial use with no
+//     attribution. loremflickr (used here previously) serves Creative
+//     Commons Flickr photos whose flavour varies PER IMAGE — several were
+//     NonCommercial/NoDerivatives, which an App Store listing violates.
+//     Pick a picsum id, LOOK at it, then write copy to match; never write
+//     copy first and hunt for a photo (that's how a "free pizza" post
+//     ended up illustrated with a cat statue). Avoid photos of
+//     identifiable people — Unsplash's licence doesn't grant model
+//     releases.
+//  3. THE SPREAD IS THE PITCH. On Board is where campus social life lives,
 //     so the mix reads as club mixers, club meetings, practical campus help,
 //     and pure shitposting — in that proportion, not a wall of venting.
 //
@@ -49,12 +59,14 @@ extension Post {
             comments: Comment.bizMixerComments
         ),
         // Short body-only post — exercises PostMarkup.bodyOnlyTier's
-        // extraLarge rendering on the card and in detail.
+        // extraLarge rendering on the card and in detail. Also ANSWERS this
+        // week's prompt: a board whose prompt has no replies under it reads
+        // like a dead board, so a few posts always talk back to it.
         sample(
             author: "danielr",
             tone: .mint,
-            content: "who else heard the fire alarm go off at 3am or am i losing it",
-            reactionCounts: [.laugh: 31, .hug: 2],
+            content: "climbing club. went for the free intro session, now its my whole personality",
+            reactionCounts: [.laugh: 31, .like: 12, .hug: 2],
             comments: []
         ),
         // Campus help: the "am i alone in this" post that makes a board feel
@@ -94,14 +106,15 @@ extension Post {
             author: "saraa",
             tone: .pink,
             content: """
-            # FREE PIZZA in the club room rn
-            coding club overordered, four untouched boxes. come take some before it gets sad and cold
+            # join the cooking club, im serious
+            ## they always make *way* too much
+            open to everyone, zero skills required. tonight they cooked for forty people and there are eleven of us. come eat
 
-            #free-food #clubs
+            #clubs #free-food
             """,
             reactionCounts: [.like: 59, .laugh: 6],
             comments: Comment.freePizzaComments,
-            imageUrl: "https://loremflickr.com/800/500/pizzabox?lock=5",
+            imageUrl: "https://picsum.photos/id/292/800/500",
             imageAspectRatio: 1.6
         ),
         // Shitposting, and a syntax guard-rail showcase: "$7 * 4 * 12" must
@@ -125,9 +138,7 @@ extension Post {
             #lost-and-found
             """,
             reactionCounts: [.like: 9, .hug: 19],
-            comments: Comment.hydroflaskComments,
-            imageUrl: "https://loremflickr.com/900/600/hydroflask?lock=7",
-            imageAspectRatio: 1.5
+            comments: Comment.hydroflaskComments
         ),
         // Pure campus life — the post that has no purpose except being funny,
         // which is half of what a board is for.
@@ -141,9 +152,7 @@ extension Post {
             #campus-life #funny
             """,
             reactionCounts: [.laugh: 52, .like: 17, .hug: 2],
-            comments: Comment.squirrelComments,
-            imageUrl: "https://loremflickr.com/1000/600/squirrel?lock=9",
-            imageAspectRatio: 1.667
+            comments: Comment.squirrelComments
         ),
 
         // ─── Archived weeks (last 10) ───────────────────────────────────
@@ -180,7 +189,9 @@ extension Post {
             #academics #study-group
             """,
             reactionCounts: [.like: 21, .hug: 3],
-            comments: Comment.econStudyComments
+            comments: Comment.econStudyComments,
+            imageUrl: "https://picsum.photos/id/431/800/500",
+            imageAspectRatio: 1.6
         ),
         sample(
             author: "quinnm",

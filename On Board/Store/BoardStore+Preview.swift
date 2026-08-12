@@ -49,7 +49,7 @@ extension BoardStore {
         )
 
         let archivedWeeks: [BoardWeek] = [
-            (-10, -3, SampleBoardWeekID.archived, "Who is the most overhated celebrity and why?", "Who is the most overhated fucking celebrity?"),
+            (-10, -3, SampleBoardWeekID.archived, "What are you irrationally hyped about right now?", "What are you irrationally hyped about right now?"),
             (-17, -10, UUID(uuidString: "B0000000-0000-4000-8000-000000000003")!, "What's a hill you will absolutely die on?", "What's a stupid hill you will absolutely die on?"),
             (-24, -17, UUID(uuidString: "B0000000-0000-4000-8000-000000000004")!, "What was your favorite childhood game?", "What was your favorite childhood game?"),
             (-31, -24, UUID(uuidString: "B0000000-0000-4000-8000-000000000005")!, "What is the worst food combination you've tried?", "What's the most disgusting shit you've ever eaten?"),
