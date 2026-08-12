@@ -17,21 +17,34 @@ private enum AppLaunchContext {
             || env["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1"
     }
 
+    /// DEV: `-dev.mockMode` runs the whole app on sample data with a live
+    /// `Secrets.xcconfig` still in place.
+    ///
+    /// Deleting that file was the old way in, and it is a bad way: it is a
+    /// build-configuration change (so it needs a rebuild), it edits a
+    /// gitignored file holding production credentials, and when it doesn't
+    /// take, it fails as a live app that can't reach anything rather than as
+    /// an obvious error. A launch argument is per-RUN, reversible, and can't
+    /// misplace a secret. This is how App Store screenshots get taken.
+    static var forcesMocks: Bool {
+        isPreview || ProcessInfo.processInfo.arguments.contains("-dev.mockMode")
+    }
+
     static var boardStore: BoardStore {
-        (isPreview || !AppConfiguration.current.isSupabaseConfigured)
+        (forcesMocks || !AppConfiguration.current.isSupabaseConfigured)
             ? BoardStore.previewBoard()
             : BoardStore()
     }
 
     @MainActor
     static func makeAuthStore() -> AuthStore {
-        AuthStore(service: isPreview ? MockAuthService() : AuthServiceFactory.make())
+        AuthStore(service: forcesMocks ? MockAuthService() : AuthServiceFactory.make())
     }
 
     @MainActor
     static func makeOnboardingStore(auth: AuthStore, network: NetworkMonitor) -> OnboardingStore {
         OnboardingStore(
-            service: isPreview ? MockOnboardingService() : OnboardingServiceFactory.make(),
+            service: forcesMocks ? MockOnboardingService() : OnboardingServiceFactory.make(),
             auth: auth,
             network: network
         )

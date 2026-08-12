@@ -261,8 +261,24 @@ final class MockAuthService: AuthService, @unchecked Sendable {
     }
 
     func restoreSession() async throws -> AuthSession? {
-        guard let data = defaults.data(forKey: sessionKey) else { return nil }
-        return try? JSONDecoder().decode(AuthSession.self, from: data)
+        if let data = defaults.data(forKey: sessionKey),
+           let session = try? JSONDecoder().decode(AuthSession.self, from: data) {
+            return session
+        }
+        // `-dev.mockMode` means "show me the app", so it restores straight into
+        // a completed sample account rather than the sign-in wall. Maya is the
+        // one MockOnboardingService reports as `.complete`, so this lands on
+        // the feed. Persisted like a real sign-in, so relaunches are stable.
+        guard ProcessInfo.processInfo.arguments.contains("-dev.mockMode") else { return nil }
+        let seeded = makeSession(
+            userId: SampleProfileID.maya,
+            primaryProvider: .apple,
+            email: "maya@example.com",
+            phone: nil,
+            linkedProviders: [.apple]
+        )
+        persist(seeded)
+        return seeded
     }
 
     private func link(provider: AuthProvider) async throws -> AuthSession {

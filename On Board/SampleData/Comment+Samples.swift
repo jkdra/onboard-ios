@@ -12,7 +12,7 @@ extension Comment {
             .authored(by: "leokp", body: "yes")
         ]),
         Comment(author: "anon", body: "yall need to start going to office hours fr"),
-        .authored(by: "saraa", body: "average was actually 51 i checked learn. still cooked")
+        .authored(by: "saraa", body: "average was actually 51, i checked. still cooked")
     ]
 
     static let textbookComments: [Comment] = [
@@ -23,7 +23,7 @@ extension Comment {
     ]
 
     static let hydroflaskComments: [Comment] = [
-        .authored(by: "danielr", body: "check lost and found at turnkey, they had like 6 last week"),
+        .authored(by: "danielr", body: "check the lost and found desk, they had like 6 last week"),
         .authored(by: "saraa", body: "if its blue with a sticker that says 'i miss my mom' that's mine sorry", replies: [
             .authored(by: "zainabr", body: "lmao no its black. solidarity tho")
         ]),
@@ -31,16 +31,16 @@ extension Comment {
     ]
 
     static let timsLineComments: [Comment] = [
-        .authored(by: "jordank", body: "this is canadas true national crisis"),
-        .authored(by: "marcus.l", body: "skip it, the one in MC is empty rn", replies: [
+        .authored(by: "jordank", body: "the line at that place is a genuine campus crisis"),
+        .authored(by: "marcus.l", body: "skip it, the one by the gym is empty rn", replies: [
             .authored(by: "danielr", body: "you're a hero")
         ]),
-        Comment(author: "anon", body: "the iced caps just hit different when youve been waiting 20 min for them")
+        Comment(author: "anon", body: "iced coffee just hits different after waiting 20 min for it")
     ]
 
     static let econStudyComments: [Comment] = [
-        .authored(by: "rileyc", body: "down. dc 1568 friday at 7?", replies: [
-            .authored(by: "priyas", body: "ill be there w timbits")
+        .authored(by: "rileyc", body: "down. library group room friday at 7?", replies: [
+            .authored(by: "priyas", body: "ill be there with donuts")
         ]),
         .authored(by: "quinnm", body: "+1"),
         Comment(author: "ben.k", body: "is this open or like a closed thing", replies: [
@@ -66,13 +66,13 @@ extension Comment {
 
     static let wifiComments: [Comment] = [
         .authored(by: "laylah", body: "its not just you, the whole north campus is down rn"),
-        Comment(author: "ella", body: "ive been trying to ssh into student.cs for an hour. send help", replies: [
+        Comment(author: "ella", body: "ive been trying to connect to the lab server for an hour. send help", replies: [
             .authored(by: "jordank", body: "we are all suffering together")
         ])
     ]
 
     static let squirrelComments: [Comment] = [
-        .authored(by: "priyas", body: "the one near needles hall stole my entire sandwich last week. theyre organized"),
+        .authored(by: "priyas", body: "the one outside the dining hall stole my entire sandwich last week. theyre organized"),
         .authored(by: "marcus.l", body: "theyre building something. mark my words", replies: [
             .authored(by: "rileyc", body: "the squirrel uprising is upon us")
         ]),
@@ -80,7 +80,7 @@ extension Comment {
     ]
 
     static let umbrellaComments: [Comment] = [
-        .authored(by: "saraa", body: "this is the most waterloo thing ive ever read"),
+        .authored(by: "saraa", body: "this is the most campus thing ive ever read"),
         .authored(by: "leokp", body: "i found one by the vending machines last week. blue, broken handle. yours?", replies: [
             .authored(by: "quinnm", body: "mine was black but ill take it at this point")
         ])
@@ -95,7 +95,7 @@ extension Comment {
     ]
 
     static let transferComments: [Comment] = [
-        .authored(by: "maya.c", body: "welcome!! the second cafeteria in slc is actually the good one dont sleep on it"),
+        .authored(by: "maya.c", body: "welcome!! the second cafeteria is actually the good one, dont sleep on it"),
         .authored(by: "zainabr", body: "printing credits reset every term, go to the it help desk they can top you up"),
         Comment(author: "anon", body: "ngl took me a full semester to find the quiet floor in the library too, ur ahead of schedule")
     ]
@@ -118,7 +118,7 @@ extension Comment {
 
     static let libraryThoughtsComments: [Comment] = [
         .authored(by: "saraa", body: "the 2am library energy is unmatched, its like a different planet"),
-        .authored(by: "danielr", body: "i had a full life realization at the dc printers once, we've all been there", replies: [
+        .authored(by: "danielr", body: "i had a full life realization at the library printers once, we've all been there", replies: [
             .authored(by: "zainabr", body: "the printers really do double as a confessional")
         ]),
         Comment(author: "anon", body: "sending love, also maybe go to sleep")
@@ -140,7 +140,7 @@ extension Comment {
 
     static let missedConnectionComments: [Comment] = [
         .authored(by: "maya.c", body: "this is either the most romantic or most unhinged post ive seen on here and i respect it"),
-        .authored(by: "noraf", body: "camus in a tim hortons is such specific main character energy", replies: [
+        .authored(by: "noraf", body: "reading camus in a coffee line is such specific main character energy", replies: [
             .authored(by: "leokp", body: "i thought so too in the moment, still thinking about it now")
         ]),
         Comment(author: "anon", body: "if this is about who i think it is, she comes in every monday at 2, good luck man")

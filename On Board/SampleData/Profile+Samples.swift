@@ -21,7 +21,7 @@ extension Profile {
         ),
         Profile(id: SampleProfileID.leo,    handle: "leokp",    displayName: "Leo Park",       bio: "design + caffeine.",                                    avatarUrl: "https://randomuser.me/api/portraits/men/4.jpg", birthday: "2002-11-02", showBirthday: false),
         Profile(id: SampleProfileID.layla,  handle: "laylah",   displayName: "Layla Haddad",   bio: "mech eng. building things that occasionally don't catch fire.", avatarUrl: "https://randomuser.me/api/portraits/women/40.jpg"),
-        Profile(id: SampleProfileID.daniel, handle: "danielr",  displayName: "Daniel Reyes",   bio: "ranks tims locations by line speed.",                   avatarUrl: "https://randomuser.me/api/portraits/men/7.jpg"),
+        Profile(id: SampleProfileID.daniel, handle: "danielr",  displayName: "Daniel Reyes",   bio: "ranks campus coffee by line speed.",                   avatarUrl: "https://randomuser.me/api/portraits/men/7.jpg"),
         Profile(id: SampleProfileID.priya,  handle: "priyas",   displayName: "Priya Singh",    bio: "always down for a study group.",                        avatarUrl: "https://randomuser.me/api/portraits/women/88.jpg"),
         Profile(id: SampleProfileID.marcus, handle: "marcus.l", displayName: "Marcus Lee",     bio: "the oat milk was MINE.",                                 avatarUrl: "https://randomuser.me/api/portraits/men/26.jpg"),
         Profile(id: SampleProfileID.sara,   handle: "saraa",    displayName: "Sara Okafor",    bio: "trails, parks, and snacks.",                             avatarUrl: "https://randomuser.me/api/portraits/women/6.jpg"),

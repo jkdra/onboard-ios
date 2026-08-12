@@ -9,62 +9,119 @@
 //  which may format). Several posts are heading-less one-liners on purpose:
 //  that's the new normal, not a degenerate case.
 //
+//  They're also the App Store screenshots, so two content rules hold:
+//
+//  1. NOTHING NAMES A CAMPUS. No building codes, no local chains, no
+//     campus-specific course numbers or society acronyms. Every location is
+//     a thing every campus has ("the library", "the student union"), and
+//     course codes are the generic kind ("stats 200"). One screenshot with
+//     "DC basement" in it tells every reader which school this is, and
+//     prices the app as that school's app.
+//  2. THE SPREAD IS THE PITCH. On Board is where campus social life lives,
+//     so the mix reads as club mixers, club meetings, practical campus help,
+//     and pure shitposting — in that proportion, not a wall of venting.
+//
+//  Feed/archive split (see BoardStore.previewBoard): the FIRST 8 are this
+//  week's board and the LAST 10 are archived, so the count here must stay at
+//  18 — anything in between is silently dropped from both.
+//
 
 import Foundation
 
 extension Post {
     static let samples: [Post] = [
+
+        // ─── This week's board (first 8) ────────────────────────────────
+
+        // Clubs/events, and the fullest markup sample: heading, subtitle,
+        // italic, bold.
+        sample(
+            author: "kevinz",
+            tone: .yellow,
+            content: """
+            # design club mixer thursday
+            ## free boba for the first 50
+            networking night but we kept it chill, *no blazers required*. student union atrium, 6pm. **first-years especially welcome** — come alone, leave with a group chat
+
+            #clubs #events
+            """,
+            reactionCounts: [.like: 44, .laugh: 5],
+            comments: Comment.bizMixerComments
+        ),
         // Short body-only post — exercises PostMarkup.bodyOnlyTier's
         // extraLarge rendering on the card and in detail.
         sample(
             author: "danielr",
-            tone: .yellow,
-            content: "who else heard the fire alarm in west hall at 3am or am i losing it",
+            tone: .mint,
+            content: "who else heard the fire alarm go off at 3am or am i losing it",
             reactionCounts: [.laugh: 31, .hug: 2],
             comments: []
         ),
-        sample(
-            author: "maya.c",
-            tone: .green,
-            content: "**brat** by charli xcx is literally album of the year. i cant stop listening. it's been on repeat for *4 days straight* and my roommate is begging me to stop playing 360 but i refuse\n\n#music #charlixcx",
-            reactionCounts: [.like: 89, .laugh: 12],
-            comments: Comment.cs241MidtermComments // Reusing comments for simplicity
-        ),
+        // Campus help: the "am i alone in this" post that makes a board feel
+        // like a room full of people.
         sample(
             author: "maya.c",
             tone: .orange,
             content: """
-            # anyone else fail the cs241 midterm
-            felt like none of that was even in the lectures. avg was 47 according to my TA so ~~we're cooked~~ maybe the curve carries us. tell me im not alone in this
-            
-            #cs241 #midterms #venting
+            # anyone else fail the stats 200 midterm
+            felt like none of that was in the lectures. average was a 47 so ~~we're cooked~~ maybe the curve saves us. tell me im not the only one
+
+            #academics #midterms
             """,
             reactionCounts: [.like: 40, .hug: 21, .laugh: 4],
             comments: Comment.cs241MidtermComments
         ),
+        // Marketplace + the bullet list, with an underline in the wild.
         sample(
             author: "leokp",
             tone: .blue,
             content: """
-            # selling math239 textbook $40 obo
-            barely used. condition report:
+            # selling my stats textbook, $40 obo
+            barely used. honest condition report:
             * two pages of highlighter
             * one (1) coffee ring
             * spine __never cracked__
-            dm me, can meet outside dc library
-            
-            #forsale #math239
+            can meet outside the library any afternoon
+
+            #for-sale #textbooks
             """,
             reactionCounts: [.like: 15],
             comments: Comment.textbookComments
         ),
+        // Clubs again, from the other side: the free-food post that gets
+        // people into a club room they'd never have walked into.
         sample(
-            author: "laylah",
+            author: "saraa",
             tone: .pink,
             content: """
-            # lost: black hydroflask, dc basement
-            covered in stickers, one says 'do not crash'. left it on a table monday around 2am while i was crying over assembly. pls help i need water to live
-            
+            # FREE PIZZA in the club room rn
+            coding club overordered, four untouched boxes. come take some before it gets sad and cold
+
+            #free-food #clubs
+            """,
+            reactionCounts: [.like: 59, .laugh: 6],
+            comments: Comment.freePizzaComments,
+            imageUrl: "https://loremflickr.com/800/500/pizzabox?lock=5",
+            imageAspectRatio: 1.6
+        ),
+        // Shitposting, and a syntax guard-rail showcase: "$7 * 4 * 12" must
+        // stay arithmetic, and "#not-sponsored" is a real inline tag but the
+        // post's 4th — highlighted, yet silently kept out of the tag index.
+        sample(
+            author: "marcus.l",
+            tone: .green,
+            content: "if my roommate drinks my oat milk ***one more time*** im labelling it with chemistry hazard symbols. it costs SEVEN dollars. thats $7 * 4 * 12 a year of theft. have mercy #not-sponsored\n\n#venting #roommates",
+            reactionCounts: [.laugh: 33, .like: 14, .hug: 9, .dislike: 1],
+            comments: Comment.oatMilkComments
+        ),
+        // Practical help, with a photo.
+        sample(
+            author: "laylah",
+            tone: .purple,
+            content: """
+            # lost: black water bottle, covered in stickers
+            one of them says 'do not crash'. left it on a table monday around 2am while crying over a problem set. i need water to live
+
             #lost-and-found
             """,
             reactionCounts: [.like: 9, .hug: 19],
@@ -72,68 +129,15 @@ extension Post {
             imageUrl: "https://loremflickr.com/900/600/hydroflask?lock=7",
             imageAspectRatio: 1.5
         ),
-        sample(
-            author: "danielr",
-            tone: .red,
-            // Deliberately heading-less + a mid-line capital rant: the card's
-            // anchor is just the post itself.
-            content: "ive been standing in the tims line for 18 minutes for an iced cap. they are **STAFFED**. multiple humans behind the counter. *nothing is happening*. send help\n\n#venting #coffee",
-            reactionCounts: [.laugh: 47, .like: 22, .hug: 6],
-            comments: Comment.timsLineComments,
-            imageUrl: "https://loremflickr.com/800/600/coffee,shop?lock=3",
-            imageAspectRatio: 1.333
-        ),
-        sample(
-            author: "priyas",
-            tone: .purple,
-            content: """
-            # econ 201 study group?
-            midterm is in **11 days** and i havent opened the textbook once. looking for ppl who actually want to grind. ill bring munchies
-            
-            #econ201 #study-group
-            """,
-            reactionCounts: [.like: 21, .hug: 3],
-            comments: Comment.econStudyComments
-        ),
-        sample(
-            author: "marcus.l",
-            tone: .yellow,
-            // Syntax guard-rail showcase: "$7 * 4 * 12" must stay arithmetic.
-            // "#not-sponsored" is now a real inline tag — but it's this post's
-            // 4th, so it renders highlighted while the silent cap keeps it out
-            // of the tags index. "#1"-style number-only tokens stay literal.
-            content: "if my roommate drinks my oat milk ***one more time*** im labelling it with chemistry hazard symbols. it costs SEVEN dollars. thats $7 * 4 * 12 a year of theft. have mercy #not-sponsored\n\n#venting #roommates",
-            reactionCounts: [.laugh: 33, .like: 14, .hug: 9, .dislike: 1],
-            comments: Comment.oatMilkComments
-        ),
-        sample(
-            author: "saraa",
-            tone: .pink,
-            content: """
-            # FREE PIZZA mc 4022 rn
-            software eng club meeting, like 4 untouched boxes. get over here before engsoc smells it and ransacks the place
-            
-            #free-food #promo
-            """,
-            reactionCounts: [.like: 59, .laugh: 6],
-            comments: Comment.freePizzaComments,
-            imageUrl: "https://loremflickr.com/800/500/pizzabox?lock=5",
-            imageAspectRatio: 1.6
-        ),
-        sample(
-            author: "jordank",
-            tone: .indigo,
-            content: "is anyones wifi being weird. eduroam is held together with two paperclips and a prayer. trying to submit my lab and im in *physical pain*\n\n#venting #wifi",
-            reactionCounts: [.like: 19, .hug: 12, .laugh: 4],
-            comments: Comment.wifiComments
-        ),
+        // Pure campus life — the post that has no purpose except being funny,
+        // which is half of what a board is for.
         sample(
             author: "rileyc",
-            tone: .mint,
+            tone: .teal,
             content: """
             # the squirrels are getting too brave
-            one of them made __direct eye contact__ w me today while i was eating a granola bar. i felt threatened. should we be worried
-            
+            one of them made __direct eye contact__ with me while i was eating a granola bar. i felt genuinely threatened. should we be worried
+
             #campus-life #funny
             """,
             reactionCounts: [.laugh: 52, .like: 17, .hug: 2],
@@ -141,13 +145,50 @@ extension Post {
             imageUrl: "https://loremflickr.com/1000/600/squirrel?lock=9",
             imageAspectRatio: 1.667
         ),
+
+        // ─── Archived weeks (last 10) ───────────────────────────────────
+
+        sample(
+            author: "maya.c",
+            tone: .green,
+            content: "**brat** by charli xcx is literally album of the year. i cant stop listening. it's been on repeat for *4 days straight* and my roommate is begging me to stop playing 360 but i refuse\n\n#music #charlixcx",
+            reactionCounts: [.like: 89, .laugh: 12],
+            comments: Comment.cs241MidtermComments
+        ),
+        sample(
+            author: "laylah",
+            tone: .green,
+            content: """
+            # hackathon signups close friday
+            * 24 hours
+            * free food **the entire time**
+            * prizes for the top 3
+            no experience needed — we WILL pair you with people who know what theyre doing
+
+            #clubs #events
+            """,
+            reactionCounts: [.like: 31, .laugh: 2],
+            comments: Comment.hackathonComments
+        ),
+        sample(
+            author: "priyas",
+            tone: .purple,
+            content: """
+            # stats study group, anyone?
+            midterm is in **11 days** and i havent opened the textbook once. looking for people who actually want to grind. ill bring the snacks
+
+            #academics #study-group
+            """,
+            reactionCounts: [.like: 21, .hug: 3],
+            comments: Comment.econStudyComments
+        ),
         sample(
             author: "quinnm",
             tone: .blue,
             content: """
             # to whoever took my umbrella
-            it was the only one i had. i hope it inverts on you in the worst possible moment. also if you have a heart pls return it, second floor mc by the vending machines
-            
+            it was the only one i had. i hope it inverts on you at the worst possible moment. if you have a heart, its second floor by the vending machines
+
             #lost-and-found #venting
             """,
             reactionCounts: [.like: 23, .laugh: 11, .dislike: 2, .hug: 5],
@@ -163,27 +204,14 @@ extension Post {
         sample(
             author: "benw",
             tone: .teal,
-            content: "transferred in this semester, still figuring out where anything is. 3 weeks in and i just found out there's a whole second cafeteria. also does anyone know how the printing credits work bc i think ive already gone into printing debt\n\n#transfer #campus-life",
+            content: "transferred in this semester and im still figuring out where anything is. 3 weeks in and i just found out there's a whole second cafeteria. also does anyone know how printing credits work bc i think im already in printing debt\n\n#transfer #campus-life",
             reactionCounts: [.hug: 24, .like: 18, .laugh: 9],
             comments: Comment.transferComments
         ),
         sample(
-            author: "kevinz",
-            tone: .yellow,
-            content: """
-            # biz society mixer thursday
-            ## free boba for the first 50
-            networking event but we kept it chill, *no blazers required*. mc atrium 6pm. boba from the place on king st, **not the sus one**
-            
-            #promo #events
-            """,
-            reactionCounts: [.like: 44, .laugh: 5],
-            comments: Comment.bizMixerComments
-        ),
-        sample(
             author: "tylerb",
             tone: .red,
-            content: "my roommate does dishes exactly once a month. its always the day before his parents visit. otherwise the sink is a science experiment. i live with a man who treats a sponge like its cursed\n\n#venting #roommates",
+            content: "my roommate does dishes exactly once a month, always the day before his parents visit. otherwise the sink is a science experiment. i live with a man who treats a sponge like its cursed\n\n#venting #roommates",
             reactionCounts: [.laugh: 39, .like: 20, .dislike: 2],
             comments: Comment.dishesComments
         ),
@@ -193,21 +221,6 @@ extension Post {
             content: "does anyone else do their best thinking at 2am in the library. im not even studying anymore im just sitting here having a full emotional realization about my life choices. the library at 2am is a *whole different dimension*\n\n#self-expression #3am-thoughts",
             reactionCounts: [.like: 47, .hug: 22, .laugh: 6],
             comments: Comment.libraryThoughtsComments
-        ),
-        sample(
-            author: "laylah",
-            tone: .green,
-            content: """
-            # eng society hackathon signups close friday
-            * 24 hrs
-            * free food **the entire time**
-            * prizes for top 3
-            no experience needed we WILL pair you with people who know what theyre doing. sign up link in the group chat
-            
-            #promo #engineering #events
-            """,
-            reactionCounts: [.like: 31, .laugh: 2],
-            comments: Comment.hackathonComments
         ),
         sample(
             author: "saraa",
@@ -220,9 +233,9 @@ extension Post {
             author: "leokp",
             tone: .pink,
             content: """
-            # to the girl reading camus in the tim hortons on monday
+            # to the person reading camus in the coffee line on monday
             you laughed at something on your phone and i have thought about it every day since. this is __deeply embarrassing__ to post but here we are. reply if this was you (it *probably* wasnt but let a guy dream)
-            
+
             #missed-connections #self-expression
             """,
             reactionCounts: [.laugh: 72, .like: 41, .hug: 9],

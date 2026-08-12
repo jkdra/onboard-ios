@@ -32,7 +32,7 @@ extension BoardStore {
         let now = Date()
         let mainBoard = Board(
             id: SampleBoardID.main,
-            name: "Preview Campus",
+            name: "Campus",
             createdAt: now.addingTimeInterval(-86_400 * 38)
         )
 
@@ -44,8 +44,8 @@ extension BoardStore {
             startsAt: weekStart,
             endsAt: nextWeekStart,
             status: .active,
-            promptClean: "What's the best album you've listened to this week?",
-            promptProfane: "What's the most badass album you've listened to this week?"
+            promptClean: "What club should everyone join this semester?",
+            promptProfane: "What club should everyone actually join this semester?"
         )
 
         let archivedWeeks: [BoardWeek] = [

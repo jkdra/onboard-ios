@@ -146,6 +146,19 @@ struct ContentView: View {
             navigationPath.append(.post(store.posts[index].id))
         }
         .onAppear {
+            // DEV: `-dev.openArchivedWeek` pushes Archive → the most recent
+            // archived week. Reaching it by hand means opening the "•••"
+            // menu, and synthesized taps on that Menu are broken under the
+            // current Xcode (see ReactionBarInsetUITests) — so this is the
+            // only headless route to the archived-week screen, which is one
+            // of the App Store screenshots.
+            guard ProcessInfo.processInfo.arguments.contains("-dev.openArchivedWeek"),
+                  navigationPath.isEmpty,
+                  let week = store.boardWeeks.first(where: { $0.isReadOnly }) else { return }
+            navigationPath.append(BoardRoute.archive)
+            navigationPath.append(BoardRoute.archivedWeek(week))
+        }
+        .onAppear {
             // DEV: `-dev.emptyBoard` rolls the seeded mock week over into a
             // fresh empty one — the only headless way to reach the
             // fresh-Monday empty state (the Host's empty-board canvas).
