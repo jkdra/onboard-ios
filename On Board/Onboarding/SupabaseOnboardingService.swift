@@ -187,6 +187,21 @@ final class SupabaseOnboardingService: OnboardingService, @unchecked Sendable {
         }
     }
 
+    func completeSchoolEmailVerificationByLink(_ token: String) async throws -> OnboardingStep {
+        let client = try requireClient()
+        do {
+            let step: OnboardingStep = try await client
+                .rpc("complete_school_email_verification_by_link", params: [
+                    "p_token": token.trimmingCharacters(in: .whitespacesAndNewlines)
+                ])
+                .execute()
+                .value
+            return step
+        } catch let error as PostgrestError where error.message.contains("already linked") {
+            throw OnboardingError.schoolEmailInUse
+        }
+    }
+
     func submitReferralCode(_ code: String) async throws {
         let client = try requireClient()
         try await client

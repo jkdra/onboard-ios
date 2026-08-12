@@ -242,6 +242,7 @@ final class AuthStore {
         // link): a deep-linked code must not carry into someone else's
         // sign-in on the same device.
         PendingReferralCode.clear()
+        PendingSchoolVerificationToken.clear()
         state = .signedOut
     }
 
@@ -250,6 +251,7 @@ final class AuthStore {
         defer { isPerformingIntentionalSignOut = false }
         try await service.deleteAccount()
         PendingReferralCode.clear()
+        PendingSchoolVerificationToken.clear()
         state = .signedOut
     }
 }

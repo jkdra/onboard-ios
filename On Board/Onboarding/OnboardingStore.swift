@@ -271,6 +271,18 @@ final class OnboardingStore {
         }
     }
 
+    /// Spends a one-tap verification token from the emailed link. Mirrors
+    /// `verifySchoolEmail`, but the token alone identifies the row, so there's
+    /// no email to pass.
+    @discardableResult
+    func verifySchoolEmailByLink(_ token: String) async -> Bool {
+        await performSubmit {
+            _ = try await service.completeSchoolEmailVerificationByLink(token)
+            await refresh(force: true)
+            return status?.onboardingStep == .waitlist || status?.isComplete == true
+        }
+    }
+
     /// Whether the dev-only instant-admission lever is available (mock mode).
     var supportsDevAdmission: Bool {
         service is MockOnboardingService && !AppConfiguration.current.isSupabaseConfigured

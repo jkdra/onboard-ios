@@ -56,6 +56,10 @@ struct OnboardingStalenessTests {
             try await inner.completeSchoolEmailVerification(email, token: token)
         }
 
+        func completeSchoolEmailVerificationByLink(_ token: String) async throws -> OnboardingStep {
+            try await inner.completeSchoolEmailVerificationByLink(token)
+        }
+
         func joinWaitlist() async throws -> OnboardingStep {
             try await inner.joinWaitlist()
         }

@@ -72,6 +72,9 @@ protocol OnboardingService: Sendable {
     func checkSchoolEmailAvailable(_ email: String) async throws -> Bool
     func beginSchoolEmailVerification(_ email: String) async throws -> SchoolMatch
     func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep
+    /// One-tap path: the emailed token alone proves address ownership, so
+    /// no email argument — the server resolves the row from the session.
+    func completeSchoolEmailVerificationByLink(_ token: String) async throws -> OnboardingStep
     func joinWaitlist() async throws -> OnboardingStep
     func submitReferralCode(_ code: String) async throws
     func setExpectedGraduation(_ month: Date) async throws

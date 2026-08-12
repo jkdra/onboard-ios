@@ -142,6 +142,20 @@ final class MockOnboardingService: OnboardingService, @unchecked Sendable {
         return match
     }
 
+    /// Mock one-tap path: the token isn't validated here (there's no server
+    /// row to match), so it resolves the pending email the same way the live
+    /// RPC resolves it from the session, then reuses the code path.
+    func completeSchoolEmailVerificationByLink(_ token: String) async throws -> OnboardingStep {
+        _ = token
+        guard let userID = MockOnboardingService.currentUserID(from: defaults) else {
+            throw OnboardingError.notAuthenticated
+        }
+        guard let pending = loadStatus(for: userID).pendingSchoolEmail else {
+            throw OnboardingError.schoolVerificationIncomplete
+        }
+        return try await completeSchoolEmailVerification(pending, token: "000000")
+    }
+
     func completeSchoolEmailVerification(_ email: String, token: String) async throws -> OnboardingStep {
         _ = token  // OTP not validated in mock; any code succeeds
         try await Task.sleep(for: .milliseconds(180))

@@ -126,6 +126,25 @@ struct On_BoardApp: App {
                         }
                     }
 
+                    // One-tap school verification
+                    // Universal Link: https://onboardapp.org/verify/<token>
+                    // Custom Scheme: onboard://verify/<token>
+                    // The token is PARKED, not spent here: the tap can land
+                    // while the app is cold-launching, signed out, or on a
+                    // different onboarding step. The school step spends it
+                    // once it's on screen (see OnboardingSchoolEmailStepView).
+                    let isVerifyUniversalLink = url.host == "onboardapp.org"
+                        && url.pathComponents.count >= 3 && url.pathComponents[1] == "verify"
+                    let isVerifyCustomScheme = url.scheme == "onboard"
+                        && url.host == "verify" && url.pathComponents.count >= 2
+
+                    if isVerifyUniversalLink || isVerifyCustomScheme {
+                        if let token = url.pathComponents.last, !token.isEmpty, token != "/" {
+                            PendingSchoolVerificationToken.store(token)
+                            return
+                        }
+                    }
+
                     // Deep-link referral code
                     // Universal Link: https://onboardapp.org/invite/XXX (canonical —
                     // matches the web landing route) or /invite?code=XXX

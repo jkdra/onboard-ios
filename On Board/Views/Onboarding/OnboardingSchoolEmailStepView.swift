@@ -21,6 +21,7 @@ import SwiftUI
 struct OnboardingSchoolEmailStepView: View {
     @Environment(OnboardingStore.self) private var onboarding
     @Environment(RemoteConfigStore.self) private var remoteConfig
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var email = ""
     @State private var otpCode = ""
@@ -123,11 +124,39 @@ struct OnboardingSchoolEmailStepView: View {
                 lookupState = .idle
             }
         }
+        // Spend a one-tap token the moment this step can act on it. The link
+        // may have been tapped before the app was signed in or on this step,
+        // so the token parks in UserDefaults and is consumed here — including
+        // when iOS delivers the URL to an already-running app, which is why
+        // this also watches scenePhase rather than only firing on appear.
+        .task(id: redeemTrigger) { await redeemPendingLinkIfNeeded() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { redeemTrigger &+= 1 }
+        }
         .alert("Nice Try.", isPresented: $showNiceTryAlert) {
             Button("OK", role: .cancel) { }
         } message: {
             Text("Impressive. You should be on our dev team, but rules are rules. Please put your actual school email.")
         }
+    }
+
+    /// Bumped to re-run the redeem task when the app returns to the
+    /// foreground — `onOpenURL` on a live app doesn't re-trigger `.task`.
+    @State private var redeemTrigger = 0
+
+    /// Spends a token captured from the emailed one-tap link, if there is one.
+    ///
+    /// Cleared on BOTH outcomes: a stale or already-used link must not retry
+    /// forever, and the 6-digit code in the same email is always still there
+    /// as the fallback. Failure is deliberately quiet — the user may not have
+    /// tapped anything (a token can survive a killed app), so an error alert
+    /// about a link they don't remember using would be pure confusion.
+    private func redeemPendingLinkIfNeeded() async {
+        guard let token = PendingSchoolVerificationToken.current,
+              onboarding.status?.verifiedSchoolEmail == nil,
+              !onboarding.isSubmitting else { return }
+        PendingSchoolVerificationToken.clear()
+        _ = await onboarding.verifySchoolEmailByLink(token)
     }
 
     // MARK: - Stage 1: email
