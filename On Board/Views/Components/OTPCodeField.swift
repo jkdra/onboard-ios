@@ -26,6 +26,36 @@ struct OTPCodeField: View {
     @State private var didTriggerCompletion = false
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            field
+            // iOS fills one-time codes from Apple Mail and Messages only, so a
+            // student reading .edu mail in Gmail or Outlook has to paste — and
+            // the field they'd paste into is a 1.5%-opacity TextField behind
+            // the digit boxes, on a .numberPad with no paste key. The only
+            // affordance was long-pressing something invisible.
+            //
+            // PasteButton is user-initiated, so it reads the clipboard WITHOUT
+            // the "pasted from" permission banner that a UIPasteboard read
+            // would trigger. Shown whenever the field is empty and enabled:
+            // checking the clipboard's contents first to decide would itself
+            // be the read we're avoiding.
+            if isEnabled, code.isEmpty {
+                PasteButton(payloadType: String.self) { strings in
+                    guard let pasted = strings.first else { return }
+                    let digits = OTPCodeInput.sanitized(pasted)
+                    guard !digits.isEmpty else { return }
+                    // Assigning drives the same onChange path as typing, so
+                    // completion still auto-submits.
+                    code = digits
+                }
+                .labelStyle(.titleAndIcon)
+                .buttonBorderShape(.capsule)
+                .tint(.primary)
+            }
+        }
+    }
+
+    private var field: some View {
         ZStack(alignment: .leading) {
             HStack(spacing: 8) {
                 ForEach(0..<OTPCodeInput.defaultLength, id: \.self) { index in
